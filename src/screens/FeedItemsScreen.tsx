@@ -36,6 +36,8 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Mock per-session state. Save / hide aren't persisted yet — real storage
+  // will land with issues #13 (Save forever) and #14 (Read later).
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
 

@@ -32,6 +32,9 @@ export default function FeedListScreen({ navigation }: Props) {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Filter pills are visual-only for now: unread/starred counts aren't
+  // available on the Feed model yet (see issues #13, #14). The selected
+  // value persists during the session so the UI still feels interactive.
   const [filter, setFilter] = useState<"all" | "unread" | "starred">("all");
 
   const loadFeeds = useCallback(async () => {
