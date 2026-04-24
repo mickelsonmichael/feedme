@@ -24,8 +24,7 @@
       "package": "com.feedme.app"
     },
     "web": {
-      "favicon": "./assets/favicon.png",
-      "baseUrl": "/feedme"
+      "favicon": "./assets/favicon.png"
     }
   }
 }
