@@ -4,7 +4,7 @@ This file provides instructions that all agents must follow when working on task
 
 ## Code Quality
 
-All agents **must** run the **code-quality** skill as part of every task to ensure the project meets formatting standards. See [`.github/copilot/skills/code-quality.md`](./copilot/skills/code-quality.md) for instructions on how to run it.
+All agents **must** run the **code-quality** skill as part of every task to ensure the project meets formatting standards. See [`.github/skills/code-quality/SKILL.md`](.github/skills/code-quality/SKILL.md) for instructions on how to run it.
 
 ## Task Completion Requirements
 
