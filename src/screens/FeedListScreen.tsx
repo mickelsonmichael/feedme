@@ -17,7 +17,8 @@ import { getFeeds, deleteFeed } from "../database";
 import { fetchFeed } from "../feedParser";
 import { Feed, RootStackParamList, TabParamList } from "../types";
 import { Avatar, MetaText, Pill, Wordmark } from "../components/ui";
-import { colors, fonts, fontSize, radii, spacing } from "../theme";
+import { fonts, fontSize, radii, spacing } from "../theme";
+import { useTheme } from "../context/ThemeContext";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -25,6 +26,7 @@ type Props = CompositeScreenProps<
 >;
 
 export default function FeedListScreen({ navigation }: Props) {
+  const { colors } = useTheme();
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -83,24 +85,30 @@ export default function FeedListScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
+      <View
+        style={[
+          styles.container,
+          styles.center,
+          { backgroundColor: colors.paper },
+        ]}
+      >
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.paper }]}>
       {/* Wordmark header */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { borderBottomColor: colors.ink }]}>
         <Wordmark size={26} />
-        <Text style={styles.topBarSub}>
+        <Text style={[styles.topBarSub, { color: colors.inkSoft }]}>
           / {feeds.length} {feeds.length === 1 ? "feed" : "feeds"}
         </Text>
       </View>
 
       {/* Filter pills row */}
-      <View style={styles.filterRow}>
+      <View style={[styles.filterRow, { borderBottomColor: colors.inkFaint }]}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -135,11 +143,13 @@ export default function FeedListScreen({ navigation }: Props) {
 
       {feeds.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.emptyTitle}>No feeds yet.</Text>
-          <Text style={styles.emptySub}>
+          <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+            No feeds yet.
+          </Text>
+          <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
             Tap ＋ to add your first subscription.
           </Text>
-          <Text style={styles.scrawl}>
+          <Text style={[styles.scrawl, { color: colors.accent }]}>
             or ↓ import an OPML file via Settings
           </Text>
         </View>
@@ -152,40 +162,54 @@ export default function FeedListScreen({ navigation }: Props) {
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.row}
+              style={[styles.row, { backgroundColor: colors.paper }]}
               onPress={() => navigation.navigate("FeedItems", { feed: item })}
               onLongPress={() => handleDelete(item)}
               activeOpacity={0.7}
             >
               <Avatar label={item.title} size={36} />
               <View style={styles.rowBody}>
-                <Text style={styles.feedTitle} numberOfLines={1}>
+                <Text
+                  style={[styles.feedTitle, { color: colors.ink }]}
+                  numberOfLines={1}
+                >
                   {item.title}
                 </Text>
                 <MetaText>{item.url.replace(/^https?:\/\//, "")}</MetaText>
               </View>
-              <Text style={styles.chevron}>›</Text>
+              <Text style={[styles.chevron, { color: colors.inkSoft }]}>›</Text>
             </TouchableOpacity>
           )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={() => (
+            <View
+              style={[styles.separator, { borderBottomColor: colors.inkFaint }]}
+            />
+          )}
         />
       )}
 
       {/* FAB */}
       <TouchableOpacity
-        style={styles.fab}
+        style={[
+          styles.fab,
+          {
+            backgroundColor: colors.accent,
+            borderColor: colors.ink,
+            shadowColor: colors.ink,
+          },
+        ]}
         onPress={() => navigation.navigate("AddFeed")}
         accessibilityLabel="Add feed"
         activeOpacity={0.8}
       >
-        <Text style={styles.fabText}>＋</Text>
+        <Text style={[styles.fabText, { color: colors.paper }]}>＋</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.paper },
+  container: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   topBar: {
     flexDirection: "row",
@@ -195,17 +219,14 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     gap: spacing.sm,
     borderBottomWidth: 1.2,
-    borderBottomColor: colors.ink,
   },
   topBarSub: {
     fontFamily: fonts.mono,
     fontSize: fontSize.meta,
-    color: colors.inkSoft,
   },
   filterRow: {
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.inkFaint,
     borderStyle: "dashed",
   },
   filterPills: {
@@ -220,40 +241,33 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    backgroundColor: colors.paper,
   },
   rowBody: { flex: 1, gap: 2 },
   feedTitle: {
     fontSize: fontSize.title,
-    color: colors.ink,
     fontWeight: "600",
     fontFamily: fonts.heading,
   },
   chevron: {
     fontSize: 22,
-    color: colors.inkSoft,
   },
   separator: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.inkFaint,
     borderStyle: "dashed",
     marginHorizontal: spacing.lg,
   },
   emptyTitle: {
     fontSize: fontSize.h2,
-    color: colors.ink,
     fontWeight: "600",
     fontFamily: fonts.heading,
   },
   emptySub: {
     fontSize: fontSize.bodyLg,
-    color: colors.inkSoft,
     marginTop: spacing.sm,
   },
   scrawl: {
     fontFamily: fonts.brand,
     fontSize: fontSize.bodyLg,
-    color: colors.accent,
     marginTop: spacing.lg,
     transform: [{ rotate: "-2deg" }],
     textAlign: "center",
@@ -265,19 +279,15 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
-    borderColor: colors.ink,
     elevation: 4,
-    shadowColor: colors.ink,
     shadowOpacity: 0.25,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
   fabText: {
-    color: colors.paper,
     fontSize: 28,
     lineHeight: 32,
     fontWeight: "600",

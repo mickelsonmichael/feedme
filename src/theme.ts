@@ -16,6 +16,32 @@ export const colors = {
   danger: "#b44b4b",
 } as const;
 
+export const darkColors = {
+  // Paper / ink palette (dark)
+  paper: "#1a1826",
+  paperWarm: "#221f30",
+  ink: "#e8e4f5",
+  inkSoft: "#9992c0",
+  inkFaint: "#3d3958",
+  accent: "#7e78c4",
+  accentSoft: "#3d358f",
+  highlight: "#ffe27a",
+  // Semantic
+  danger: "#e07070",
+} as const;
+
+export type ColorTokens = {
+  paper: string;
+  paperWarm: string;
+  ink: string;
+  inkSoft: string;
+  inkFaint: string;
+  accent: string;
+  accentSoft: string;
+  highlight: string;
+  danger: string;
+};
+
 export const spacing = {
   xs: 4,
   sm: 8,

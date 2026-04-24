@@ -15,11 +15,13 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { addFeed } from "../database";
 import { fetchFeed, extractFeedTitle } from "../feedParser";
 import { RootStackParamList } from "../types";
-import { colors, fonts, fontSize, radii, spacing } from "../theme";
+import { fonts, fontSize, radii, spacing } from "../theme";
+import { useTheme } from "../context/ThemeContext";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
 
 export default function AddFeedScreen({ navigation }: Props) {
+  const { colors } = useTheme();
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
@@ -76,23 +78,37 @@ export default function AddFeedScreen({ navigation }: Props) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.flex}
+      style={[styles.flex, { backgroundColor: colors.paper }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.hintBox}>
-          <Text style={styles.hintText}>
+        <View
+          style={[
+            styles.hintBox,
+            { borderColor: colors.ink, backgroundColor: colors.paperWarm },
+          ]}
+        >
+          <Text style={[styles.hintText, { color: colors.inkSoft }]}>
             paste an RSS/Atom feed URL or a site URL — we’ll try to find the
             feed.
           </Text>
         </View>
 
-        <Text style={styles.label}>feed url *</Text>
+        <Text style={[styles.label, { color: colors.inkSoft }]}>
+          feed url *
+        </Text>
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            {
+              backgroundColor: colors.paper,
+              borderColor: colors.ink,
+              color: colors.ink,
+            },
+          ]}
           placeholder="https://example.com/feed.xml"
           placeholderTextColor={colors.inkFaint}
           value={url}
@@ -104,9 +120,18 @@ export default function AddFeedScreen({ navigation }: Props) {
           returnKeyType="next"
         />
 
-        <Text style={styles.label}>title (optional)</Text>
+        <Text style={[styles.label, { color: colors.inkSoft }]}>
+          title (optional)
+        </Text>
         <TextInput
-          style={styles.input}
+          style={[
+            styles.input,
+            {
+              backgroundColor: colors.paper,
+              borderColor: colors.ink,
+              color: colors.ink,
+            },
+          ]}
           placeholder="My Favourite Blog"
           placeholderTextColor={colors.inkFaint}
           value={title}
@@ -119,70 +144,68 @@ export default function AddFeedScreen({ navigation }: Props) {
         )}
 
         <TouchableOpacity
-          style={[styles.primaryBtn, loading && styles.btnDisabled]}
+          style={[
+            styles.primaryBtn,
+            { backgroundColor: colors.accent, borderColor: colors.ink },
+            loading && styles.btnDisabled,
+          ]}
           onPress={handleAdd}
           disabled={loading}
           activeOpacity={0.8}
         >
-          <Text style={styles.primaryBtnText}>add feed →</Text>
+          <Text style={[styles.primaryBtnText, { color: colors.paper }]}>
+            add feed →
+          </Text>
         </TouchableOpacity>
 
-        <Text style={styles.scrawl}>or import OPML via Settings ↗</Text>
+        <Text style={[styles.scrawl, { color: colors.accent }]}>
+          or import OPML via Settings ↗
+        </Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  flex: { flex: 1, backgroundColor: colors.paper },
+  flex: { flex: 1 },
   container: { padding: spacing.lg },
   hintBox: {
     borderWidth: 1.5,
     borderStyle: "dashed",
-    borderColor: colors.ink,
     borderRadius: radii.sm,
     padding: spacing.md,
-    backgroundColor: colors.paperWarm,
     marginBottom: spacing.lg,
   },
   hintText: {
     fontSize: fontSize.body,
-    color: colors.inkSoft,
     fontFamily: fonts.mono,
     lineHeight: 18,
   },
   label: {
     fontSize: fontSize.xs,
     fontFamily: fonts.mono,
-    color: colors.inkSoft,
     letterSpacing: 1.2,
     textTransform: "uppercase",
     marginTop: spacing.md,
     marginBottom: spacing.sm,
   },
   input: {
-    backgroundColor: colors.paper,
     borderWidth: 1.5,
-    borderColor: colors.ink,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: fontSize.bodyLg,
-    color: colors.ink,
   },
   spinner: { marginTop: spacing.md },
   primaryBtn: {
     marginTop: spacing.xxl,
-    backgroundColor: colors.accent,
     borderWidth: 1.5,
-    borderColor: colors.ink,
     borderRadius: radii.sm,
     paddingVertical: spacing.md,
     alignItems: "center",
   },
   btnDisabled: { opacity: 0.5 },
   primaryBtnText: {
-    color: colors.paper,
     fontSize: fontSize.bodyLg,
     fontWeight: "700",
     fontFamily: fonts.mono,
@@ -190,7 +213,6 @@ const styles = StyleSheet.create({
   scrawl: {
     fontFamily: fonts.brand,
     fontSize: fontSize.bodyLg,
-    color: colors.accent,
     marginTop: spacing.xl,
     textAlign: "center",
     transform: [{ rotate: "-2deg" }],

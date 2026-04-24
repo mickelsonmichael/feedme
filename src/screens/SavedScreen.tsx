@@ -5,28 +5,36 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { Wordmark } from "../components/ui";
-import { colors, fonts, fontSize, spacing } from "../theme";
+import { fonts, fontSize, spacing } from "../theme";
+import { useTheme } from "../context/ThemeContext";
 
 export default function SavedScreen() {
+  const { colors } = useTheme();
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <View style={[styles.container, { backgroundColor: colors.paper }]}>
+      <View style={[styles.header, { borderBottomColor: colors.ink }]}>
         <Wordmark size={22} />
-        <Text style={styles.subtitle}>/ saved</Text>
+        <Text style={[styles.subtitle, { color: colors.inkSoft }]}>
+          / saved
+        </Text>
       </View>
       <View style={styles.empty}>
-        <Text style={styles.emptyTitle}>No saved posts yet.</Text>
-        <Text style={styles.emptyBody}>
+        <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+          No saved posts yet.
+        </Text>
+        <Text style={[styles.emptyBody, { color: colors.inkSoft }]}>
           Tap the save icon on any post to keep it here for later.
         </Text>
-        <Text style={styles.scrawl}>← coming soon</Text>
+        <Text style={[styles.scrawl, { color: colors.accent }]}>
+          ← coming soon
+        </Text>
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.paper },
+  container: { flex: 1 },
   header: {
     flexDirection: "row",
     alignItems: "baseline",
@@ -34,13 +42,11 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
     borderBottomWidth: 1.2,
-    borderBottomColor: colors.ink,
     gap: spacing.sm,
   },
   subtitle: {
     fontFamily: fonts.mono,
     fontSize: fontSize.meta,
-    color: colors.inkSoft,
   },
   empty: {
     flex: 1,
@@ -52,12 +58,10 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontFamily: fonts.heading,
     fontSize: fontSize.h2,
-    color: colors.ink,
     fontWeight: "600",
   },
   emptyBody: {
     fontSize: fontSize.bodyLg,
-    color: colors.inkSoft,
     textAlign: "center",
     maxWidth: 280,
     lineHeight: 20,
@@ -65,7 +69,6 @@ const styles = StyleSheet.create({
   scrawl: {
     fontFamily: fonts.brand,
     fontSize: fontSize.bodyLg,
-    color: colors.accent,
     marginTop: spacing.md,
     transform: [{ rotate: "-2deg" }],
   },
