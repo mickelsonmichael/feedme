@@ -11,11 +11,11 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system/legacy";
+import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { getFeeds, deleteFeed, addFeed } from "../database";
 import { generateOpml, parseOpml } from "../opml";
-import { fetchFeed, extractFeedTitle } from "../feedParser";
+import { fetchFeed } from "../feedParser";
 import { Feed, RootStackParamList } from "../types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedList">;
@@ -60,18 +60,16 @@ export default function FeedListScreen({ navigation }: Props) {
   const handleExportOpml = async () => {
     try {
       const opmlContent = generateOpml(feeds);
-      const path = FileSystem.cacheDirectory + "feedme-subscriptions.opml";
-      await FileSystem.writeAsStringAsync(path, opmlContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
+      const file = new File(Paths.cache, "feedme-subscriptions.opml");
+      file.write(opmlContent);
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(path, {
+        await Sharing.shareAsync(file.uri, {
           mimeType: "text/x-opml",
           dialogTitle: "Export OPML",
         });
       } else {
-        Alert.alert("Exported", "OPML saved to: " + path);
+        Alert.alert("Exported", "OPML saved to: " + file.uri);
       }
     } catch (err) {
       Alert.alert("Export Error", (err as Error).message);
@@ -86,7 +84,7 @@ export default function FeedListScreen({ navigation }: Props) {
       });
       if (result.canceled) return;
 
-      const content = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const content = await new File(result.assets[0].uri).text();
       const parsedFeeds = parseOpml(content);
 
       if (parsedFeeds.length === 0) {
