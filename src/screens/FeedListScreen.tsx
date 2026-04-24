@@ -7,8 +7,11 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
+  ScrollView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { CompositeScreenProps } from "@react-navigation/native";
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
 import { File, Paths } from "expo-file-system";
@@ -16,14 +19,20 @@ import * as Sharing from "expo-sharing";
 import { getFeeds, deleteFeed, addFeed } from "../database";
 import { generateOpml, parseOpml } from "../opml";
 import { fetchFeed } from "../feedParser";
-import { Feed, RootStackParamList } from "../types";
+import { Feed, RootStackParamList, TabParamList } from "../types";
+import { Avatar, MetaText, Pill, Wordmark } from "../components/ui";
+import { colors, fonts, fontSize, radii, spacing } from "../theme";
 
-type Props = NativeStackScreenProps<RootStackParamList, "FeedList">;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<TabParamList, "Feed">,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 export default function FeedListScreen({ navigation }: Props) {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<"all" | "unread" | "starred">("all");
 
   const loadFeeds = useCallback(async () => {
     try {
@@ -139,37 +148,87 @@ export default function FeedListScreen({ navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#4A90E2" />
+      <View style={[styles.container, styles.center]}>
+        <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {/* Wordmark header */}
+      <View style={styles.topBar}>
+        <Wordmark size={26} />
+        <Text style={styles.topBarSub}>
+          / {feeds.length} {feeds.length === 1 ? "feed" : "feeds"}
+        </Text>
+      </View>
+
+      {/* Filter pills row */}
+      <View style={styles.filterRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterPills}
+        >
+          <TouchableOpacity
+            onPress={() => setFilter("all")}
+            activeOpacity={0.7}
+          >
+            <Pill label="all" variant={filter === "all" ? "accent" : "soft"} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setFilter("unread")}
+            activeOpacity={0.7}
+          >
+            <Pill
+              label="unread"
+              variant={filter === "unread" ? "accent" : "soft"}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setFilter("starred")}
+            activeOpacity={0.7}
+          >
+            <Pill
+              label="★ starred"
+              variant={filter === "starred" ? "accent" : "soft"}
+            />
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+
+      {/* OPML import/export — moves to Settings per issue #26 */}
       <View style={styles.toolbar}>
         <TouchableOpacity
-          style={styles.toolbarButton}
+          style={styles.toolbarBtn}
           onPress={handleImportOpml}
+          activeOpacity={0.7}
         >
-          <Text style={styles.toolbarButtonText}>Import OPML</Text>
+          <Text style={styles.toolbarBtnText}>↓ import opml</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[
-            styles.toolbarButton,
-            feeds.length === 0 && styles.toolbarButtonDisabled,
+            styles.toolbarBtn,
+            feeds.length === 0 && styles.toolbarBtnDisabled,
           ]}
           onPress={handleExportOpml}
           disabled={feeds.length === 0}
+          activeOpacity={0.7}
         >
-          <Text style={styles.toolbarButtonText}>Export OPML</Text>
+          <Text style={styles.toolbarBtnText}>↑ export opml</Text>
         </TouchableOpacity>
       </View>
 
       {feeds.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.emptyText}>No feeds yet.</Text>
-          <Text style={styles.emptySubText}>Tap + to add your first feed.</Text>
+          <Text style={styles.emptyTitle}>No feeds yet.</Text>
+          <Text style={styles.emptySub}>
+            Tap ＋ to add your first subscription.
+          </Text>
+          <Text style={styles.scrawl}>
+            or ↓ import an OPML file from another reader
+          </Text>
         </View>
       ) : (
         <FlatList
@@ -177,19 +236,20 @@ export default function FeedListScreen({ navigation }: Props) {
           keyExtractor={(item) => String(item.id)}
           onRefresh={handleRefreshAll}
           refreshing={refreshing}
+          contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <TouchableOpacity
-              style={styles.feedItem}
+              style={styles.row}
               onPress={() => navigation.navigate("FeedItems", { feed: item })}
               onLongPress={() => handleDelete(item)}
+              activeOpacity={0.7}
             >
-              <View style={styles.feedInfo}>
+              <Avatar label={item.title} size={36} />
+              <View style={styles.rowBody}>
                 <Text style={styles.feedTitle} numberOfLines={1}>
                   {item.title}
                 </Text>
-                <Text style={styles.feedUrl} numberOfLines={1}>
-                  {item.url}
-                </Text>
+                <MetaText>{item.url.replace(/^https?:\/\//, "")}</MetaText>
               </View>
               <Text style={styles.chevron}>›</Text>
             </TouchableOpacity>
@@ -198,65 +258,135 @@ export default function FeedListScreen({ navigation }: Props) {
         />
       )}
 
+      {/* FAB */}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => navigation.navigate("AddFeed")}
         accessibilityLabel="Add feed"
+        activeOpacity={0.8}
       >
-        <Text style={styles.fabText}>+</Text>
+        <Text style={styles.fabText}>＋</Text>
       </TouchableOpacity>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F5F5" },
+  container: { flex: 1, backgroundColor: colors.paper },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
+  topBar: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    gap: spacing.sm,
+    borderBottomWidth: 1.2,
+    borderBottomColor: colors.ink,
+  },
+  topBarSub: {
+    fontFamily: fonts.mono,
+    fontSize: fontSize.meta,
+    color: colors.inkSoft,
+  },
+  filterRow: {
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.inkFaint,
+    borderStyle: "dashed",
+  },
+  filterPills: {
+    paddingHorizontal: spacing.lg,
+    gap: spacing.sm,
+    flexDirection: "row",
+  },
   toolbar: {
     flexDirection: "row",
-    padding: 8,
-    backgroundColor: "#fff",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
-    gap: 8,
+    padding: spacing.md,
+    gap: spacing.sm,
   },
-  toolbarButton: {
+  toolbarBtn: {
     flex: 1,
-    backgroundColor: "#4A90E2",
-    borderRadius: 6,
-    paddingVertical: 8,
+    borderWidth: 1.5,
+    borderColor: colors.ink,
+    borderRadius: radii.sm,
+    paddingVertical: spacing.sm,
     alignItems: "center",
+    backgroundColor: colors.paper,
   },
-  toolbarButtonDisabled: { opacity: 0.4 },
-  toolbarButtonText: { color: "#fff", fontWeight: "600", fontSize: 13 },
-  feedItem: {
+  toolbarBtnDisabled: { opacity: 0.4 },
+  toolbarBtnText: {
+    color: colors.ink,
+    fontSize: fontSize.body,
+    fontFamily: fonts.mono,
+  },
+  list: { paddingBottom: 80 },
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#fff",
-    padding: 16,
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.lg,
+    backgroundColor: colors.paper,
   },
-  feedInfo: { flex: 1 },
-  feedTitle: { fontSize: 16, fontWeight: "600", color: "#212121" },
-  feedUrl: { fontSize: 12, color: "#757575", marginTop: 2 },
-  chevron: { fontSize: 22, color: "#BDBDBD", marginLeft: 8 },
-  separator: { height: 1, backgroundColor: "#E0E0E0" },
-  emptyText: { fontSize: 18, color: "#616161", fontWeight: "600" },
-  emptySubText: { fontSize: 14, color: "#9E9E9E", marginTop: 6 },
+  rowBody: { flex: 1, gap: 2 },
+  feedTitle: {
+    fontSize: fontSize.title,
+    color: colors.ink,
+    fontWeight: "600",
+    fontFamily: fonts.heading,
+  },
+  chevron: {
+    fontSize: 22,
+    color: colors.inkSoft,
+  },
+  separator: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.inkFaint,
+    borderStyle: "dashed",
+    marginHorizontal: spacing.lg,
+  },
+  emptyTitle: {
+    fontSize: fontSize.h2,
+    color: colors.ink,
+    fontWeight: "600",
+    fontFamily: fonts.heading,
+  },
+  emptySub: {
+    fontSize: fontSize.bodyLg,
+    color: colors.inkSoft,
+    marginTop: spacing.sm,
+  },
+  scrawl: {
+    fontFamily: fonts.brand,
+    fontSize: fontSize.bodyLg,
+    color: colors.accent,
+    marginTop: spacing.lg,
+    transform: [{ rotate: "-2deg" }],
+    textAlign: "center",
+  },
   fab: {
     position: "absolute",
-    right: 20,
-    bottom: 28,
+    right: spacing.xl,
+    bottom: spacing.xl,
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: "#4A90E2",
+    backgroundColor: colors.accent,
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: colors.ink,
     elevation: 4,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.25,
     shadowRadius: 4,
     shadowOffset: { width: 0, height: 2 },
   },
-  fabText: { color: "#fff", fontSize: 28, lineHeight: 32 },
+  fabText: {
+    color: colors.paper,
+    fontSize: 28,
+    lineHeight: 32,
+    fontWeight: "600",
+  },
 });

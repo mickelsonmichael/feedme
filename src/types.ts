@@ -24,7 +24,14 @@ export type ParsedFeedItem = {
 };
 
 export type RootStackParamList = {
-  FeedList: undefined;
+  Tabs: undefined;
   AddFeed: undefined;
   FeedItems: { feed: Feed };
+};
+
+export type TabParamList = {
+  Feed: undefined;
+  Saved: undefined;
+  Discover: undefined;
+  Settings: undefined;
 };
