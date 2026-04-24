@@ -10,6 +10,7 @@ import {
   Linking,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   getItemsForFeed,
   upsertItems,
@@ -17,10 +18,13 @@ import {
   updateFeedLastFetched,
 } from "../database";
 import { fetchFeed } from "../feedParser";
+import { FeedItem, RootStackParamList } from "../types";
 
-export default function FeedItemsScreen({ route, navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, "FeedItems">;
+
+export default function FeedItemsScreen({ route, navigation }: Props) {
   const { feed } = route.params;
-  const [items, setItems] = useState([]);
+  const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -33,7 +37,7 @@ export default function FeedItemsScreen({ route, navigation }) {
       const data = await getItemsForFeed(feed.id);
       setItems(data);
     } catch (err) {
-      Alert.alert("Error", "Failed to load items: " + err.message);
+      Alert.alert("Error", "Failed to load items: " + (err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -53,13 +57,13 @@ export default function FeedItemsScreen({ route, navigation }) {
       await updateFeedLastFetched(feed.id);
       await loadItems();
     } catch (err) {
-      Alert.alert("Refresh Error", err.message);
+      Alert.alert("Refresh Error", (err as Error).message);
     } finally {
       setRefreshing(false);
     }
   }, [feed, loadItems]);
 
-  const handleOpenItem = async (item) => {
+  const handleOpenItem = async (item: FeedItem) => {
     await markItemRead(item.id);
     setItems((prev) =>
       prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
@@ -71,7 +75,7 @@ export default function FeedItemsScreen({ route, navigation }) {
     }
   };
 
-  const formatDate = (ts) => {
+  const formatDate = (ts: number | null): string => {
     if (!ts) return "";
     return new Date(ts).toLocaleDateString(undefined, {
       year: "numeric",
@@ -113,7 +117,10 @@ export default function FeedItemsScreen({ route, navigation }) {
             >
               <View style={styles.itemContent}>
                 <Text
-                  style={[styles.itemTitle, item.read && styles.itemTitleRead]}
+                  style={[
+                    styles.itemTitle,
+                    !!item.read && styles.itemTitleRead,
+                  ]}
                   numberOfLines={2}
                 >
                   {item.title}

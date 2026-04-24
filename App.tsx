@@ -4,8 +4,9 @@ import { StatusBar } from "expo-status-bar";
 import FeedListScreen from "./src/screens/FeedListScreen";
 import AddFeedScreen from "./src/screens/AddFeedScreen";
 import FeedItemsScreen from "./src/screens/FeedItemsScreen";
+import { RootStackParamList } from "./src/types";
 
-const Stack = createNativeStackNavigator();
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
   return (

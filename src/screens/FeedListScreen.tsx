@@ -9,15 +9,19 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import { getFeeds, deleteFeed, addFeed } from "../database";
 import { generateOpml, parseOpml } from "../opml";
 import { fetchFeed, extractFeedTitle } from "../feedParser";
+import { Feed, RootStackParamList } from "../types";
 
-export default function FeedListScreen({ navigation }) {
-  const [feeds, setFeeds] = useState([]);
+type Props = NativeStackScreenProps<RootStackParamList, "FeedList">;
+
+export default function FeedListScreen({ navigation }: Props) {
+  const [feeds, setFeeds] = useState<Feed[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -26,7 +30,7 @@ export default function FeedListScreen({ navigation }) {
       const data = await getFeeds();
       setFeeds(data);
     } catch (err) {
-      Alert.alert("Error", "Failed to load feeds: " + err.message);
+      Alert.alert("Error", "Failed to load feeds: " + (err as Error).message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -39,7 +43,7 @@ export default function FeedListScreen({ navigation }) {
     }, [loadFeeds])
   );
 
-  const handleDelete = (feed) => {
+  const handleDelete = (feed: Feed) => {
     Alert.alert("Remove Feed", `Remove "${feed.title}"?`, [
       { text: "Cancel", style: "cancel" },
       {
@@ -70,7 +74,7 @@ export default function FeedListScreen({ navigation }) {
         Alert.alert("Exported", "OPML saved to: " + path);
       }
     } catch (err) {
-      Alert.alert("Export Error", err.message);
+      Alert.alert("Export Error", (err as Error).message);
     }
   };
 
@@ -96,11 +100,15 @@ export default function FeedListScreen({ navigation }) {
       let added = 0;
       for (const feed of parsedFeeds) {
         try {
-          await addFeed(feed);
+          await addFeed({
+            title: feed.title,
+            url: feed.url,
+            description: feed.description ?? null,
+          });
           added++;
         } catch (err) {
           // Skip feeds that already exist (UNIQUE constraint); rethrow unexpected errors
-          if (!err.message?.includes("UNIQUE")) {
+          if (!(err as Error).message?.includes("UNIQUE")) {
             throw err;
           }
         }
@@ -111,7 +119,7 @@ export default function FeedListScreen({ navigation }) {
       );
       loadFeeds();
     } catch (err) {
-      Alert.alert("Import Error", err.message);
+      Alert.alert("Import Error", (err as Error).message);
     }
   };
 

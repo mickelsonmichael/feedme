@@ -1,8 +1,10 @@
+import { ParsedFeedItem } from "./types";
+
 /**
  * Fetches and parses an RSS/Atom feed URL.
  * Returns an array of { title, url, content, publishedAt } items.
  */
-export async function fetchFeed(feedUrl) {
+export async function fetchFeed(feedUrl: string): Promise<ParsedFeedItem[]> {
   const response = await fetch(feedUrl);
   if (!response.ok) {
     throw new Error(
@@ -16,7 +18,7 @@ export async function fetchFeed(feedUrl) {
 /**
  * Parses RSS 2.0 or Atom feed XML and extracts title and feed entries.
  */
-export function parseFeed(xml) {
+export function parseFeed(xml: string): ParsedFeedItem[] {
   const isAtom = /<feed[^>]*xmlns[^>]*>/i.test(xml);
   if (isAtom) {
     return parseAtom(xml);
@@ -27,7 +29,7 @@ export function parseFeed(xml) {
 /**
  * Extracts the channel/feed title from XML.
  */
-export function extractFeedTitle(xml) {
+export function extractFeedTitle(xml: string): string {
   const isAtom = /<feed[^>]*xmlns[^>]*>/i.test(xml);
   if (isAtom) {
     return extractTagText(xml, "title") ?? "Untitled";
@@ -42,8 +44,8 @@ export function extractFeedTitle(xml) {
 
 // ── RSS 2.0 ────────────────────────────────────────────────────────────────
 
-function parseRss(xml) {
-  const items = [];
+function parseRss(xml: string): ParsedFeedItem[] {
+  const items: ParsedFeedItem[] = [];
   const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
   let match;
   while ((match = itemRegex.exec(xml)) !== null) {
@@ -64,8 +66,8 @@ function parseRss(xml) {
 
 // ── Atom ───────────────────────────────────────────────────────────────────
 
-function parseAtom(xml) {
-  const items = [];
+function parseAtom(xml: string): ParsedFeedItem[] {
+  const items: ParsedFeedItem[] = [];
   const entryRegex = /<entry[^>]*>([\s\S]*?)<\/entry>/gi;
   let match;
   while ((match = entryRegex.exec(xml)) !== null) {
@@ -88,11 +90,11 @@ function parseAtom(xml) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function escapeRegex(str) {
+function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function extractTagText(xml, tag) {
+function extractTagText(xml: string, tag: string): string | undefined {
   const re = new RegExp(
     `<${escapeRegex(tag)}[^>]*>([\\s\\S]*?)<\\/${escapeRegex(tag)}>`,
     "i"
@@ -102,7 +104,7 @@ function extractTagText(xml, tag) {
   return m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim() || undefined;
 }
 
-function extractCData(xml, tag) {
+function extractCData(xml: string, tag: string): string | undefined {
   const re = new RegExp(
     `<${escapeRegex(tag)}[^>]*>([\\s\\S]*?)<\\/${escapeRegex(tag)}>`,
     "i"
@@ -114,7 +116,7 @@ function extractCData(xml, tag) {
   return (cdata ? cdata[1] : inner).trim() || undefined;
 }
 
-function extractAtomLink(block) {
+function extractAtomLink(block: string): string | undefined {
   // Prefer <link href="..."> (alternate)
   const hrefMatch = block.match(/<link[^>]+href=["']([^"']+)["'][^>]*\/?>/i);
   if (hrefMatch) return hrefMatch[1];

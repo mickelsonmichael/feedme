@@ -4,7 +4,7 @@ This file provides instructions that all agents must follow when working on task
 
 ## Code Quality
 
-All agents **must** run the **code-quality** skill as part of every task to ensure the project meets formatting standards. See [`.github/skills/code-quality/SKILL.md`](.github/skills/code-quality/SKILL.md) for instructions on how to run it.
+All agents **must** run the **code-quality** skill as part of every task to ensure the project meets formatting and type-safety standards. See [`.github/skills/code-quality/SKILL.md`](.github/skills/code-quality/SKILL.md) for instructions on how to run it.
 
 ## Task Completion Requirements
 
@@ -14,5 +14,10 @@ Before a task is considered complete, all agents **must**:
 2. Resolve any issues reported by the code-quality agent.
 3. Re-run the code-quality agent after resolving issues to confirm all issues are fixed.
 4. Ensure the CI `prettier` job is passing. Check the workflow run status for the pull request and confirm the `Prettier` job has a green check. If it is failing, fix the issues and push again before marking the task as complete.
+5. Ensure the CI `typecheck` job is passing. Check the workflow run status for the pull request and confirm the `TypeScript` job has a green check. If it is failing, fix the type errors and push again before marking the task as complete.
 
-A task is **not complete** until the code-quality agent reports no issues and the `Prettier` CI job is passing on the pull request.
+A task is **not complete** until the code-quality agent reports no issues, the `Prettier` CI job is passing, and the `TypeScript` CI job is passing on the pull request.
+
+## TypeScript
+
+All source code must be written in TypeScript (`.ts` or `.tsx`). JavaScript is only acceptable for configuration files (e.g. `metro.config.js`) where TypeScript is not practical.

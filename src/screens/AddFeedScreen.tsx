@@ -11,10 +11,14 @@ import {
   Platform,
   ScrollView,
 } from "react-native";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { addFeed } from "../database";
 import { fetchFeed, extractFeedTitle } from "../feedParser";
+import { RootStackParamList } from "../types";
 
-export default function AddFeedScreen({ navigation }) {
+type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
+
+export default function AddFeedScreen({ navigation }: Props) {
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(false);
@@ -59,10 +63,10 @@ export default function AddFeedScreen({ navigation }) {
       await addFeed({ title: feedTitle, url: trimmedUrl, description: null });
       navigation.goBack();
     } catch (err) {
-      if (err.message?.includes("UNIQUE")) {
+      if ((err as Error).message?.includes("UNIQUE")) {
         Alert.alert("Duplicate", "This feed is already in your list.");
       } else {
-        Alert.alert("Error", "Could not save feed: " + err.message);
+        Alert.alert("Error", "Could not save feed: " + (err as Error).message);
       }
     } finally {
       setLoading(false);

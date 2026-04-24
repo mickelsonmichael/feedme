@@ -1,4 +1,5 @@
 import { parseFeed, extractFeedTitle } from "../feedParser";
+import { ParsedFeedItem } from "../types";
 
 const RSS_FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">
@@ -107,5 +108,22 @@ describe("extractFeedTitle", () => {
 
   it("returns 'Untitled' for empty input", () => {
     expect(extractFeedTitle("")).toBe("Untitled");
+  });
+});
+
+// Ensure the return type matches ParsedFeedItem
+describe("parseFeed – return type", () => {
+  it("returns items conforming to ParsedFeedItem shape", () => {
+    const items: ParsedFeedItem[] = parseFeed(RSS_FEED);
+    items.forEach((item) => {
+      expect(typeof item.title).toBe("string");
+      expect(item.url === null || typeof item.url === "string").toBe(true);
+      expect(item.content === null || typeof item.content === "string").toBe(
+        true
+      );
+      expect(
+        item.publishedAt === null || typeof item.publishedAt === "number"
+      ).toBe(true);
+    });
   });
 });
