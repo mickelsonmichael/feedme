@@ -23,7 +23,9 @@ export function generateOpml(feeds) {
     .map((feed) => {
       const title = escapeXml(feed.title);
       const url = escapeXml(feed.url);
-      const desc = feed.description ? ` description="${escapeXml(feed.description)}"` : "";
+      const desc = feed.description
+        ? ` description="${escapeXml(feed.description)}"`
+        : "";
       return `    <outline type="rss" title="${title}" xmlUrl="${url}"${desc}/>`;
     })
     .join("\n");
@@ -46,7 +48,8 @@ export function parseOpml(opmlText) {
     const xmlUrl = extractAttr(attrs, "xmlUrl");
     if (!xmlUrl) continue;
 
-    const title = extractAttr(attrs, "title") ?? extractAttr(attrs, "text") ?? xmlUrl;
+    const title =
+      extractAttr(attrs, "title") ?? extractAttr(attrs, "text") ?? xmlUrl;
     const description = extractAttr(attrs, "description") ?? null;
 
     feeds.push({ title, url: xmlUrl, description });

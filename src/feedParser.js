@@ -5,7 +5,9 @@
 export async function fetchFeed(feedUrl) {
   const response = await fetch(feedUrl);
   if (!response.ok) {
-    throw new Error(`Failed to fetch feed: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to fetch feed: ${response.status} ${response.statusText}`
+    );
   }
   const text = await response.text();
   return parseFeed(text);
@@ -70,8 +72,10 @@ function parseAtom(xml) {
     const block = match[1];
     const title = extractCData(block, "title") ?? "Untitled";
     const link = extractAtomLink(block);
-    const content = extractCData(block, "content") ?? extractCData(block, "summary");
-    const published = extractTagText(block, "published") ?? extractTagText(block, "updated");
+    const content =
+      extractCData(block, "content") ?? extractCData(block, "summary");
+    const published =
+      extractTagText(block, "published") ?? extractTagText(block, "updated");
     items.push({
       title,
       url: link ?? null,
@@ -89,14 +93,20 @@ function escapeRegex(str) {
 }
 
 function extractTagText(xml, tag) {
-  const re = new RegExp(`<${escapeRegex(tag)}[^>]*>([\\s\\S]*?)<\\/${escapeRegex(tag)}>`, "i");
+  const re = new RegExp(
+    `<${escapeRegex(tag)}[^>]*>([\\s\\S]*?)<\\/${escapeRegex(tag)}>`,
+    "i"
+  );
   const m = xml.match(re);
   if (!m) return undefined;
   return m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim() || undefined;
 }
 
 function extractCData(xml, tag) {
-  const re = new RegExp(`<${escapeRegex(tag)}[^>]*>([\\s\\S]*?)<\\/${escapeRegex(tag)}>`, "i");
+  const re = new RegExp(
+    `<${escapeRegex(tag)}[^>]*>([\\s\\S]*?)<\\/${escapeRegex(tag)}>`,
+    "i"
+  );
   const m = xml.match(re);
   if (!m) return undefined;
   const inner = m[1];
