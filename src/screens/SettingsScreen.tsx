@@ -168,7 +168,7 @@ export default function SettingsScreen({ navigation }: Props) {
 
         <SectionHeading label="Import / export" />
         <Row
-          label="Import / export OPML"
+          label="Import / export"
           value="OPML"
           onPress={() => navigation.navigate("ImportExport")}
         />
