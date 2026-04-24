@@ -3,6 +3,10 @@
  * files used to share RSS/Atom feed subscription lists.
  */
 
+import { Feed } from "./types";
+
+type OpmlFeed = Pick<Feed, "title" | "url"> & { description?: string | null };
+
 const OPML_HEADER = `<?xml version="1.0" encoding="UTF-8"?>
 <opml version="2.0">
   <head>
@@ -15,10 +19,8 @@ const OPML_FOOTER = `  </body>
 
 /**
  * Generate an OPML XML string from an array of feed objects.
- * @param {Array<{title: string, url: string, description?: string}>} feeds
- * @returns {string}
  */
-export function generateOpml(feeds) {
+export function generateOpml(feeds: OpmlFeed[]): string {
   const outlines = feeds
     .map((feed) => {
       const title = escapeXml(feed.title);
@@ -34,11 +36,9 @@ export function generateOpml(feeds) {
 
 /**
  * Parse an OPML XML string and return an array of feed objects.
- * @param {string} opmlText
- * @returns {Array<{title: string, url: string, description: string|null}>}
  */
-export function parseOpml(opmlText) {
-  const feeds = [];
+export function parseOpml(opmlText: string): OpmlFeed[] {
+  const feeds: OpmlFeed[] = [];
 
   // Extract all <outline> elements that have an xmlUrl attribute
   const outlineRegex = /<outline\s+([^>]*?)(?:\s*\/>|\s*>)/gi;
@@ -60,7 +60,7 @@ export function parseOpml(opmlText) {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function extractAttr(attrsString, name) {
+function extractAttr(attrsString: string, name: string): string | undefined {
   // Escape the attribute name before using it in a RegExp
   const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // Match both single and double quoted attribute values
@@ -69,7 +69,7 @@ function extractAttr(attrsString, name) {
   return m ? unescapeXml(m[1]) : undefined;
 }
 
-function escapeXml(str) {
+function escapeXml(str: string): string {
   return String(str)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -78,7 +78,7 @@ function escapeXml(str) {
     .replace(/'/g, "&apos;");
 }
 
-function unescapeXml(str) {
+function unescapeXml(str: string): string {
   return String(str)
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")

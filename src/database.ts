@@ -1,8 +1,9 @@
 import * as SQLite from "expo-sqlite";
+import { Feed, FeedItem, ParsedFeedItem } from "./types";
 
-let db = null;
+let db: SQLite.SQLiteDatabase | null = null;
 
-export async function getDatabase() {
+export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!db) {
     db = await SQLite.openDatabaseAsync("feedme.db");
     await initializeSchema(db);
@@ -10,7 +11,9 @@ export async function getDatabase() {
   return db;
 }
 
-async function initializeSchema(database) {
+async function initializeSchema(
+  database: SQLite.SQLiteDatabase
+): Promise<void> {
   await database.execAsync(`
     PRAGMA journal_mode = WAL;
 
@@ -38,12 +41,16 @@ async function initializeSchema(database) {
 
 // ── Feeds ──────────────────────────────────────────────────────────────────
 
-export async function getFeeds() {
+export async function getFeeds(): Promise<Feed[]> {
   const database = await getDatabase();
-  return database.getAllAsync("SELECT * FROM feeds ORDER BY title ASC");
+  return database.getAllAsync<Feed>("SELECT * FROM feeds ORDER BY title ASC");
 }
 
-export async function addFeed({ title, url, description }) {
+export async function addFeed({
+  title,
+  url,
+  description,
+}: Pick<Feed, "title" | "url" | "description">): Promise<number> {
   const database = await getDatabase();
   const result = await database.runAsync(
     "INSERT INTO feeds (title, url, description) VALUES (?, ?, ?)",
@@ -52,12 +59,12 @@ export async function addFeed({ title, url, description }) {
   return result.lastInsertRowId;
 }
 
-export async function deleteFeed(feedId) {
+export async function deleteFeed(feedId: number): Promise<void> {
   const database = await getDatabase();
   await database.runAsync("DELETE FROM feeds WHERE id = ?", [feedId]);
 }
 
-export async function updateFeedLastFetched(feedId) {
+export async function updateFeedLastFetched(feedId: number): Promise<void> {
   const database = await getDatabase();
   await database.runAsync("UPDATE feeds SET last_fetched = ? WHERE id = ?", [
     Date.now(),
@@ -67,15 +74,18 @@ export async function updateFeedLastFetched(feedId) {
 
 // ── Items ──────────────────────────────────────────────────────────────────
 
-export async function getItemsForFeed(feedId) {
+export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
   const database = await getDatabase();
-  return database.getAllAsync(
+  return database.getAllAsync<FeedItem>(
     "SELECT * FROM items WHERE feed_id = ? ORDER BY published_at DESC",
     [feedId]
   );
 }
 
-export async function upsertItems(feedId, items) {
+export async function upsertItems(
+  feedId: number,
+  items: ParsedFeedItem[]
+): Promise<void> {
   const database = await getDatabase();
   for (const item of items) {
     await database.runAsync(
@@ -93,14 +103,14 @@ export async function upsertItems(feedId, items) {
   }
 }
 
-export async function markItemRead(itemId) {
+export async function markItemRead(itemId: number): Promise<void> {
   const database = await getDatabase();
   await database.runAsync("UPDATE items SET read = 1 WHERE id = ?", [itemId]);
 }
 
-export async function getUnreadCount(feedId) {
+export async function getUnreadCount(feedId: number): Promise<number> {
   const database = await getDatabase();
-  const row = await database.getFirstAsync(
+  const row = await database.getFirstAsync<{ count: number }>(
     "SELECT COUNT(*) as count FROM items WHERE feed_id = ? AND read = 0",
     [feedId]
   );
