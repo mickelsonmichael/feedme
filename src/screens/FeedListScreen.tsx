@@ -13,11 +13,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import * as DocumentPicker from "expo-document-picker";
-import { File, Paths } from "expo-file-system";
-import * as Sharing from "expo-sharing";
-import { getFeeds, deleteFeed, addFeed } from "../database";
-import { generateOpml, parseOpml } from "../opml";
+import { getFeeds, deleteFeed } from "../database";
 import { fetchFeed } from "../feedParser";
 import { Feed, RootStackParamList, TabParamList } from "../types";
 import { Avatar, MetaText, Pill, Wordmark } from "../components/ui";
@@ -67,70 +63,6 @@ export default function FeedListScreen({ navigation }: Props) {
         },
       },
     ]);
-  };
-
-  const handleExportOpml = async () => {
-    try {
-      const opmlContent = generateOpml(feeds);
-      const file = new File(Paths.cache, "feedme-subscriptions.opml");
-      file.write(opmlContent);
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(file.uri, {
-          mimeType: "text/x-opml",
-          dialogTitle: "Export OPML",
-        });
-      } else {
-        Alert.alert("Exported", "OPML saved to: " + file.uri);
-      }
-    } catch (err) {
-      Alert.alert("Export Error", (err as Error).message);
-    }
-  };
-
-  const handleImportOpml = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["text/xml", "text/x-opml", "application/xml", "*/*"],
-        copyToCacheDirectory: true,
-      });
-      if (result.canceled) return;
-
-      const content = await new File(result.assets[0].uri).text();
-      const parsedFeeds = parseOpml(content);
-
-      if (parsedFeeds.length === 0) {
-        Alert.alert(
-          "No feeds found",
-          "The selected file contained no valid feed entries."
-        );
-        return;
-      }
-
-      let added = 0;
-      for (const feed of parsedFeeds) {
-        try {
-          await addFeed({
-            title: feed.title,
-            url: feed.url,
-            description: feed.description ?? null,
-          });
-          added++;
-        } catch (err) {
-          // Skip feeds that already exist (UNIQUE constraint); rethrow unexpected errors
-          if (!(err as Error).message?.includes("UNIQUE")) {
-            throw err;
-          }
-        }
-      }
-      Alert.alert(
-        "Import Complete",
-        `Added ${added} of ${parsedFeeds.length} feeds.`
-      );
-      loadFeeds();
-    } catch (err) {
-      Alert.alert("Import Error", (err as Error).message);
-    }
   };
 
   const handleRefreshAll = async () => {
@@ -201,28 +133,6 @@ export default function FeedListScreen({ navigation }: Props) {
         </ScrollView>
       </View>
 
-      {/* OPML import/export — moves to Settings per issue #26 */}
-      <View style={styles.toolbar}>
-        <TouchableOpacity
-          style={styles.toolbarBtn}
-          onPress={handleImportOpml}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.toolbarBtnText}>↓ import opml</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[
-            styles.toolbarBtn,
-            feeds.length === 0 && styles.toolbarBtnDisabled,
-          ]}
-          onPress={handleExportOpml}
-          disabled={feeds.length === 0}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.toolbarBtnText}>↑ export opml</Text>
-        </TouchableOpacity>
-      </View>
-
       {feeds.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyTitle}>No feeds yet.</Text>
@@ -230,7 +140,7 @@ export default function FeedListScreen({ navigation }: Props) {
             Tap ＋ to add your first subscription.
           </Text>
           <Text style={styles.scrawl}>
-            or ↓ import an OPML file from another reader
+            or ↓ import an OPML file via Settings
           </Text>
         </View>
       ) : (
@@ -302,26 +212,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
     flexDirection: "row",
-  },
-  toolbar: {
-    flexDirection: "row",
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  toolbarBtn: {
-    flex: 1,
-    borderWidth: 1.5,
-    borderColor: colors.ink,
-    borderRadius: radii.sm,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-    backgroundColor: colors.paper,
-  },
-  toolbarBtnDisabled: { opacity: 0.4 },
-  toolbarBtnText: {
-    color: colors.ink,
-    fontSize: fontSize.body,
-    fontFamily: fonts.mono,
   },
   list: { paddingBottom: 80 },
   row: {

@@ -1,6 +1,5 @@
 // SettingsScreen — mock settings tab modeled on wire-other.jsx SettingsView.
-// State is local (useState) only — nothing persists yet. Import / Export
-// buttons link to the existing OPML flows on the Feed screen.
+// State is local (useState) only — nothing persists yet.
 
 import React, { useState } from "react";
 import {
@@ -10,8 +9,17 @@ import {
   ScrollView,
   TouchableOpacity,
 } from "react-native";
+import { CompositeScreenProps } from "@react-navigation/native";
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Wordmark } from "../components/ui";
 import { colors, fonts, fontSize, radii, spacing } from "../theme";
+import { RootStackParamList, TabParamList } from "../types";
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<TabParamList, "Settings">,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 type Density = "compact" | "comfy" | "spacious";
 type ThemeMode = "light" | "dark" | "system";
@@ -97,7 +105,7 @@ function Segmented<T extends string>({
   );
 }
 
-export default function SettingsScreen() {
+export default function SettingsScreen({ navigation }: Props) {
   const [density, setDensity] = useState<Density>("comfy");
   const [themeMode, setThemeMode] = useState<ThemeMode>("light");
   const [cacheImages, setCacheImages] = useState(true);
@@ -159,10 +167,11 @@ export default function SettingsScreen() {
         />
 
         <SectionHeading label="Import / export" />
-        <Text style={styles.hint}>
-          Use the Import / Export buttons on the Feed tab to bring OPML in or
-          out. A dedicated settings flow is coming soon.
-        </Text>
+        <Row
+          label="Import / export OPML"
+          value="OPML"
+          onPress={() => navigation.navigate("ImportExport")}
+        />
 
         <SectionHeading label="About" />
         <Row label="Version" value="dev" />
@@ -268,12 +277,5 @@ const styles = StyleSheet.create({
   segmentTextActive: {
     color: colors.paper,
     fontWeight: "600",
-  },
-  hint: {
-    fontSize: fontSize.body,
-    color: colors.inkSoft,
-    fontStyle: "italic",
-    lineHeight: 18,
-    paddingVertical: spacing.sm,
   },
 });
