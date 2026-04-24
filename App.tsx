@@ -12,7 +12,8 @@ import DiscoverScreen from "./src/screens/DiscoverScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
 import { RootStackParamList, TabParamList } from "./src/types";
-import { colors, fonts, fontSize } from "./src/theme";
+import { fonts, fontSize } from "./src/theme";
+import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -24,6 +25,7 @@ function TabIcon({
   glyph: string;
   focused: boolean;
 }): React.ReactElement {
+  const { colors } = useTheme();
   return (
     <Text
       style={{
@@ -38,13 +40,21 @@ function TabIcon({
 }
 
 function Tabs() {
+  const { colors } = useTheme();
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.ink,
         tabBarInactiveTintColor: colors.inkSoft,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: {
+          backgroundColor: colors.paper,
+          borderTopWidth: 1.5,
+          borderTopColor: colors.ink,
+          height: 62,
+          paddingBottom: 6,
+          paddingTop: 6,
+        },
         tabBarLabelStyle: styles.tabLabel,
       }}
     >
@@ -80,11 +90,12 @@ function Tabs() {
   );
 }
 
-export default function App() {
+function AppContent() {
+  const { colors, isDark } = useTheme();
   return (
-    <View style={styles.root}>
+    <View style={[styles.root, { backgroundColor: colors.paper }]}>
       <NavigationContainer>
-        <StatusBar style="dark" />
+        <StatusBar style={isDark ? "light" : "dark"} />
         <Stack.Navigator
           screenOptions={{
             headerStyle: { backgroundColor: colors.paper },
@@ -120,21 +131,20 @@ export default function App() {
   );
 }
 
+export default function App() {
+  return (
+    <ThemeProvider>
+      <AppContent />
+    </ThemeProvider>
+  );
+}
+
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.paper },
+  root: { flex: 1 },
   headerTitle: {
     fontFamily: fonts.heading,
     fontWeight: "600",
     fontSize: fontSize.h2,
-    color: colors.ink,
-  },
-  tabBar: {
-    backgroundColor: colors.paper,
-    borderTopWidth: 1.5,
-    borderTopColor: colors.ink,
-    height: 62,
-    paddingBottom: 6,
-    paddingTop: 6,
   },
   tabLabel: {
     fontSize: 11,

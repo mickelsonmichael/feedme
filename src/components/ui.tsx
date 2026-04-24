@@ -11,7 +11,8 @@ import {
   TextStyle,
   StyleProp,
 } from "react-native";
-import { colors, fonts, fontSize, radii, spacing } from "../theme";
+import { fonts, fontSize, radii, spacing } from "../theme";
+import { useTheme } from "../context/ThemeContext";
 
 export function Wordmark({
   size = fontSize.wordmark,
@@ -20,11 +21,16 @@ export function Wordmark({
   size?: number;
   style?: StyleProp<TextStyle>;
 }) {
+  const { colors } = useTheme();
   return (
     <Text
       style={[
         styles.wordmark,
-        { fontSize: size, transform: [{ rotate: "-1.5deg" }] },
+        {
+          fontSize: size,
+          color: colors.ink,
+          transform: [{ rotate: "-1.5deg" }],
+        },
         style,
       ]}
     >
@@ -34,6 +40,7 @@ export function Wordmark({
 }
 
 export function Avatar({ label, size = 28 }: { label: string; size?: number }) {
+  const { colors } = useTheme();
   return (
     <View
       style={[
@@ -42,10 +49,17 @@ export function Avatar({ label, size = 28 }: { label: string; size?: number }) {
           width: size,
           height: size,
           borderRadius: size / 2,
+          borderColor: colors.ink,
+          backgroundColor: colors.paperWarm,
         },
       ]}
     >
-      <Text style={[styles.avatarText, { fontSize: size * 0.5 }]}>
+      <Text
+        style={[
+          styles.avatarText,
+          { fontSize: size * 0.5, color: colors.inkSoft },
+        ]}
+      >
         {(label || "?").charAt(0).toUpperCase()}
       </Text>
     </View>
@@ -61,23 +75,31 @@ export function Pill({
   variant?: "soft" | "accent" | "outline";
   style?: StyleProp<ViewStyle>;
 }) {
+  const { colors } = useTheme();
   const pillStyle =
     variant === "accent"
-      ? styles.pillAccent
+      ? { borderColor: colors.accent, backgroundColor: colors.accent }
       : variant === "outline"
-        ? styles.pillOutline
-        : styles.pillSoft;
-  const textStyle =
-    variant === "accent" ? styles.pillAccentText : styles.pillText;
+        ? { borderColor: colors.ink, backgroundColor: colors.paper }
+        : {
+            borderColor: colors.inkSoft,
+            backgroundColor: "transparent" as const,
+          };
+  const textColor = variant === "accent" ? colors.paper : colors.inkSoft;
   return (
     <View style={[styles.pillBase, pillStyle, style]}>
-      <Text style={textStyle}>{label}</Text>
+      <Text style={[styles.pillText, { color: textColor }]}>{label}</Text>
     </View>
   );
 }
 
 export function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <Text style={styles.sectionLabel}>{children}</Text>;
+  const { colors } = useTheme();
+  return (
+    <Text style={[styles.sectionLabel, { color: colors.inkSoft }]}>
+      {children}
+    </Text>
+  );
 }
 
 export function MetaText({
@@ -87,29 +109,35 @@ export function MetaText({
   children: React.ReactNode;
   style?: StyleProp<TextStyle>;
 }) {
-  return <Text style={[styles.meta, style]}>{children}</Text>;
+  const { colors } = useTheme();
+  return (
+    <Text style={[styles.meta, { color: colors.inkSoft }, style]}>
+      {children}
+    </Text>
+  );
 }
 
 export function DashedDivider() {
-  return <View style={styles.dashedDivider} />;
+  const { colors } = useTheme();
+  return (
+    <View
+      style={[styles.dashedDivider, { borderBottomColor: colors.inkFaint }]}
+    />
+  );
 }
 
 const styles = StyleSheet.create({
   wordmark: {
     fontFamily: fonts.brand,
-    color: colors.ink,
     fontWeight: "700",
     lineHeight: 32,
   },
   avatar: {
     borderWidth: 1.5,
-    borderColor: colors.ink,
-    backgroundColor: colors.paperWarm,
     alignItems: "center",
     justifyContent: "center",
   },
   avatarText: {
-    color: colors.inkSoft,
     fontWeight: "600",
   },
   pillBase: {
@@ -119,31 +147,12 @@ const styles = StyleSheet.create({
     borderWidth: 1.2,
     alignSelf: "flex-start",
   },
-  pillSoft: {
-    borderColor: colors.inkSoft,
-    backgroundColor: "transparent",
-  },
-  pillOutline: {
-    borderColor: colors.ink,
-    backgroundColor: colors.paper,
-  },
-  pillAccent: {
-    borderColor: colors.accent,
-    backgroundColor: colors.accent,
-  },
   pillText: {
     fontSize: fontSize.meta,
-    color: colors.inkSoft,
-  },
-  pillAccentText: {
-    fontSize: fontSize.meta,
-    color: colors.paper,
-    fontWeight: "600",
   },
   sectionLabel: {
     fontSize: fontSize.xs,
     fontFamily: fonts.mono,
-    color: colors.inkSoft,
     letterSpacing: 1.2,
     textTransform: "uppercase",
     marginBottom: spacing.sm,
@@ -151,11 +160,9 @@ const styles = StyleSheet.create({
   meta: {
     fontSize: fontSize.meta,
     fontFamily: fonts.mono,
-    color: colors.inkSoft,
   },
   dashedDivider: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.inkFaint,
     borderStyle: "dashed",
     marginVertical: spacing.sm,
   },

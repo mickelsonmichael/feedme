@@ -21,7 +21,8 @@ import {
 import { fetchFeed } from "../feedParser";
 import { FeedItem, RootStackParamList } from "../types";
 import { MetaText } from "../components/ui";
-import { colors, fonts, fontSize, radii, spacing } from "../theme";
+import { fonts, fontSize, radii, spacing } from "../theme";
+import { useTheme } from "../context/ThemeContext";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItems">;
 
@@ -32,6 +33,7 @@ function mockVotes(id: number): number {
 }
 
 export default function FeedItemsScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
   const { feed } = route.params;
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,15 +141,23 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
+      <View
+        style={[
+          styles.container,
+          styles.center,
+          { backgroundColor: colors.paper },
+        ]}
+      >
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <View style={styles.headerStrip}>
+    <View style={[styles.container, { backgroundColor: colors.paper }]}>
+      <View
+        style={[styles.headerStrip, { borderBottomColor: colors.inkFaint }]}
+      >
         <MetaText>
           {feed.url.replace(/^https?:\/\//, "")} · {items.length} items
         </MetaText>
@@ -156,13 +166,23 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       </View>
       {visibleItems.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.emptyTitle}>No items yet.</Text>
+          <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+            No items yet.
+          </Text>
           <TouchableOpacity
-            style={styles.fetchBtn}
+            style={[
+              styles.fetchBtn,
+              {
+                borderColor: colors.accent,
+                backgroundColor: colors.accent,
+              },
+            ]}
             onPress={handleRefresh}
             activeOpacity={0.8}
           >
-            <Text style={styles.fetchBtnText}>fetch items →</Text>
+            <Text style={[styles.fetchBtnText, { color: colors.paper }]}>
+              fetch items →
+            </Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -175,32 +195,69 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           renderItem={({ item }) => {
             const saved = savedIds.has(item.id);
             return (
-              <View style={styles.card}>
+              <View
+                style={[
+                  styles.card,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: colors.ink,
+                  },
+                ]}
+              >
                 <View style={styles.cardMeta}>
-                  <Text style={styles.sourceText}>{feed.title}</Text>
-                  <Text style={styles.metaDot}>·</Text>
+                  <Text style={[styles.sourceText, { color: colors.ink }]}>
+                    {feed.title}
+                  </Text>
+                  <Text style={[styles.metaDot, { color: colors.inkSoft }]}>
+                    ·
+                  </Text>
                   <MetaText>{formatDate(item.published_at)}</MetaText>
-                  {!item.read && <View style={styles.unreadDot} />}
+                  {!item.read && (
+                    <View
+                      style={[
+                        styles.unreadDot,
+                        { backgroundColor: colors.accent },
+                      ]}
+                    />
+                  )}
                 </View>
                 <TouchableOpacity
                   onPress={() => handleOpenItem(item)}
                   activeOpacity={0.7}
                 >
                   <Text
-                    style={[styles.title, item.read ? styles.titleRead : null]}
+                    style={[
+                      styles.title,
+                      { color: colors.ink },
+                      item.read
+                        ? { color: colors.inkSoft, fontWeight: "500" }
+                        : null,
+                    ]}
                     numberOfLines={3}
                   >
                     {item.title}
                   </Text>
                   {item.content ? (
-                    <Text style={styles.summary} numberOfLines={2}>
+                    <Text
+                      style={[styles.summary, { color: colors.inkSoft }]}
+                      numberOfLines={2}
+                    >
                       {stripHtml(item.content)}
                     </Text>
                   ) : null}
                 </TouchableOpacity>
-                <View style={styles.actionRow}>
-                  <Text style={styles.actionMeta}>↑ {mockVotes(item.id)}</Text>
-                  <Text style={styles.actionMeta}>💬 0</Text>
+                <View
+                  style={[
+                    styles.actionRow,
+                    { borderTopColor: colors.inkFaint },
+                  ]}
+                >
+                  <Text style={[styles.actionMeta, { color: colors.inkSoft }]}>
+                    ↑ {mockVotes(item.id)}
+                  </Text>
+                  <Text style={[styles.actionMeta, { color: colors.inkSoft }]}>
+                    💬 0
+                  </Text>
                   <View style={styles.spacer} />
                   <TouchableOpacity
                     onPress={() => toggleSave(item.id)}
@@ -210,7 +267,8 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                     <Text
                       style={[
                         styles.actionIcon,
-                        saved && styles.actionIconActive,
+                        { color: colors.inkSoft },
+                        saved && { color: colors.accent },
                       ]}
                     >
                       {saved ? "❤" : "♡"}
@@ -221,14 +279,22 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                     activeOpacity={0.6}
                     hitSlop={8}
                   >
-                    <Text style={styles.actionIcon}>⊘</Text>
+                    <Text
+                      style={[styles.actionIcon, { color: colors.inkSoft }]}
+                    >
+                      ⊘
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => handleShare(item)}
                     activeOpacity={0.6}
                     hitSlop={8}
                   >
-                    <Text style={styles.actionIcon}>↗</Text>
+                    <Text
+                      style={[styles.actionIcon, { color: colors.inkSoft }]}
+                    >
+                      ↗
+                    </Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -249,7 +315,7 @@ function stripHtml(html: string): string {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.paper },
+  container: { flex: 1 },
   center: {
     flex: 1,
     alignItems: "center",
@@ -262,16 +328,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.inkFaint,
     borderStyle: "dashed",
     gap: spacing.sm,
   },
   spacer: { flex: 1 },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   card: {
-    backgroundColor: colors.paper,
     borderWidth: 1.5,
-    borderColor: colors.ink,
     borderRadius: radii.sm,
     padding: spacing.md,
     gap: spacing.sm,
@@ -284,35 +347,26 @@ const styles = StyleSheet.create({
   sourceText: {
     fontSize: fontSize.meta,
     fontFamily: fonts.mono,
-    color: colors.ink,
     fontWeight: "600",
   },
   metaDot: {
     fontSize: fontSize.meta,
-    color: colors.inkSoft,
     marginHorizontal: 2,
   },
   unreadDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: colors.accent,
     marginLeft: spacing.sm,
   },
   title: {
     fontSize: fontSize.title,
-    color: colors.ink,
     fontWeight: "700",
     fontFamily: fonts.heading,
     lineHeight: 20,
   },
-  titleRead: {
-    color: colors.inkSoft,
-    fontWeight: "500",
-  },
   summary: {
     fontSize: fontSize.body,
-    color: colors.inkSoft,
     marginTop: spacing.xs,
     lineHeight: 18,
   },
@@ -323,40 +377,30 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderTopColor: colors.inkFaint,
     borderStyle: "dashed",
   },
   actionMeta: {
     fontSize: fontSize.meta,
     fontFamily: fonts.mono,
-    color: colors.inkSoft,
   },
   actionIcon: {
     fontSize: 18,
-    color: colors.inkSoft,
     paddingHorizontal: spacing.xs,
-  },
-  actionIconActive: {
-    color: colors.accent,
   },
   separator: { height: spacing.sm },
   emptyTitle: {
     fontSize: fontSize.h2,
-    color: colors.ink,
     marginBottom: spacing.lg,
     fontFamily: fonts.heading,
     fontWeight: "600",
   },
   fetchBtn: {
     borderWidth: 1.5,
-    borderColor: colors.accent,
-    backgroundColor: colors.accent,
     borderRadius: radii.sm,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
   },
   fetchBtnText: {
-    color: colors.paper,
     fontWeight: "600",
     fontFamily: fonts.mono,
   },

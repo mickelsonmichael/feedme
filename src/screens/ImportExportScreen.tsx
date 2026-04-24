@@ -13,9 +13,11 @@ import * as Sharing from "expo-sharing";
 import { getFeeds, addFeed } from "../database";
 import { generateOpml, parseOpml } from "../opml";
 import { Feed } from "../types";
-import { colors, fonts, fontSize, radii, spacing } from "../theme";
+import { fonts, fontSize, radii, spacing } from "../theme";
+import { useTheme } from "../context/ThemeContext";
 
 export default function ImportExportScreen() {
+  const { colors } = useTheme();
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -95,37 +97,54 @@ export default function ImportExportScreen() {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center]}>
+      <View
+        style={[
+          styles.container,
+          styles.center,
+          { backgroundColor: colors.paper },
+        ]}
+      >
         <ActivityIndicator size="large" color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.hint}>
+    <View style={[styles.container, { backgroundColor: colors.paper }]}>
+      <Text style={[styles.hint, { color: colors.inkSoft }]}>
         Use OPML to move your subscriptions between feed readers.
       </Text>
 
       <TouchableOpacity
-        style={styles.btn}
+        style={[
+          styles.btn,
+          { borderColor: colors.ink, backgroundColor: colors.paper },
+        ]}
         onPress={handleImportOpml}
         activeOpacity={0.7}
       >
-        <Text style={styles.btnText}>↓ import opml</Text>
+        <Text style={[styles.btnText, { color: colors.ink }]}>
+          ↓ import opml
+        </Text>
       </TouchableOpacity>
 
       <TouchableOpacity
-        style={[styles.btn, feeds.length === 0 && styles.btnDisabled]}
+        style={[
+          styles.btn,
+          { borderColor: colors.ink, backgroundColor: colors.paper },
+          feeds.length === 0 && styles.btnDisabled,
+        ]}
         onPress={handleExportOpml}
         disabled={feeds.length === 0}
         activeOpacity={0.7}
       >
-        <Text style={styles.btnText}>↑ export opml</Text>
+        <Text style={[styles.btnText, { color: colors.ink }]}>
+          ↑ export opml
+        </Text>
       </TouchableOpacity>
 
       {feeds.length === 0 && (
-        <Text style={styles.disabledHint}>
+        <Text style={[styles.disabledHint, { color: colors.inkSoft }]}>
           Add some feeds before exporting.
         </Text>
       )}
@@ -134,33 +153,28 @@ export default function ImportExportScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.paper, padding: spacing.lg },
+  container: { flex: 1, padding: spacing.lg },
   center: { alignItems: "center", justifyContent: "center" },
   hint: {
     fontSize: fontSize.body,
-    color: colors.inkSoft,
     fontStyle: "italic",
     lineHeight: 20,
     marginBottom: spacing.lg,
   },
   btn: {
     borderWidth: 1.5,
-    borderColor: colors.ink,
     borderRadius: radii.sm,
     paddingVertical: spacing.md,
     alignItems: "center",
-    backgroundColor: colors.paper,
     marginBottom: spacing.sm,
   },
   btnDisabled: { opacity: 0.4 },
   btnText: {
-    color: colors.ink,
     fontSize: fontSize.bodyLg,
     fontFamily: fonts.mono,
   },
   disabledHint: {
     fontSize: fontSize.body,
-    color: colors.inkSoft,
     textAlign: "center",
     marginTop: spacing.sm,
   },
