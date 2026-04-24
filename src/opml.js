@@ -39,7 +39,7 @@ export function parseOpml(opmlText) {
   const feeds = [];
 
   // Extract all <outline> elements that have an xmlUrl attribute
-  const outlineRegex = /<outline\s+([^/]*\/?>)/gi;
+  const outlineRegex = /<outline\s+([^>]*?)(?:\s*\/>|\s*>)/gi;
   let match;
   while ((match = outlineRegex.exec(opmlText)) !== null) {
     const attrs = match[1];
