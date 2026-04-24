@@ -44,7 +44,10 @@ export default function AddFeedScreen({ navigation }) {
       return;
     }
 
-    if (!trimmedUrl.startsWith("http://") && !trimmedUrl.startsWith("https://")) {
+    if (
+      !trimmedUrl.startsWith("http://") &&
+      !trimmedUrl.startsWith("https://")
+    ) {
       Alert.alert("Validation", "URL must start with http:// or https://");
       return;
     }
@@ -71,7 +74,10 @@ export default function AddFeedScreen({ navigation }) {
       style={styles.flex}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={styles.container}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={styles.label}>Feed URL *</Text>
         <View style={styles.urlRow}>
           <TextInput
@@ -96,7 +102,9 @@ export default function AddFeedScreen({ navigation }) {
           returnKeyType="done"
         />
 
-        {loading && <ActivityIndicator style={styles.spinner} color="#4A90E2" />}
+        {loading && (
+          <ActivityIndicator style={styles.spinner} color="#4A90E2" />
+        )}
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}

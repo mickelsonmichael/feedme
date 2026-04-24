@@ -1,8 +1,16 @@
 import { generateOpml, parseOpml } from "../opml";
 
 const SAMPLE_FEEDS = [
-  { title: "Feed One", url: "https://example.com/feed1.xml", description: "A great feed" },
-  { title: "Feed Two", url: "https://example.org/feed2.xml", description: null },
+  {
+    title: "Feed One",
+    url: "https://example.com/feed1.xml",
+    description: "A great feed",
+  },
+  {
+    title: "Feed Two",
+    url: "https://example.org/feed2.xml",
+    description: null,
+  },
 ];
 
 const SAMPLE_OPML = `<?xml version="1.0" encoding="UTF-8"?>
@@ -47,7 +55,9 @@ describe("generateOpml", () => {
   });
 
   it("escapes XML special characters in title and url", () => {
-    const feeds = [{ title: 'A & B <test>', url: "https://example.com/feed?a=1&b=2" }];
+    const feeds = [
+      { title: "A & B <test>", url: "https://example.com/feed?a=1&b=2" },
+    ];
     const output = generateOpml(feeds);
     expect(output).toContain("A &amp; B &lt;test&gt;");
     expect(output).toContain("a=1&amp;b=2");
@@ -85,7 +95,11 @@ describe("parseOpml", () => {
 
   it("round-trips through generateOpml → parseOpml", () => {
     const original = [
-      { title: "Round Trip", url: "https://example.com/rt.xml", description: "desc" },
+      {
+        title: "Round Trip",
+        url: "https://example.com/rt.xml",
+        description: "desc",
+      },
     ];
     const opml = generateOpml(original);
     const parsed = parseOpml(opml);

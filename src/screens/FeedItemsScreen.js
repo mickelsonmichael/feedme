@@ -10,7 +10,12 @@ import {
   Linking,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
-import { getItemsForFeed, upsertItems, markItemRead, updateFeedLastFetched } from "../database";
+import {
+  getItemsForFeed,
+  upsertItems,
+  markItemRead,
+  updateFeedLastFetched,
+} from "../database";
 import { fetchFeed } from "../feedParser";
 
 export default function FeedItemsScreen({ route, navigation }) {
@@ -88,7 +93,10 @@ export default function FeedItemsScreen({ route, navigation }) {
       {items.length === 0 ? (
         <View style={styles.center}>
           <Text style={styles.emptyText}>No items yet.</Text>
-          <TouchableOpacity style={styles.refreshButton} onPress={handleRefresh}>
+          <TouchableOpacity
+            style={styles.refreshButton}
+            onPress={handleRefresh}
+          >
             <Text style={styles.refreshButtonText}>Fetch Items</Text>
           </TouchableOpacity>
         </View>
@@ -111,7 +119,9 @@ export default function FeedItemsScreen({ route, navigation }) {
                   {item.title}
                 </Text>
                 {item.published_at ? (
-                  <Text style={styles.itemDate}>{formatDate(item.published_at)}</Text>
+                  <Text style={styles.itemDate}>
+                    {formatDate(item.published_at)}
+                  </Text>
                 ) : null}
               </View>
               {!item.read && <View style={styles.unreadDot} />}

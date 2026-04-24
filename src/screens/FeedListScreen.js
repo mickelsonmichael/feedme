@@ -62,7 +62,10 @@ export default function FeedListScreen({ navigation }) {
       });
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(path, { mimeType: "text/x-opml", dialogTitle: "Export OPML" });
+        await Sharing.shareAsync(path, {
+          mimeType: "text/x-opml",
+          dialogTitle: "Export OPML",
+        });
       } else {
         Alert.alert("Exported", "OPML saved to: " + path);
       }
@@ -83,7 +86,10 @@ export default function FeedListScreen({ navigation }) {
       const parsedFeeds = parseOpml(content);
 
       if (parsedFeeds.length === 0) {
-        Alert.alert("No feeds found", "The selected file contained no valid feed entries.");
+        Alert.alert(
+          "No feeds found",
+          "The selected file contained no valid feed entries."
+        );
         return;
       }
 
@@ -99,7 +105,10 @@ export default function FeedListScreen({ navigation }) {
           }
         }
       }
-      Alert.alert("Import Complete", `Added ${added} of ${parsedFeeds.length} feeds.`);
+      Alert.alert(
+        "Import Complete",
+        `Added ${added} of ${parsedFeeds.length} feeds.`
+      );
       loadFeeds();
     } catch (err) {
       Alert.alert("Import Error", err.message);
@@ -133,11 +142,17 @@ export default function FeedListScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <View style={styles.toolbar}>
-        <TouchableOpacity style={styles.toolbarButton} onPress={handleImportOpml}>
+        <TouchableOpacity
+          style={styles.toolbarButton}
+          onPress={handleImportOpml}
+        >
           <Text style={styles.toolbarButtonText}>Import OPML</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.toolbarButton, feeds.length === 0 && styles.toolbarButtonDisabled]}
+          style={[
+            styles.toolbarButton,
+            feeds.length === 0 && styles.toolbarButtonDisabled,
+          ]}
           onPress={handleExportOpml}
           disabled={feeds.length === 0}
         >

@@ -82,7 +82,13 @@ export async function upsertItems(feedId, items) {
       `INSERT INTO items (feed_id, title, url, content, published_at)
        VALUES (?, ?, ?, ?, ?)
        ON CONFLICT (feed_id, url) DO NOTHING`,
-      [feedId, item.title, item.url ?? null, item.content ?? null, item.publishedAt ?? null]
+      [
+        feedId,
+        item.title,
+        item.url ?? null,
+        item.content ?? null,
+        item.publishedAt ?? null,
+      ]
     );
   }
 }
