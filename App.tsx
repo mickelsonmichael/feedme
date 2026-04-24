@@ -10,6 +10,7 @@ import FeedItemsScreen from "./src/screens/FeedItemsScreen";
 import SavedScreen from "./src/screens/SavedScreen";
 import DiscoverScreen from "./src/screens/DiscoverScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
+import ImportExportScreen from "./src/screens/ImportExportScreen";
 import { RootStackParamList, TabParamList } from "./src/types";
 import { colors, fonts, fontSize } from "./src/theme";
 
@@ -107,6 +108,11 @@ export default function App() {
             name="FeedItems"
             component={FeedItemsScreen}
             options={{ title: "" }}
+          />
+          <Stack.Screen
+            name="ImportExport"
+            component={ImportExportScreen}
+            options={{ title: "import / export" }}
           />
         </Stack.Navigator>
       </NavigationContainer>

@@ -27,6 +27,7 @@ export type RootStackParamList = {
   Tabs: undefined;
   AddFeed: undefined;
   FeedItems: { feed: Feed };
+  ImportExport: undefined;
 };
 
 export type TabParamList = {

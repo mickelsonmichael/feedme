@@ -127,7 +127,7 @@ export default function AddFeedScreen({ navigation }: Props) {
           <Text style={styles.primaryBtnText}>add feed →</Text>
         </TouchableOpacity>
 
-        <Text style={styles.scrawl}>or import OPML from the Feed tab ↗</Text>
+        <Text style={styles.scrawl}>or import OPML via Settings ↗</Text>
       </ScrollView>
     </KeyboardAvoidingView>
   );
