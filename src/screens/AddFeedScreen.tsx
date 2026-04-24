@@ -85,8 +85,8 @@ export default function AddFeedScreen({ navigation }: Props) {
       >
         <View style={styles.hintBox}>
           <Text style={styles.hintText}>
-            paste an RSS/Atom feed URL or a site URL — we&apos;ll try to find
-            the feed.
+            paste an RSS/Atom feed URL or a site URL — we’ll try to find the
+            feed.
           </Text>
         </View>
 

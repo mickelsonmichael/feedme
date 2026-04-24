@@ -11,7 +11,7 @@ import {
   TextStyle,
   StyleProp,
 } from "react-native";
-import { colors, fonts, fontSize, radii, spacing } from "./../theme";
+import { colors, fonts, fontSize, radii, spacing } from "../theme";
 
 export function Wordmark({
   size = fontSize.wordmark,
