@@ -1,5 +1,5 @@
 import * as SQLite from "expo-sqlite";
-import { Feed, FeedItem, ParsedFeedItem } from "./types";
+import { Feed, FeedItem, FeedItemWithFeed, ParsedFeedItem } from "./types";
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -73,6 +73,16 @@ export async function updateFeedLastFetched(feedId: number): Promise<void> {
 }
 
 // ── Items ──────────────────────────────────────────────────────────────────
+
+export async function getAllItems(): Promise<FeedItemWithFeed[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<FeedItemWithFeed>(
+    `SELECT items.*, feeds.title AS feed_title
+     FROM items
+     JOIN feeds ON items.feed_id = feeds.id
+     ORDER BY items.published_at DESC`
+  );
+}
 
 export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
   const database = await getDatabase();

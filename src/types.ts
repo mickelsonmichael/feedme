@@ -16,6 +16,8 @@ export type FeedItem = {
   read: number;
 };
 
+export type FeedItemWithFeed = FeedItem & { feed_title: string };
+
 export type ParsedFeedItem = {
   title: string;
   url: string | null;
