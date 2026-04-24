@@ -100,7 +100,7 @@ function AppContent() {
           screenOptions={{
             headerStyle: { backgroundColor: colors.paper },
             headerTintColor: colors.ink,
-            headerTitleStyle: styles.headerTitle,
+            headerTitleStyle: [styles.headerTitle, { color: colors.ink }],
             headerShadowVisible: false,
             contentStyle: { backgroundColor: colors.paper },
           }}
