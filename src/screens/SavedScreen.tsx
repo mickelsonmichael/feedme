@@ -5,14 +5,12 @@
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { useTheme } from "../context/ThemeContext";
-import { AppHeader } from "../components/AppHeader";
 import { fonts, fontSize, spacing } from "../theme";
 
 export default function SavedScreen() {
   const { colors } = useTheme();
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <AppHeader subtitle="saved" />
       <View style={styles.empty}>
         <Text style={[styles.emptyTitle, { color: colors.ink }]}>
           No saved posts yet.

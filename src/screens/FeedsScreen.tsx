@@ -16,7 +16,6 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { getFeeds } from "../database";
 import { Feed, RootStackParamList, TabParamList } from "../types";
 import { DashedDivider } from "../components/ui";
-import { AppHeader } from "../components/AppHeader";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
@@ -80,8 +79,6 @@ export default function FeedsScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <AppHeader subtitle="feeds" />
-
       <View
         style={[
           styles.searchRow,

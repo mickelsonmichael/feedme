@@ -30,7 +30,6 @@ import {
   TabParamList,
 } from "../types";
 import { MetaText, Pill } from "../components/ui";
-import { AppHeader } from "../components/AppHeader";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
@@ -177,11 +176,6 @@ export default function FeedListScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      {/* Shared header */}
-      <AppHeader
-        subtitle={`${items.length} ${items.length === 1 ? "item" : "items"}`}
-      />
-
       {/* Filter pills row */}
       <View style={[styles.filterRow, { borderBottomColor: colors.inkFaint }]}>
         <ScrollView
