@@ -15,9 +15,12 @@
 export function getYouTubeChannelUrl(rawValue: string): string {
   const trimmed = rawValue.trim();
 
-  // Already a full URL — pass through as-is
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+  // Already a full URL — ensure https
+  if (trimmed.startsWith("https://")) {
     return trimmed;
+  }
+  if (trimmed.startsWith("http://")) {
+    return trimmed.replace(/^http:\/\//, "https://");
   }
 
   // Looks like a channel ID (starts with "UC" and is 24 chars)
@@ -44,16 +47,11 @@ export function getYouTubeChannelUrl(rawValue: string): string {
  *   "https://www.youtube.com/feeds/videos.xml?channel_id=UCgv4dPk_qZNAbUW9WkuLPSA"
  */
 export function extractYouTubeRssFeedUrl(html: string): string | null {
-  const match = html.match(
-    /<link[^>]+type="application\/rss\+xml"[^>]+href="([^"]+)"/i
-  );
-  if (match) return match[1];
+  // First, isolate any <link> tag that contains type="application/rss+xml"
+  const tagMatch = html.match(/<link[^>]+type="application\/rss\+xml"[^>]*>/i);
+  if (!tagMatch) return null;
 
-  // Also try with href before type
-  const matchAlt = html.match(
-    /<link[^>]+href="([^"]+)"[^>]+type="application\/rss\+xml"/i
-  );
-  if (matchAlt) return matchAlt[1];
-
-  return null;
+  // Then extract the href attribute from that tag
+  const hrefMatch = tagMatch[0].match(/href="([^"]+)"/i);
+  return hrefMatch ? hrefMatch[1] : null;
 }

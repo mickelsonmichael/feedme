@@ -48,6 +48,17 @@ describe("getYouTubeChannelUrl", () => {
     expect(result).toBe("https://youtube.com/c/atrioc");
   });
 
+  it("upgrades an http:// URL to https://", () => {
+    // Arrange
+    const raw = "http://www.youtube.com/@atrioc";
+
+    // Act
+    const result = getYouTubeChannelUrl(raw);
+
+    // Assert
+    expect(result).toBe("https://www.youtube.com/@atrioc");
+  });
+
   it("builds a /channel/ URL for a channel ID (starts with UC, 24 chars)", () => {
     // Arrange
     const raw = "UCgv4dPk_qZNAbUW9WkuLPSA";
