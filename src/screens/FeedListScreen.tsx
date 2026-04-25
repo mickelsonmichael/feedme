@@ -29,7 +29,8 @@ import {
   RootStackParamList,
   TabParamList,
 } from "../types";
-import { MetaText, Pill, Wordmark } from "../components/ui";
+import { MetaText, Pill } from "../components/ui";
+import { AppHeader } from "../components/AppHeader";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
@@ -176,13 +177,10 @@ export default function FeedListScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      {/* Wordmark header */}
-      <View style={[styles.topBar, { borderBottomColor: colors.ink }]}>
-        <Wordmark size={26} />
-        <Text style={[styles.topBarSub, { color: colors.inkSoft }]}>
-          / {items.length} {items.length === 1 ? "item" : "items"}
-        </Text>
-      </View>
+      {/* Shared header */}
+      <AppHeader
+        subtitle={`/ ${items.length} ${items.length === 1 ? "item" : "items"}`}
+      />
 
       {/* Filter pills row */}
       <View style={[styles.filterRow, { borderBottomColor: colors.inkFaint }]}>
@@ -392,19 +390,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.xl,
-  },
-  topBar: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    gap: spacing.sm,
-    borderBottomWidth: 1.2,
-  },
-  topBarSub: {
-    fontFamily: fonts.mono,
-    fontSize: fontSize.meta,
   },
   filterRow: {
     paddingVertical: spacing.sm,

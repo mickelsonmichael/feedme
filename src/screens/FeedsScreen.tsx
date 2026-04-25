@@ -16,6 +16,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { getFeeds } from "../database";
 import { Feed, RootStackParamList, TabParamList } from "../types";
 import { DashedDivider } from "../components/ui";
+import { AppHeader } from "../components/AppHeader";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
@@ -79,10 +80,7 @@ export default function FeedsScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <View style={[styles.header, { borderBottomColor: colors.ink }]}>
-        <Feather name="rss" size={18} color={colors.ink} />
-        <Text style={[styles.headerTitle, { color: colors.ink }]}>feeds</Text>
-      </View>
+      <AppHeader subtitle="/ feeds" />
 
       <View
         style={[
@@ -176,20 +174,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     padding: spacing.xl,
-  },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1.2,
-    gap: spacing.sm,
-  },
-  headerTitle: {
-    fontFamily: fonts.heading,
-    fontSize: fontSize.h2,
-    fontWeight: "600",
   },
   searchRow: {
     flexDirection: "row",

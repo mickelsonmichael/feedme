@@ -4,20 +4,15 @@
 
 import React from "react";
 import { View, Text, StyleSheet } from "react-native";
-import { Wordmark } from "../components/ui";
-import { fonts, fontSize, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { AppHeader } from "../components/AppHeader";
+import { fonts, fontSize, spacing } from "../theme";
 
 export default function SavedScreen() {
   const { colors } = useTheme();
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <View style={[styles.header, { borderBottomColor: colors.ink }]}>
-        <Wordmark size={22} />
-        <Text style={[styles.subtitle, { color: colors.inkSoft }]}>
-          / saved
-        </Text>
-      </View>
+      <AppHeader subtitle="/ saved" />
       <View style={styles.empty}>
         <Text style={[styles.emptyTitle, { color: colors.ink }]}>
           No saved posts yet.
@@ -35,19 +30,6 @@ export default function SavedScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1.2,
-    gap: spacing.sm,
-  },
-  subtitle: {
-    fontFamily: fonts.mono,
-    fontSize: fontSize.meta,
-  },
   empty: {
     flex: 1,
     alignItems: "center",

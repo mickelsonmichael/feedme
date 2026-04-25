@@ -11,7 +11,7 @@ import {
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Wordmark } from "../components/ui";
+import { AppHeader } from "../components/AppHeader";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { RootStackParamList, TabParamList } from "../types";
 import { useTheme, type ThemeMode } from "../context/ThemeContext";
@@ -149,12 +149,7 @@ export default function SettingsScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <View style={[styles.header, { borderBottomColor: colors.ink }]}>
-        <Wordmark size={22} />
-        <Text style={[styles.subtitle, { color: colors.inkSoft }]}>
-          / settings
-        </Text>
-      </View>
+      <AppHeader subtitle="/ settings" />
 
       <ScrollView contentContainerStyle={styles.content}>
         <SectionHeading label="Reading" />
@@ -219,19 +214,6 @@ export default function SettingsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.lg,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1.2,
-    gap: spacing.sm,
-  },
-  subtitle: {
-    fontFamily: fonts.mono,
-    fontSize: fontSize.meta,
-  },
   content: { padding: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xxl },
   sectionHeading: {
     fontSize: fontSize.xs,
