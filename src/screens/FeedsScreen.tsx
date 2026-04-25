@@ -111,23 +111,36 @@ export default function FeedsScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <View
-        style={[
-          styles.searchRow,
-          { borderColor: colors.inkFaint, backgroundColor: colors.paperWarm },
-        ]}
-      >
-        <Feather name="search" size={14} color={colors.inkSoft} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.ink }]}
-          placeholder="search by title or url…"
-          placeholderTextColor={colors.inkFaint}
-          value={search}
-          onChangeText={setSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-        />
+      <View style={styles.topRow}>
+        <View
+          style={[
+            styles.searchRow,
+            { borderColor: colors.inkFaint, backgroundColor: colors.paperWarm },
+          ]}
+        >
+          <Feather name="search" size={14} color={colors.inkSoft} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.ink }]}
+            placeholder="search by title or url…"
+            placeholderTextColor={colors.inkFaint}
+            value={search}
+            onChangeText={setSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.addBtn,
+            { backgroundColor: colors.accent, borderColor: colors.ink },
+          ]}
+          onPress={() => navigation.navigate("AddFeed")}
+          accessibilityLabel="Add feed"
+          activeOpacity={0.8}
+        >
+          <Feather name="plus" size={18} color={colors.paper} />
+        </TouchableOpacity>
       </View>
 
       {feeds.length === 0 ? (
@@ -136,7 +149,7 @@ export default function FeedsScreen({ navigation }: Props) {
             No feeds yet.
           </Text>
           <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            Add feeds from the Home tab or Settings.
+            Tap the + button to add your first feed.
           </Text>
         </View>
       ) : visibleFeeds.length === 0 ? (
@@ -211,15 +224,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: spacing.xl,
   },
-  searchRow: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
     margin: spacing.md,
+    gap: spacing.sm,
+  },
+  searchRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderWidth: 1.5,
     borderRadius: radii.sm,
     gap: spacing.sm,
+  },
+  addBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: radii.sm,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
   },
   searchInput: {
     flex: 1,
