@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   subtitle: {
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     fontSize: fontSize.meta,
   },
 });

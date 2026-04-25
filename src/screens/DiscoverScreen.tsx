@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   subtitle: {
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     fontSize: fontSize.meta,
   },
   searchRow: {
@@ -110,13 +110,13 @@ const styles = StyleSheet.create({
     borderRadius: radii.sm,
   },
   searchPlaceholder: {
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     fontSize: fontSize.body,
   },
   list: { padding: spacing.md, gap: spacing.md },
   sectionLabel: {
     fontSize: fontSize.xs,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     letterSpacing: 1.2,
     textTransform: "uppercase",
     marginBottom: spacing.sm,

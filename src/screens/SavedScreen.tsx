@@ -222,7 +222,7 @@ const styles = StyleSheet.create({
   },
   sourceText: {
     fontSize: fontSize.meta,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     fontWeight: "600",
   },
   metaDot: {
@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   },
   originalLink: {
     fontSize: fontSize.meta,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
   },
   spacer: { flex: 1 },
   separator: { height: spacing.sm },

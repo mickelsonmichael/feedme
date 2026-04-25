@@ -152,14 +152,14 @@ const styles = StyleSheet.create({
   },
   sectionLabel: {
     fontSize: fontSize.xs,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     letterSpacing: 1.2,
     textTransform: "uppercase",
     marginBottom: spacing.sm,
   },
   meta: {
     fontSize: fontSize.meta,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
   },
   dashedDivider: {
     borderBottomWidth: 1,

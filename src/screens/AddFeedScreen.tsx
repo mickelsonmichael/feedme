@@ -452,7 +452,7 @@ const styles = StyleSheet.create({
   },
   segmentBtnText: {
     fontSize: fontSize.body,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     fontWeight: "600",
   },
   hintBox: {
@@ -464,12 +464,12 @@ const styles = StyleSheet.create({
   },
   hintText: {
     fontSize: fontSize.body,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     lineHeight: 18,
   },
   label: {
     fontSize: fontSize.xs,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     letterSpacing: 1.2,
     textTransform: "uppercase",
     marginTop: spacing.md,
@@ -491,7 +491,7 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: fontSize.body,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     lineHeight: 18,
   },
   primaryBtn: {
@@ -505,7 +505,7 @@ const styles = StyleSheet.create({
   primaryBtnText: {
     fontSize: fontSize.bodyLg,
     fontWeight: "700",
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
   },
   scrawl: {
     fontFamily: fonts.brand,

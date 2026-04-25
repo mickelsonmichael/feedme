@@ -280,13 +280,13 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   tabsRoot: { flex: 1 },
   headerTitle: {
-    fontFamily: fonts.heading,
+    fontFamily: fonts.sans,
     fontWeight: "600",
     fontSize: fontSize.h2,
   },
   tabLabel: {
     fontSize: 11,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
   },
   // Web-only: row layout with sidebar on left and main content on right
   webLayout: {
@@ -316,7 +316,7 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   sidebarLabel: {
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     fontSize: fontSize.bodyLg,
   },
 });
