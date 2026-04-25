@@ -415,7 +415,7 @@ export default function AddFeedScreen({ navigation }: Props) {
         <TouchableOpacity
           style={[
             styles.primaryBtn,
-            { backgroundColor: colors.accent, borderColor: colors.accent },
+            { backgroundColor: colors.accent, borderColor: colors.border },
             loading && styles.btnDisabled,
           ]}
           onPress={handleAdd}
