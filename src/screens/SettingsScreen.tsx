@@ -149,7 +149,7 @@ export default function SettingsScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <AppHeader subtitle="/ settings" />
+      <AppHeader subtitle="settings" />
 
       <ScrollView contentContainerStyle={styles.content}>
         <SectionHeading label="Reading" />

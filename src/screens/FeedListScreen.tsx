@@ -179,7 +179,7 @@ export default function FeedListScreen({ navigation }: Props) {
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
       {/* Shared header */}
       <AppHeader
-        subtitle={`/ ${items.length} ${items.length === 1 ? "item" : "items"}`}
+        subtitle={`${items.length} ${items.length === 1 ? "item" : "items"}`}
       />
 
       {/* Filter pills row */}
