@@ -254,7 +254,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
           onChangeText={setTitle}
           placeholder="Feed title"
           placeholderTextColor={colors.inkFaint}
-          autoCapitalize="none"
+          autoCapitalize="sentences"
           autoCorrect={false}
           returnKeyType="next"
         />
