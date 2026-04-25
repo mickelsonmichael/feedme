@@ -35,6 +35,12 @@ if (typeof window === "undefined") {
             credentials: "omit",
           })
         : r;
+
+    // COOP and COEP headers are only meaningful on navigation (document) responses.
+    // Adding them to subresource responses (scripts, workers, etc.) is unnecessary
+    // and can cause loading failures in some browsers.
+    const isNavigation = request.mode === "navigate";
+
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -43,14 +49,18 @@ if (typeof window === "undefined") {
           }
 
           const newHeaders = new Headers(response.headers);
-          newHeaders.set(
-            "Cross-Origin-Embedder-Policy",
-            coepCredentialless ? "credentialless" : "require-corp"
-          );
+          if (isNavigation) {
+            newHeaders.set(
+              "Cross-Origin-Embedder-Policy",
+              coepCredentialless ? "credentialless" : "require-corp"
+            );
+            newHeaders.set("Cross-Origin-Opener-Policy", "same-origin");
+          }
+          // CORP must be added to all responses so that cross-origin subresources
+          // satisfy the COEP: require-corp policy set on the navigation response.
           if (!coepCredentialless) {
             newHeaders.set("Cross-Origin-Resource-Policy", "cross-origin");
           }
-          newHeaders.set("Cross-Origin-Opener-Policy", "same-origin");
 
           return new Response(response.body, {
             status: response.status,
@@ -58,7 +68,10 @@ if (typeof window === "undefined") {
             headers: newHeaders,
           });
         })
-        .catch((e) => console.error(e))
+        .catch((e) => {
+          console.error(e);
+          return fetch(event.request);
+        })
     );
   });
 } else {
