@@ -10,17 +10,12 @@ import { upsertItems, updateFeedLastFetched } from "./database";
  * @returns the number of feeds that failed to refresh
  */
 export async function refreshFeeds(feeds: Feed[]): Promise<number> {
-  let errors = 0;
-  await Promise.allSettled(
+  const results = await Promise.allSettled(
     feeds.map(async (feed) => {
-      try {
-        const fetched = await fetchFeed(feed.url);
-        await upsertItems(feed.id, fetched);
-        await updateFeedLastFetched(feed.id);
-      } catch {
-        errors++;
-      }
+      const fetched = await fetchFeed(feed.url);
+      await upsertItems(feed.id, fetched);
+      await updateFeedLastFetched(feed.id);
     })
   );
-  return errors;
+  return results.filter((r) => r.status === "rejected").length;
 }
