@@ -65,6 +65,7 @@ export const fonts = {
   heading: "Georgia, Times New Roman, serif",
   body: "System",
   mono: "Menlo, Monaco, Courier New, monospace",
+  sans: "sans-serif",
 } as const;
 
 export const fontSize = {
