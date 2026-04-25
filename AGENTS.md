@@ -1,23 +1,33 @@
-# Agents
+# Instructions
 
-This file provides instructions that all agents must follow when working on tasks in this repository.
+This app is an RSS feeder app that can run either (A) as an Android mobile app or (B) as a web page.
+To support this, the app is written using React Native and TypeScript.
+Every feature added to the app should support both these environments and use a local SQLite database or storing long-term data.
+The web app can choose to use Local Storage where appropriate.
+
+Users will add a list of RSS Feeds by URL and give them an optional title.
+The items will then be fetched from all the RSS Feeds and displayed on the main "Feeds" page as an aggregated list,
+similar to Reddit's mechanism. `Subreddits : Posts :: Feeds : Items`.
+
+Each time the above functionality is modified as part of a change, we should update the above description to reflect the new functionality only if the change was explicitly requested.
+Otherwise, the above is the contract for the app's behavior and all changes should be consistent with this description.
+
+For commits, use Conventional Commits (e.g. `feat(feeds): Added ability fo favorite feeds` or `fix(settings): Persisted dark mode selection longer than 1 day`).
+
+## Unit Tests
+
+New features should be well tested and before each merge requests the new tests and previous tests must pass.
+You must follow the `Arrange - Act - Asssert` paradigm to better organize the tests.
 
 ## Code Quality
 
-All agents **must** run the **code-quality** skill as part of every task to ensure the project meets formatting and type-safety standards. See [`.github/skills/code-quality/SKILL.md`](.github/skills/code-quality/SKILL.md) for instructions on how to run it.
+All agents **must** run the **code-quality** skill as part of every task to ensure the project meets formatting and type-safety standards.
 
 ## Task Completion Requirements
 
 Before a task is considered complete, all agents **must**:
 
-1. Run the **code-quality-agent** (`.github/agents/code-quality.md`) as the **last step** of every task.
-2. Resolve any issues reported by the code-quality agent.
-3. Re-run the code-quality agent after resolving issues to confirm all issues are fixed.
-4. Ensure the CI `prettier` job is passing. Check the workflow run status for the pull request and confirm the `Prettier` job has a green check. If it is failing, fix the issues and push again before marking the task as complete.
-5. Ensure the CI `typecheck` job is passing. Check the workflow run status for the pull request and confirm the `TypeScript` job has a green check. If it is failing, fix the type errors and push again before marking the task as complete.
-
-A task is **not complete** until the code-quality agent reports no issues, the `Prettier` CI job is passing, and the `TypeScript` CI job is passing on the pull request.
-
-## TypeScript
-
-All source code must be written in TypeScript (`.ts` or `.tsx`). JavaScript is only acceptable for configuration files (e.g. `metro.config.js`) where TypeScript is not practical.
+1. Plan your work, analyze the issue and come up with a proper plan before beginning work.
+2. Implement the plan and execute the changes.
+3. Write a unit test to validate the new functionality. Ensure all previous tests pass.
+4. Run the **code-quality-agent** and fix any issues found, re-running until no issues are returned.
