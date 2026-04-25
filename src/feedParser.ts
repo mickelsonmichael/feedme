@@ -125,6 +125,17 @@ function extractAtomLink(block: string): string | undefined {
   return extractTagText(block, "link");
 }
 
+// ── Image extraction patterns ──────────────────────────────────────────────
+
+const MEDIA_CONTENT_RE = /<media:content[^>]+url=["']([^"']+)["'][^>]*\/?>/i;
+const MEDIA_THUMBNAIL_RE =
+  /<media:thumbnail[^>]+url=["']([^"']+)["'][^>]*\/?>/i;
+const ENCLOSURE_URL_FIRST_RE =
+  /<enclosure[^>]+url=["']([^"']+)["'][^>]+type=["']image\/[^"']+["'][^>]*\/?>/i;
+const ENCLOSURE_TYPE_FIRST_RE =
+  /<enclosure[^>]+type=["']image\/[^"']+["'][^>]+url=["']([^"']+)["'][^>]*\/?>/i;
+const IMG_SRC_RE = /<img[^>]+src=["']([^"']+)["'][^>]*\/?>/i;
+
 /**
  * Extracts a thumbnail/image URL from a feed item block.
  * Checks (in order): media:content, media:thumbnail, enclosure (image types),
@@ -134,32 +145,22 @@ export function extractImageUrl(
   block: string,
   htmlContent?: string | null
 ): string | undefined {
-  // media:content url attribute
-  const mediaContent = block.match(
-    /<media:content[^>]+url=["']([^"']+)["'][^>]*\/?>/i
-  );
+  const mediaContent = block.match(MEDIA_CONTENT_RE);
   if (mediaContent) return mediaContent[1];
 
-  // media:thumbnail url attribute
-  const mediaThumbnail = block.match(
-    /<media:thumbnail[^>]+url=["']([^"']+)["'][^>]*\/?>/i
-  );
+  const mediaThumbnail = block.match(MEDIA_THUMBNAIL_RE);
   if (mediaThumbnail) return mediaThumbnail[1];
 
   // <enclosure> with an image MIME type (url may appear before or after type)
-  const enclosure1 = block.match(
-    /<enclosure[^>]+url=["']([^"']+)["'][^>]+type=["']image\/[^"']+["'][^>]*\/?>/i
-  );
+  const enclosure1 = block.match(ENCLOSURE_URL_FIRST_RE);
   if (enclosure1) return enclosure1[1];
 
-  const enclosure2 = block.match(
-    /<enclosure[^>]+type=["']image\/[^"']+["'][^>]+url=["']([^"']+)["'][^>]*\/?>/i
-  );
+  const enclosure2 = block.match(ENCLOSURE_TYPE_FIRST_RE);
   if (enclosure2) return enclosure2[1];
 
   // Fall back to the first <img src="..."> in the HTML content
   if (htmlContent) {
-    const imgTag = htmlContent.match(/<img[^>]+src=["']([^"']+)["'][^>]*\/?>/i);
+    const imgTag = htmlContent.match(IMG_SRC_RE);
     if (imgTag) return imgTag[1];
   }
 
