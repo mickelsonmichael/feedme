@@ -3,12 +3,14 @@ import { View, Text, StyleSheet } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { Feather } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
 import FeedListScreen from "./src/screens/FeedListScreen";
 import AddFeedScreen from "./src/screens/AddFeedScreen";
 import FeedItemsScreen from "./src/screens/FeedItemsScreen";
 import SavedScreen from "./src/screens/SavedScreen";
-import DiscoverScreen from "./src/screens/DiscoverScreen";
+import FeedsScreen from "./src/screens/FeedsScreen";
+import FeedDetailScreen from "./src/screens/FeedDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
 import { RootStackParamList, TabParamList } from "./src/types";
@@ -36,6 +38,17 @@ function TabIcon({
     >
       {glyph}
     </Text>
+  );
+}
+
+function RssTabIcon({ focused }: { focused: boolean }): React.ReactElement {
+  const { colors } = useTheme();
+  return (
+    <Feather
+      name="rss"
+      size={18}
+      color={focused ? colors.ink : colors.inkSoft}
+    />
   );
 }
 
@@ -73,10 +86,10 @@ function Tabs() {
         }}
       />
       <Tab.Screen
-        name="Discover"
-        component={DiscoverScreen}
+        name="Feeds"
+        component={FeedsScreen}
         options={{
-          tabBarIcon: ({ focused }) => <TabIcon glyph="⌕" focused={focused} />,
+          tabBarIcon: ({ focused }) => <RssTabIcon focused={focused} />,
         }}
       />
       <Tab.Screen
@@ -119,6 +132,11 @@ function AppContent() {
             name="FeedItems"
             component={FeedItemsScreen}
             options={{ title: "" }}
+          />
+          <Stack.Screen
+            name="FeedDetail"
+            component={FeedDetailScreen}
+            options={{ headerShown: false }}
           />
           <Stack.Screen
             name="ImportExport"

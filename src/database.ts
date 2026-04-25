@@ -22,7 +22,8 @@ async function initializeSchema(
       title TEXT NOT NULL,
       url TEXT NOT NULL UNIQUE,
       description TEXT,
-      last_fetched INTEGER
+      last_fetched INTEGER,
+      error TEXT
     );
 
     CREATE TABLE IF NOT EXISTS items (
@@ -37,6 +38,13 @@ async function initializeSchema(
       UNIQUE (feed_id, url)
     );
   `);
+
+  // Migration: add error column to feeds if it doesn't exist yet
+  try {
+    await database.execAsync("ALTER TABLE feeds ADD COLUMN error TEXT");
+  } catch {
+    // Column already exists — ignore
+  }
 }
 
 // ── Feeds ──────────────────────────────────────────────────────────────────
@@ -70,6 +78,38 @@ export async function updateFeedLastFetched(feedId: number): Promise<void> {
     Date.now(),
     feedId,
   ]);
+}
+
+export async function updateFeed(
+  feedId: number,
+  fields: Pick<Feed, "title" | "url">
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync("UPDATE feeds SET title = ?, url = ? WHERE id = ?", [
+    fields.title,
+    fields.url,
+    feedId,
+  ]);
+}
+
+export async function setFeedError(
+  feedId: number,
+  error: string | null
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync("UPDATE feeds SET error = ? WHERE id = ?", [
+    error,
+    feedId,
+  ]);
+}
+
+export async function getItemCountForFeed(feedId: number): Promise<number> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{ count: number }>(
+    "SELECT COUNT(*) as count FROM items WHERE feed_id = ?",
+    [feedId]
+  );
+  return row?.count ?? 0;
 }
 
 // ── Items ──────────────────────────────────────────────────────────────────
