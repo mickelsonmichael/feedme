@@ -39,7 +39,7 @@ export default function DiscoverScreen() {
   const { colors } = useTheme();
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <View style={[styles.header, { borderBottomColor: colors.ink }]}>
+      <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <Wordmark size={22} />
         <Text style={[styles.subtitle, { color: colors.inkSoft }]}>
           / discover
@@ -48,7 +48,7 @@ export default function DiscoverScreen() {
       <View
         style={[
           styles.searchRow,
-          { borderColor: colors.ink, backgroundColor: colors.paperWarm },
+          { borderColor: colors.border, backgroundColor: colors.paperWarm },
         ]}
       >
         <Text style={[styles.searchPlaceholder, { color: colors.inkSoft }]}>
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.lg,
     paddingBottom: spacing.md,
-    borderBottomWidth: 1.2,
+    borderBottomWidth: 1,
     gap: spacing.sm,
   },
   subtitle: {
@@ -105,9 +105,9 @@ const styles = StyleSheet.create({
   searchRow: {
     margin: spacing.md,
     padding: spacing.md,
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderStyle: "dashed",
-    borderRadius: radii.sm,
+    borderRadius: radii.md,
   },
   searchPlaceholder: {
     fontFamily: fonts.sans,

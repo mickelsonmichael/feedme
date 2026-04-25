@@ -118,7 +118,7 @@ export default function ImportExportScreen() {
       <TouchableOpacity
         style={[
           styles.btn,
-          { borderColor: colors.ink, backgroundColor: colors.paper },
+          { borderColor: colors.border, backgroundColor: colors.paper },
         ]}
         onPress={handleImportOpml}
         activeOpacity={0.7}
@@ -131,7 +131,7 @@ export default function ImportExportScreen() {
       <TouchableOpacity
         style={[
           styles.btn,
-          { borderColor: colors.ink, backgroundColor: colors.paper },
+          { borderColor: colors.border, backgroundColor: colors.paper },
           feeds.length === 0 && styles.btnDisabled,
         ]}
         onPress={handleExportOpml}
@@ -162,8 +162,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   btn: {
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     paddingVertical: spacing.md,
     alignItems: "center",
     marginBottom: spacing.sm,

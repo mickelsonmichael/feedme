@@ -49,7 +49,7 @@ export function Avatar({ label, size = 28 }: { label: string; size?: number }) {
           width: size,
           height: size,
           borderRadius: size / 2,
-          borderColor: colors.ink,
+          borderColor: colors.inkFaint,
           backgroundColor: colors.paperWarm,
         },
       ]}
@@ -80,7 +80,7 @@ export function Pill({
     variant === "accent"
       ? { borderColor: colors.accent, backgroundColor: colors.accent }
       : variant === "outline"
-        ? { borderColor: colors.ink, backgroundColor: colors.paper }
+        ? { borderColor: colors.inkFaint, backgroundColor: colors.paper }
         : {
             borderColor: colors.inkSoft,
             backgroundColor: "transparent" as const,
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     lineHeight: 32,
   },
   avatar: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 2,
     borderRadius: radii.pill,
-    borderWidth: 1.2,
+    borderWidth: 1,
     alignSelf: "flex-start",
   },
   pillText: {

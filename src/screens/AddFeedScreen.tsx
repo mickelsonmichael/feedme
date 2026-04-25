@@ -219,7 +219,7 @@ export default function AddFeedScreen({ navigation }: Props) {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={[styles.label, { color: colors.inkSoft }]}>source</Text>
-        <View style={[styles.segmentedControl, { borderColor: colors.ink }]}>
+        <View style={[styles.segmentedControl, { borderColor: colors.border }]}>
           <TouchableOpacity
             style={[
               styles.segmentBtn,
@@ -282,7 +282,7 @@ export default function AddFeedScreen({ navigation }: Props) {
         <View
           style={[
             styles.hintBox,
-            { borderColor: colors.ink, backgroundColor: colors.paperWarm },
+            { borderColor: colors.border, backgroundColor: colors.paperWarm },
           ]}
         >
           <Text style={[styles.hintText, { color: colors.inkSoft }]}>
@@ -304,7 +304,7 @@ export default function AddFeedScreen({ navigation }: Props) {
                 styles.input,
                 {
                   backgroundColor: colors.paper,
-                  borderColor: colors.ink,
+                  borderColor: colors.border,
                   color: colors.ink,
                 },
               ]}
@@ -329,7 +329,7 @@ export default function AddFeedScreen({ navigation }: Props) {
                 styles.input,
                 {
                   backgroundColor: colors.paper,
-                  borderColor: colors.ink,
+                  borderColor: colors.border,
                   color: colors.ink,
                 },
               ]}
@@ -352,7 +352,7 @@ export default function AddFeedScreen({ navigation }: Props) {
                 styles.input,
                 {
                   backgroundColor: colors.paper,
-                  borderColor: colors.ink,
+                  borderColor: colors.border,
                   color: colors.ink,
                 },
               ]}
@@ -375,7 +375,7 @@ export default function AddFeedScreen({ navigation }: Props) {
             styles.input,
             {
               backgroundColor: colors.paper,
-              borderColor: colors.ink,
+              borderColor: colors.border,
               color: colors.ink,
             },
           ]}
@@ -415,7 +415,7 @@ export default function AddFeedScreen({ navigation }: Props) {
         <TouchableOpacity
           style={[
             styles.primaryBtn,
-            { backgroundColor: colors.accent, borderColor: colors.ink },
+            { backgroundColor: colors.accent, borderColor: colors.accent },
             loading && styles.btnDisabled,
           ]}
           onPress={handleAdd}
@@ -440,8 +440,8 @@ const styles = StyleSheet.create({
   container: { padding: spacing.lg },
   segmentedControl: {
     flexDirection: "row",
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     overflow: "hidden",
     marginBottom: spacing.lg,
   },
@@ -456,9 +456,9 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   hintBox: {
-    borderWidth: 1.5,
+    borderWidth: 1,
     borderStyle: "dashed",
-    borderRadius: radii.sm,
+    borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.lg,
   },
@@ -476,8 +476,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   input: {
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: fontSize.bodyLg,
@@ -485,8 +485,8 @@ const styles = StyleSheet.create({
   spinner: { marginTop: spacing.md },
   errorBox: {
     marginTop: spacing.md,
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     padding: spacing.md,
   },
   errorText: {
@@ -496,8 +496,8 @@ const styles = StyleSheet.create({
   },
   primaryBtn: {
     marginTop: spacing.xxl,
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     paddingVertical: spacing.md,
     alignItems: "center",
   },
