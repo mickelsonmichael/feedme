@@ -18,16 +18,21 @@ import { RootStackParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { buildRedditFeedUrl, getSubreddit } from "../redditUtils";
+import {
+  extractYouTubeRssFeedUrl,
+  getYouTubeChannelUrl,
+} from "../youtubeUtils";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
 
-type FeedSource = "url" | "reddit";
+type FeedSource = "url" | "reddit" | "youtube";
 
 export default function AddFeedScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [source, setSource] = useState<FeedSource>("url");
   const [url, setUrl] = useState("");
   const [subreddit, setSubreddit] = useState("");
+  const [youtubeChannel, setYoutubeChannel] = useState("");
   const [title, setTitle] = useState("");
   const [titleManuallyEdited, setTitleManuallyEdited] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -37,6 +42,7 @@ export default function AddFeedScreen({ navigation }: Props) {
     setSource(newSource);
     setUrl("");
     setSubreddit("");
+    setYoutubeChannel("");
     setTitle("");
     setTitleManuallyEdited(false);
     setFeedError(null);
@@ -47,6 +53,14 @@ export default function AddFeedScreen({ navigation }: Props) {
     if (!titleManuallyEdited) {
       const cleaned = getSubreddit(value);
       setTitle(cleaned ? `Reddit - r/${cleaned}` : "");
+    }
+  };
+
+  const handleYoutubeChannelChange = (value: string) => {
+    setYoutubeChannel(value);
+    if (!titleManuallyEdited) {
+      const trimmed = value.trim();
+      setTitle(trimmed ? `YouTube - ${trimmed.replace(/^@/, "")}` : "");
     }
   };
 
@@ -105,6 +119,54 @@ export default function AddFeedScreen({ navigation }: Props) {
         } else {
           setFeedError(
             `Failed to connect to ${redditUrl}. Please check your connection and try again.`
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (source === "youtube") {
+      const trimmedChannel = youtubeChannel.trim();
+      if (!trimmedChannel) {
+        Alert.alert("Validation", "Please enter a YouTube channel name.");
+        return;
+      }
+      const channelUrl = getYouTubeChannelUrl(trimmedChannel);
+      const channelLabel = trimmedChannel.replace(/^@/, "");
+      const feedTitle = title.trim() || `YouTube - ${channelLabel}`;
+      setLoading(true);
+      try {
+        const response = await fetch(channelUrl);
+        if (!response.ok) {
+          if (response.status === 404) {
+            setFeedError(
+              `The channel ${channelUrl} was not found. Check the channel name and try again.`
+            );
+          } else {
+            setFeedError(
+              `Failed to connect to ${channelUrl}. Please check your connection and try again.`
+            );
+          }
+          return;
+        }
+        const html = await response.text();
+        const feedUrl = extractYouTubeRssFeedUrl(html);
+        if (!feedUrl) {
+          setFeedError(
+            `Could not find an RSS feed for ${channelUrl}. The channel may not exist or may not be accessible.`
+          );
+          return;
+        }
+        await addFeed({ title: feedTitle, url: feedUrl, description: null });
+        navigation.goBack();
+      } catch (err) {
+        if ((err as Error).message?.includes("UNIQUE")) {
+          Alert.alert("Duplicate", "This feed is already in your list.");
+        } else {
+          setFeedError(
+            `Failed to connect to ${channelUrl}. Please check your connection and try again.`
           );
         }
       } finally {
@@ -196,6 +258,25 @@ export default function AddFeedScreen({ navigation }: Props) {
               Reddit
             </Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.segmentBtn,
+              source === "youtube" && {
+                backgroundColor: colors.accent,
+              },
+            ]}
+            onPress={() => handleSourceChange("youtube")}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.segmentBtnText,
+                { color: source === "youtube" ? colors.paper : colors.ink },
+              ]}
+            >
+              YouTube
+            </Text>
+          </TouchableOpacity>
         </View>
 
         <View
@@ -207,7 +288,9 @@ export default function AddFeedScreen({ navigation }: Props) {
           <Text style={[styles.hintText, { color: colors.inkSoft }]}>
             {source === "reddit"
               ? "enter a subreddit name to subscribe to its RSS feed."
-              : "paste an RSS/Atom feed URL or a site URL — we'll try to find the feed."}
+              : source === "youtube"
+                ? "enter a YouTube channel name or URL to subscribe to its RSS feed."
+                : "paste an RSS/Atom feed URL or a site URL — we'll try to find the feed."}
           </Text>
         </View>
 
@@ -236,7 +319,7 @@ export default function AddFeedScreen({ navigation }: Props) {
               returnKeyType="next"
             />
           </>
-        ) : (
+        ) : source === "reddit" ? (
           <>
             <Text style={[styles.label, { color: colors.inkSoft }]}>
               subreddit *
@@ -259,6 +342,29 @@ export default function AddFeedScreen({ navigation }: Props) {
               returnKeyType="next"
             />
           </>
+        ) : (
+          <>
+            <Text style={[styles.label, { color: colors.inkSoft }]}>
+              channel *
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.paper,
+                  borderColor: colors.ink,
+                  color: colors.ink,
+                },
+              ]}
+              placeholder="@atrioc"
+              placeholderTextColor={colors.inkFaint}
+              value={youtubeChannel}
+              onChangeText={handleYoutubeChannelChange}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="next"
+            />
+          </>
         )}
 
         <Text style={[styles.label, { color: colors.inkSoft }]}>
@@ -274,7 +380,11 @@ export default function AddFeedScreen({ navigation }: Props) {
             },
           ]}
           placeholder={
-            source === "reddit" ? "Reddit - r/subreddit" : "My Favourite Blog"
+            source === "reddit"
+              ? "Reddit - r/subreddit"
+              : source === "youtube"
+                ? "YouTube - ChannelName"
+                : "My Favourite Blog"
           }
           placeholderTextColor={colors.inkFaint}
           value={title}
