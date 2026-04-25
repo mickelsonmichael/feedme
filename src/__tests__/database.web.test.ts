@@ -113,10 +113,9 @@ describe("database.web — feeds", () => {
 
   it("persists data across module-cache reloads via localStorage", async () => {
     await addFeed({ title: "Persistent", url: "p", description: null });
-    // Drop the in-memory cache — the next read must repopulate from
-    // localStorage to prove persistence works.
-    __resetForTests.toString(); // referenced to silence lints
-    // Re-import via Jest's isolateModules to get a fresh module-level cache.
+    // Re-import via Jest's isolateModules to get a fresh module-level cache,
+    // proving the data was actually persisted to localStorage rather than
+    // just held in memory.
     let reloaded: typeof import("../database.web");
     jest.isolateModules(() => {
       reloaded = require("../database.web");
