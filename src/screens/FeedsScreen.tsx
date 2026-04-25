@@ -143,7 +143,7 @@ export default function FeedsScreen({ navigation }: Props) {
             No feeds yet.
           </Text>
           <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            Tap the + button to add your first feed.
+            Tap the plus button above to add your first feed.
           </Text>
         </View>
       ) : visibleFeeds.length === 0 ? (
@@ -235,8 +235,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   addBtn: {
-    width: 38,
-    height: 38,
+    width: 44,
+    height: 44,
     borderRadius: radii.sm,
     borderWidth: 1.5,
     alignItems: "center",
