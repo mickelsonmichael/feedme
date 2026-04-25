@@ -24,6 +24,7 @@ import {
 } from "../database";
 import { fetchFeed } from "../feedParser";
 import { FeedItem, RootStackParamList } from "../types";
+import { toggleExpandedId } from "../expandItemIds";
 import { MetaText } from "../components/ui";
 import { Feather } from "@expo/vector-icons";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -38,6 +39,7 @@ function mockVotes(id: number): number {
 }
 
 const CARD_IMAGE_WIDTH = 100;
+const EXPAND_IMAGE_HEIGHT = 200;
 
 export default function FeedItemsScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
@@ -47,6 +49,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: feed.title });
@@ -124,6 +127,17 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       next.add(id);
       return next;
     });
+  };
+
+  const handleToggleExpand = async (item: FeedItem) => {
+    const isExpanding = !expandedIds.has(item.id);
+    setExpandedIds((prev) => toggleExpandedId(prev, item.id));
+    if (isExpanding && !item.read) {
+      await markItemRead(item.id);
+      setItems((prev) =>
+        prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
+      );
+    }
   };
 
   const handleShare = async (item: FeedItem) => {
@@ -213,6 +227,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           contentContainerStyle={styles.list}
           renderItem={({ item }) => {
             const saved = savedIds.has(item.id);
+            const expanded = expandedIds.has(item.id);
             return (
               <View
                 style={[
@@ -223,111 +238,153 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                   },
                 ]}
               >
-                {item.image_url ? (
-                  <Image
-                    source={{ uri: item.image_url }}
-                    style={styles.cardImage}
-                    resizeMode="cover"
-                  />
-                ) : null}
-                <View style={styles.cardContent}>
-                  <View style={styles.cardMeta}>
-                    <Text style={[styles.sourceText, { color: colors.ink }]}>
-                      {feed.title}
-                    </Text>
-                    <Text style={[styles.metaDot, { color: colors.inkSoft }]}>
-                      ·
-                    </Text>
-                    <MetaText>{formatDate(item.published_at)}</MetaText>
-                    {!item.read && (
-                      <View
-                        style={[
-                          styles.unreadDot,
-                          { backgroundColor: colors.accent },
-                        ]}
-                      />
-                    )}
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => handleOpenItem(item)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.title,
-                        { color: colors.ink },
-                        item.read
-                          ? { color: colors.inkSoft, fontWeight: "500" }
-                          : null,
-                      ]}
-                      numberOfLines={3}
+                <View style={styles.cardRow}>
+                  {item.image_url ? (
+                    <Image
+                      source={{ uri: item.image_url }}
+                      style={styles.cardImage}
+                      resizeMode="cover"
+                    />
+                  ) : null}
+                  <View style={styles.cardContent}>
+                    <View style={styles.cardMeta}>
+                      <Text style={[styles.sourceText, { color: colors.ink }]}>
+                        {feed.title}
+                      </Text>
+                      <Text style={[styles.metaDot, { color: colors.inkSoft }]}>
+                        ·
+                      </Text>
+                      <MetaText>{formatDate(item.published_at)}</MetaText>
+                      {!item.read && (
+                        <View
+                          style={[
+                            styles.unreadDot,
+                            { backgroundColor: colors.accent },
+                          ]}
+                        />
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleOpenItem(item)}
+                      activeOpacity={0.7}
                     >
-                      {item.title}
-                    </Text>
+                      <Text
+                        style={[
+                          styles.title,
+                          { color: colors.ink },
+                          item.read
+                            ? { color: colors.inkSoft, fontWeight: "500" }
+                            : null,
+                        ]}
+                        numberOfLines={3}
+                      >
+                        {item.title}
+                      </Text>
+                      {item.content ? (
+                        <Text
+                          style={[styles.summary, { color: colors.inkSoft }]}
+                          numberOfLines={2}
+                        >
+                          {stripHtml(item.content)}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                    <View
+                      style={[
+                        styles.actionRow,
+                        { borderTopColor: colors.inkFaint },
+                      ]}
+                    >
+                      <Text
+                        style={[styles.actionMeta, { color: colors.inkSoft }]}
+                      >
+                        ↑ {mockVotes(item.id)}
+                      </Text>
+                      <Text
+                        style={[styles.actionMeta, { color: colors.inkSoft }]}
+                      >
+                        💬 0
+                      </Text>
+                      <View style={styles.spacer} />
+                      <TouchableOpacity
+                        onPress={() => toggleSave(item)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel={saved ? "Unsave post" : "Save post"}
+                      >
+                        {/* Feather only has one bookmark icon; saved state is
+                          distinguished by accent color vs. soft ink. */}
+                        <Feather
+                          name="bookmark"
+                          size={18}
+                          color={saved ? colors.accent : colors.inkSoft}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => hideItem(item.id)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                      >
+                        <Text
+                          style={[styles.actionIcon, { color: colors.inkSoft }]}
+                        >
+                          ⊘
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleShare(item)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                      >
+                        <Text
+                          style={[styles.actionIcon, { color: colors.inkSoft }]}
+                        >
+                          ↗
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleToggleExpand(item)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel={
+                          expanded ? "Collapse post" : "Expand post"
+                        }
+                      >
+                        <Feather
+                          name={expanded ? "chevron-up" : "chevron-down"}
+                          size={18}
+                          color={expanded ? colors.accent : colors.inkSoft}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+                {expanded ? (
+                  <View
+                    style={[
+                      styles.expandPanel,
+                      {
+                        borderTopColor: colors.inkFaint,
+                        backgroundColor: colors.paperWarm,
+                      },
+                    ]}
+                  >
+                    {item.image_url ? (
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.expandImage}
+                        resizeMode="contain"
+                      />
+                    ) : null}
                     {item.content ? (
                       <Text
-                        style={[styles.summary, { color: colors.inkSoft }]}
-                        numberOfLines={2}
+                        style={[styles.expandContent, { color: colors.ink }]}
                       >
                         {stripHtml(item.content)}
                       </Text>
                     ) : null}
-                  </TouchableOpacity>
-                  <View
-                    style={[
-                      styles.actionRow,
-                      { borderTopColor: colors.inkFaint },
-                    ]}
-                  >
-                    <Text
-                      style={[styles.actionMeta, { color: colors.inkSoft }]}
-                    >
-                      ↑ {mockVotes(item.id)}
-                    </Text>
-                    <Text
-                      style={[styles.actionMeta, { color: colors.inkSoft }]}
-                    >
-                      💬 0
-                    </Text>
-                    <View style={styles.spacer} />
-                    <TouchableOpacity
-                      onPress={() => toggleSave(item)}
-                      activeOpacity={0.6}
-                      hitSlop={8}
-                      accessibilityLabel={saved ? "Unsave post" : "Save post"}
-                    >
-                      {/* Feather only has one bookmark icon; saved state is
-                        distinguished by accent color vs. soft ink. */}
-                      <Feather
-                        name="bookmark"
-                        size={18}
-                        color={saved ? colors.accent : colors.inkSoft}
-                      />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => hideItem(item.id)}
-                      activeOpacity={0.6}
-                      hitSlop={8}
-                    >
-                      <Text
-                        style={[styles.actionIcon, { color: colors.inkSoft }]}
-                      >
-                        ⊘
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleShare(item)}
-                      activeOpacity={0.6}
-                      hitSlop={8}
-                    >
-                      <Text
-                        style={[styles.actionIcon, { color: colors.inkSoft }]}
-                      >
-                        ↗
-                      </Text>
-                    </TouchableOpacity>
                   </View>
-                </View>
+                ) : null}
               </View>
             );
           }}
@@ -368,6 +425,8 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderRadius: radii.sm,
     overflow: "hidden",
+  },
+  cardRow: {
     flexDirection: "row",
   },
   cardImage: {
@@ -443,5 +502,21 @@ const styles = StyleSheet.create({
   fetchBtnText: {
     fontWeight: "600",
     fontFamily: fonts.mono,
+  },
+  expandPanel: {
+    padding: spacing.md,
+    gap: spacing.md,
+    borderTopWidth: 1,
+    borderStyle: "dashed",
+  },
+  expandImage: {
+    width: "100%",
+    height: EXPAND_IMAGE_HEIGHT,
+    borderRadius: radii.sm,
+  },
+  expandContent: {
+    fontSize: fontSize.body,
+    lineHeight: 20,
+    fontFamily: fonts.body,
   },
 });
