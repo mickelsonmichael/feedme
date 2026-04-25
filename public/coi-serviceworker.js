@@ -35,12 +35,6 @@ if (typeof window === "undefined") {
             credentials: "omit",
           })
         : r;
-
-    // COOP and COEP headers are only meaningful on navigation (document) responses.
-    // Adding them to subresource responses (scripts, workers, etc.) is unnecessary
-    // and can cause loading failures in some browsers.
-    const isNavigation = request.mode === "navigate";
-
     event.respondWith(
       fetch(request)
         .then((response) => {
@@ -49,18 +43,14 @@ if (typeof window === "undefined") {
           }
 
           const newHeaders = new Headers(response.headers);
-          if (isNavigation) {
-            newHeaders.set(
-              "Cross-Origin-Embedder-Policy",
-              coepCredentialless ? "credentialless" : "require-corp"
-            );
-            newHeaders.set("Cross-Origin-Opener-Policy", "same-origin");
-          }
-          // CORP must be added to all responses so that cross-origin subresources
-          // satisfy the COEP: require-corp policy set on the navigation response.
+          newHeaders.set(
+            "Cross-Origin-Embedder-Policy",
+            coepCredentialless ? "credentialless" : "require-corp"
+          );
           if (!coepCredentialless) {
             newHeaders.set("Cross-Origin-Resource-Policy", "cross-origin");
           }
+          newHeaders.set("Cross-Origin-Opener-Policy", "same-origin");
 
           return new Response(response.body, {
             status: response.status,
@@ -68,31 +58,51 @@ if (typeof window === "undefined") {
             headers: newHeaders,
           });
         })
-        .catch((e) => {
-          console.error(e);
-          return fetch(event.request);
-        })
+        .catch((e) => console.error(e))
     );
   });
 } else {
   (() => {
+    const reloadedBySelf = window.sessionStorage.getItem("coiReloadedBySelf");
+    window.sessionStorage.removeItem("coiReloadedBySelf");
+    const coepDegrading = reloadedBySelf == "coepdegrade";
+
     // You can customize the behavior of this script through a global `coi` variable.
     const coi = {
-      shouldRegister: () => true,
+      shouldRegister: () => !reloadedBySelf,
       shouldDeregister: () => false,
-      coepCredentialless: () => !(window.chrome || window.netscape),
+      coepCredentialless: () => true,
+      coepDegrade: () => true,
       doReload: () => window.location.reload(),
       quiet: false,
       ...window.coi,
     };
 
     const n = navigator;
+    const controlling = n.serviceWorker && n.serviceWorker.controller;
 
-    if (n.serviceWorker && n.serviceWorker.controller) {
+    // Record the failure if the page is served by serviceWorker.
+    if (controlling && !window.crossOriginIsolated) {
+      window.sessionStorage.setItem("coiCoepHasFailed", "true");
+    }
+    const coepHasFailed = window.sessionStorage.getItem("coiCoepHasFailed");
+
+    if (controlling) {
+      // Reload only on the first failure.
+      const reloadToDegrade =
+        coi.coepDegrade() && !(coepDegrading || window.crossOriginIsolated);
       n.serviceWorker.controller.postMessage({
         type: "coepCredentialless",
-        value: coi.coepCredentialless(),
+        value:
+          reloadToDegrade || (coepHasFailed && coi.coepDegrade())
+            ? false
+            : coi.coepCredentialless(),
       });
+      if (reloadToDegrade) {
+        !coi.quiet && console.log("Reloading page to degrade COEP.");
+        window.sessionStorage.setItem("coiReloadedBySelf", "coepdegrade");
+        coi.doReload("coepdegrade");
+      }
 
       if (coi.shouldDeregister()) {
         n.serviceWorker.controller.postMessage({ type: "deregister" });
@@ -111,38 +121,46 @@ if (typeof window === "undefined") {
       return;
     }
 
-    // In some environments (e.g. Chrome incognito mode) this won't be available
-    if (n.serviceWorker) {
-      n.serviceWorker.register(window.document.currentScript.src).then(
-        (registration) => {
+    // In some environments (e.g. Firefox private mode) this won't be available
+    if (!n.serviceWorker) {
+      !coi.quiet &&
+        console.error(
+          "COOP/COEP Service Worker not registered, perhaps due to private mode."
+        );
+      return;
+    }
+
+    n.serviceWorker.register(window.document.currentScript.src).then(
+      (registration) => {
+        !coi.quiet &&
+          console.log(
+            "COOP/COEP Service Worker registered",
+            registration.scope
+          );
+
+        registration.addEventListener("updatefound", () => {
           !coi.quiet &&
             console.log(
-              "COOP/COEP Service Worker registered",
-              registration.scope
+              "Reloading page to make use of updated COOP/COEP Service Worker."
             );
+          window.sessionStorage.setItem("coiReloadedBySelf", "updatefound");
+          coi.doReload();
+        });
 
-          registration.addEventListener("updatefound", () => {
-            !coi.quiet &&
-              console.log(
-                "Reloading page to make use of updated COOP/COEP Service Worker."
-              );
-            coi.doReload();
-          });
-
-          // If the registration is active, but it's not controlling the page
-          if (registration.active && !n.serviceWorker.controller) {
-            !coi.quiet &&
-              console.log(
-                "Reloading page to make use of COOP/COEP Service Worker."
-              );
-            coi.doReload();
-          }
-        },
-        (err) => {
+        // If the registration is active, but it's not controlling the page
+        if (registration.active && !n.serviceWorker.controller) {
           !coi.quiet &&
-            console.error("COOP/COEP Service Worker failed to register:", err);
+            console.log(
+              "Reloading page to make use of COOP/COEP Service Worker."
+            );
+          window.sessionStorage.setItem("coiReloadedBySelf", "notcontrolling");
+          coi.doReload();
         }
-      );
-    }
+      },
+      (err) => {
+        !coi.quiet &&
+          console.error("COOP/COEP Service Worker failed to register:", err);
+      }
+    );
   })();
 }
