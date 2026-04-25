@@ -17,7 +17,7 @@ import { extractFeedTitle } from "../feedParser";
 import { RootStackParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
-import { buildRedditFeedUrl } from "../redditUtils";
+import { buildRedditFeedUrl, getSubreddit } from "../redditUtils";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
 
@@ -45,7 +45,7 @@ export default function AddFeedScreen({ navigation }: Props) {
   const handleSubredditChange = (value: string) => {
     setSubreddit(value);
     if (!titleManuallyEdited) {
-      const cleaned = value.trim().replace(/^r\//, "");
+      const cleaned = getSubreddit(value);
       setTitle(cleaned ? `Reddit - r/${cleaned}` : "");
     }
   };
@@ -75,7 +75,7 @@ export default function AddFeedScreen({ navigation }: Props) {
     setFeedError(null);
 
     if (source === "reddit") {
-      const cleanedSubreddit = subreddit.trim().replace(/^r\//, "");
+      const cleanedSubreddit = getSubreddit(subreddit);
       if (!cleanedSubreddit) {
         Alert.alert("Validation", "Please enter a subreddit name.");
         return;
