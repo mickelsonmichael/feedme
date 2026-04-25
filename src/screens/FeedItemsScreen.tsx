@@ -414,6 +414,14 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderStyle: "dashed",
   },
+  actionMeta: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+  },
+  actionIcon: {
+    fontSize: 18,
+    paddingHorizontal: spacing.xs,
+  },
   separator: { height: spacing.sm },
   emptyTitle: {
     fontSize: fontSize.h2,
