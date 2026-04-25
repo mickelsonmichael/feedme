@@ -3,21 +3,16 @@ import { Feed, FeedItem, FeedItemWithFeed, ParsedFeedItem } from "./types";
 
 let db: SQLite.SQLiteDatabase | null = null;
 
+// Native (iOS / Android) implementation of the database module.
+//
+// The web build uses `database.web.ts`, which is backed by `localStorage`
+// because the wa-sqlite/OPFS backend that `expo-sqlite` relies on for the web
+// is not reliably available in browsers (especially when the page is not
+// Cross-Origin-Isolated, e.g. on GitHub Pages). On native we always have a
+// real SQLite engine, so no fallback is needed here.
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!db) {
-    try {
-      db = await SQLite.openDatabaseAsync("feedme.db");
-    } catch (error) {
-      // Persistent storage (OPFS) is unavailable on this platform or context
-      // (e.g. web without Cross-Origin-Isolated headers). Fall back to an
-      // in-memory database so the app remains functional, though data will
-      // not persist across page reloads.
-      console.warn(
-        "OPFS unavailable, falling back to in-memory database:",
-        error
-      );
-      db = await SQLite.openDatabaseAsync(":memory:");
-    }
+    db = await SQLite.openDatabaseAsync("feedme.db");
     await initializeSchema(db);
   }
   return db;

@@ -27,12 +27,33 @@
       }
     </style>
     <!--
-      coi-serviceworker adds Cross-Origin-Opener-Policy and Cross-Origin-Embedder-Policy
-      headers via a Service Worker, which are required for expo-sqlite to use the
-      Origin Private File System (OPFS) on GitHub Pages (which does not support custom headers).
-      See: https://github.com/gzuidhof/coi-serviceworker
+      Previous versions of this app registered a Cross-Origin-Isolation
+      service worker (coi-serviceworker) so expo-sqlite could use OPFS on the
+      web. We now use localStorage on the web (see src/database.web.ts), so
+      the service worker is no longer needed and was causing intermittent
+      "ServiceWorker intercepted the request" errors. Proactively unregister
+      any leftover registrations from previously-cached visits.
     -->
-    <script src="coi-serviceworker.js"></script>
+    <script>
+      if ("serviceWorker" in navigator) {
+        navigator.serviceWorker
+          .getRegistrations()
+          .then(function (regs) {
+            regs.forEach(function (reg) {
+              if (
+                reg.active &&
+                reg.active.scriptURL &&
+                reg.active.scriptURL.indexOf("coi-serviceworker") !== -1
+              ) {
+                reg.unregister();
+              }
+            });
+          })
+          .catch(function () {
+            /* ignore */
+          });
+      }
+    </script>
   </head>
 
   <body>
