@@ -43,7 +43,7 @@
               if (
                 reg.active &&
                 reg.active.scriptURL &&
-                reg.active.scriptURL.indexOf("coi-serviceworker") !== -1
+                reg.active.scriptURL.includes("coi-serviceworker")
               ) {
                 reg.unregister();
               }

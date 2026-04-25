@@ -49,11 +49,15 @@ function loadState(): DbState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<DbState> | null;
+      const feeds =
+        parsed && Array.isArray(parsed.feeds) ? (parsed.feeds as Feed[]) : [];
+      const items =
+        parsed && Array.isArray(parsed.items)
+          ? (parsed.items as FeedItem[])
+          : [];
       cachedState = {
-        feeds: Array.isArray(parsed?.feeds) ? (parsed!.feeds as Feed[]) : [],
-        items: Array.isArray(parsed?.items)
-          ? (parsed!.items as FeedItem[])
-          : [],
+        feeds,
+        items,
         nextFeedId:
           typeof parsed?.nextFeedId === "number" && parsed.nextFeedId > 0
             ? parsed.nextFeedId
