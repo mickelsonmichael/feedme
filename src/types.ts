@@ -13,6 +13,7 @@ export type FeedItem = {
   title: string;
   url: string | null;
   content: string | null;
+  image_url: string | null;
   published_at: number | null;
   read: number;
 };
@@ -34,6 +35,7 @@ export type ParsedFeedItem = {
   title: string;
   url: string | null;
   content: string | null;
+  imageUrl?: string | null;
   publishedAt: number | null;
 };
 

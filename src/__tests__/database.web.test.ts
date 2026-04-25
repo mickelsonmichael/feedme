@@ -148,10 +148,51 @@ describe("database.web — items", () => {
     });
   });
 
+  it("stores and retrieves image_url from feed items", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      {
+        title: "Post with image",
+        url: "https://x/img",
+        content: null,
+        imageUrl: "https://example.com/thumb.jpg",
+        publishedAt: 1000,
+      },
+      {
+        title: "Post without image",
+        url: "https://x/no-img",
+        content: null,
+        imageUrl: null,
+        publishedAt: 2000,
+      },
+    ]);
+
+    // Act
+    const items = await getItemsForFeed(feedId);
+
+    // Assert
+    const withImage = items.find((i) => i.title === "Post with image")!;
+    const withoutImage = items.find((i) => i.title === "Post without image")!;
+    expect(withImage.image_url).toBe("https://example.com/thumb.jpg");
+    expect(withoutImage.image_url).toBeNull();
+  });
+
   it("upserts items and skips duplicates by (feed_id, url)", async () => {
     await upsertItems(feedId, [
-      { title: "One", url: "https://x/1", content: null, publishedAt: 1000 },
-      { title: "Two", url: "https://x/2", content: "body", publishedAt: 2000 },
+      {
+        title: "One",
+        url: "https://x/1",
+        content: null,
+        imageUrl: null,
+        publishedAt: 1000,
+      },
+      {
+        title: "Two",
+        url: "https://x/2",
+        content: "body",
+        imageUrl: null,
+        publishedAt: 2000,
+      },
     ]);
 
     // Re-running with one duplicate URL should not create a duplicate row.

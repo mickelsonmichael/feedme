@@ -46,6 +46,7 @@ async function initializeSchema(
       title TEXT NOT NULL,
       url TEXT,
       content TEXT,
+      image_url TEXT,
       published_at INTEGER,
       read INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE,
@@ -68,6 +69,13 @@ async function initializeSchema(
   // Migration: add error column to feeds if it doesn't exist yet
   try {
     await database.execAsync("ALTER TABLE feeds ADD COLUMN error TEXT");
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Migration: add image_url column to items if it doesn't exist yet
+  try {
+    await database.execAsync("ALTER TABLE items ADD COLUMN image_url TEXT");
   } catch {
     // Column already exists — ignore
   }
@@ -165,14 +173,15 @@ export async function upsertItems(
   const database = await getDatabase();
   for (const item of items) {
     await database.runAsync(
-      `INSERT INTO items (feed_id, title, url, content, published_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO items (feed_id, title, url, content, image_url, published_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (feed_id, url) DO NOTHING`,
       [
         feedId,
         item.title,
         item.url ?? null,
         item.content ?? null,
+        item.imageUrl ?? null,
         item.publishedAt ?? null,
       ]
     );
