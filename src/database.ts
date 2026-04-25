@@ -1,5 +1,11 @@
 import * as SQLite from "expo-sqlite";
-import { Feed, FeedItem, FeedItemWithFeed, ParsedFeedItem } from "./types";
+import {
+  Feed,
+  FeedItem,
+  FeedItemWithFeed,
+  ParsedFeedItem,
+  SavedPost,
+} from "./types";
 
 let db: SQLite.SQLiteDatabase | null = null;
 
@@ -45,6 +51,18 @@ async function initializeSchema(
       FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE,
       UNIQUE (feed_id, url)
     );
+
+    CREATE TABLE IF NOT EXISTS saved_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER,
+      feed_title TEXT NOT NULL,
+      title TEXT NOT NULL,
+      url TEXT,
+      content TEXT,
+      published_at INTEGER,
+      saved_at INTEGER NOT NULL,
+      UNIQUE (item_id)
+    );
   `);
 
   // Migration: add error column to feeds if it doesn't exist yet
@@ -52,6 +70,26 @@ async function initializeSchema(
     await database.execAsync("ALTER TABLE feeds ADD COLUMN error TEXT");
   } catch {
     // Column already exists — ignore
+  }
+
+  // Migration: add saved_posts table if it doesn't exist yet (for existing installs
+  // that were created before the saved_posts feature was added).
+  try {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS saved_posts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER,
+        feed_title TEXT NOT NULL,
+        title TEXT NOT NULL,
+        url TEXT,
+        content TEXT,
+        published_at INTEGER,
+        saved_at INTEGER NOT NULL,
+        UNIQUE (item_id)
+      )
+    `);
+  } catch {
+    // Table already exists — ignore
   }
 }
 
@@ -173,4 +211,49 @@ export async function getUnreadCount(feedId: number): Promise<number> {
     [feedId]
   );
   return row?.count ?? 0;
+}
+
+// ── Saved Posts ────────────────────────────────────────────────────────────
+
+export async function savePost(
+  item: FeedItem,
+  feedTitle: string
+): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync(
+    `INSERT INTO saved_posts (item_id, feed_title, title, url, content, published_at, saved_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (item_id) DO NOTHING`,
+    [
+      item.id,
+      feedTitle,
+      item.title,
+      item.url ?? null,
+      item.content ?? null,
+      item.published_at ?? null,
+      Date.now(),
+    ]
+  );
+}
+
+export async function unsavePost(itemId: number): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync("DELETE FROM saved_posts WHERE item_id = ?", [
+    itemId,
+  ]);
+}
+
+export async function getSavedPosts(): Promise<SavedPost[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<SavedPost>(
+    "SELECT * FROM saved_posts ORDER BY saved_at DESC"
+  );
+}
+
+export async function getSavedItemIds(): Promise<Set<number>> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{ item_id: number }>(
+    "SELECT item_id FROM saved_posts WHERE item_id IS NOT NULL"
+  );
+  return new Set(rows.map((r) => r.item_id));
 }

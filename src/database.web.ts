@@ -11,19 +11,34 @@
 // Metro automatically picks this file (over `database.ts`) when bundling for
 // the `web` platform thanks to the `.web.ts` extension.
 
-import { Feed, FeedItem, FeedItemWithFeed, ParsedFeedItem } from "./types";
+import {
+  Feed,
+  FeedItem,
+  FeedItemWithFeed,
+  ParsedFeedItem,
+  SavedPost,
+} from "./types";
 
 const STORAGE_KEY = "feedme_db_v1";
 
 type DbState = {
   feeds: Feed[];
   items: FeedItem[];
+  savedPosts: SavedPost[];
   nextFeedId: number;
   nextItemId: number;
+  nextSavedPostId: number;
 };
 
 function emptyState(): DbState {
-  return { feeds: [], items: [], nextFeedId: 1, nextItemId: 1 };
+  return {
+    feeds: [],
+    items: [],
+    savedPosts: [],
+    nextFeedId: 1,
+    nextItemId: 1,
+    nextSavedPostId: 1,
+  };
 }
 
 function isStorageAvailable(): boolean {
@@ -55,9 +70,14 @@ function loadState(): DbState {
         parsed && Array.isArray(parsed.items)
           ? (parsed.items as FeedItem[])
           : [];
+      const savedPosts =
+        parsed && Array.isArray(parsed.savedPosts)
+          ? (parsed.savedPosts as SavedPost[])
+          : [];
       cachedState = {
         feeds,
         items,
+        savedPosts,
         nextFeedId:
           typeof parsed?.nextFeedId === "number" && parsed.nextFeedId > 0
             ? parsed.nextFeedId
@@ -65,6 +85,11 @@ function loadState(): DbState {
         nextItemId:
           typeof parsed?.nextItemId === "number" && parsed.nextItemId > 0
             ? parsed.nextItemId
+            : 1,
+        nextSavedPostId:
+          typeof parsed?.nextSavedPostId === "number" &&
+          parsed.nextSavedPostId > 0
+            ? parsed.nextSavedPostId
             : 1,
       };
       return cachedState;
@@ -242,5 +267,49 @@ export async function getUnreadCount(feedId: number): Promise<number> {
   return state.items.reduce(
     (n, i) => (i.feed_id === feedId && i.read === 0 ? n + 1 : n),
     0
+  );
+}
+
+// ── Saved Posts ────────────────────────────────────────────────────────────
+
+export async function savePost(
+  item: FeedItem,
+  feedTitle: string
+): Promise<void> {
+  const state = loadState();
+  // Mirror `ON CONFLICT (item_id) DO NOTHING`
+  if (state.savedPosts.some((p) => p.item_id === item.id)) {
+    return;
+  }
+  state.savedPosts.push({
+    id: state.nextSavedPostId++,
+    item_id: item.id,
+    feed_title: feedTitle,
+    title: item.title,
+    url: item.url ?? null,
+    content: item.content ?? null,
+    published_at: item.published_at ?? null,
+    saved_at: Date.now(),
+  });
+  saveState(state);
+}
+
+export async function unsavePost(itemId: number): Promise<void> {
+  const state = loadState();
+  state.savedPosts = state.savedPosts.filter((p) => p.item_id !== itemId);
+  saveState(state);
+}
+
+export async function getSavedPosts(): Promise<SavedPost[]> {
+  const state = loadState();
+  return [...state.savedPosts].sort((a, b) => b.saved_at - a.saved_at);
+}
+
+export async function getSavedItemIds(): Promise<Set<number>> {
+  const state = loadState();
+  return new Set(
+    state.savedPosts
+      .filter((p) => p.item_id !== null)
+      .map((p) => p.item_id as number)
   );
 }
