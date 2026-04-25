@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Linking,
   Share,
+  Image,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -241,26 +242,37 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                   onPress={() => handleOpenItem(item)}
                   activeOpacity={0.7}
                 >
-                  <Text
-                    style={[
-                      styles.title,
-                      { color: colors.ink },
-                      item.read
-                        ? { color: colors.inkSoft, fontWeight: "500" }
-                        : null,
-                    ]}
-                    numberOfLines={3}
-                  >
-                    {item.title}
-                  </Text>
-                  {item.content ? (
-                    <Text
-                      style={[styles.summary, { color: colors.inkSoft }]}
-                      numberOfLines={2}
-                    >
-                      {stripHtml(item.content)}
-                    </Text>
-                  ) : null}
+                  <View style={styles.titleRow}>
+                    {item.image_url ? (
+                      <Image
+                        source={{ uri: item.image_url }}
+                        style={styles.thumbnail}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+                    <View style={styles.titleContent}>
+                      <Text
+                        style={[
+                          styles.title,
+                          { color: colors.ink },
+                          item.read
+                            ? { color: colors.inkSoft, fontWeight: "500" }
+                            : null,
+                        ]}
+                        numberOfLines={3}
+                      >
+                        {item.title}
+                      </Text>
+                      {item.content ? (
+                        <Text
+                          style={[styles.summary, { color: colors.inkSoft }]}
+                          numberOfLines={2}
+                        >
+                          {stripHtml(item.content)}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
                 </TouchableOpacity>
                 <View
                   style={[
@@ -384,6 +396,19 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     marginTop: spacing.xs,
     lineHeight: 18,
+  },
+  titleRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+  },
+  titleContent: {
+    flex: 1,
+  },
+  thumbnail: {
+    width: 72,
+    height: 72,
+    borderRadius: radii.sm,
   },
   actionRow: {
     flexDirection: "row",
