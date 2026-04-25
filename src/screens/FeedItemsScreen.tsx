@@ -58,12 +58,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     }
   }, [feed.id]);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadItems();
-    }, [loadItems])
-  );
-
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
@@ -77,6 +71,12 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       setRefreshing(false);
     }
   }, [feed, loadItems]);
+
+  useFocusEffect(
+    useCallback(() => {
+      handleRefresh();
+    }, [handleRefresh])
+  );
 
   const handleOpenItem = async (item: FeedItem) => {
     await markItemRead(item.id);
