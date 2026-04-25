@@ -35,6 +35,7 @@ import {
 import { MetaText, Pill } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { SortMode, applySortMode } from "../sortItems";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -59,6 +60,7 @@ export default function FeedListScreen({ navigation }: Props) {
   // available on the Feed model yet. The selected value persists during
   // the session so the UI still feels interactive.
   const [filter, setFilter] = useState<"all" | "unread" | "starred">("all");
+  const [sort, setSort] = useState<SortMode>("stacked");
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
 
@@ -166,9 +168,11 @@ export default function FeedListScreen({ navigation }: Props) {
     });
   };
 
+  const sortedItems = useMemo(() => applySortMode(items, sort), [items, sort]);
+
   const visibleItems = useMemo(
-    () => items.filter((i) => !hiddenIds.has(i.id)),
-    [items, hiddenIds]
+    () => sortedItems.filter((i) => !hiddenIds.has(i.id)),
+    [sortedItems, hiddenIds]
   );
 
   if (loading) {
@@ -187,7 +191,7 @@ export default function FeedListScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      {/* Filter pills row */}
+      {/* Filter + sort pills row */}
       <View style={[styles.filterRow, { borderBottomColor: colors.inkFaint }]}>
         <ScrollView
           horizontal
@@ -216,6 +220,27 @@ export default function FeedListScreen({ navigation }: Props) {
             <Pill
               label="★ starred"
               variant={filter === "starred" ? "accent" : "soft"}
+            />
+          </TouchableOpacity>
+          <View
+            style={[styles.pillDivider, { backgroundColor: colors.inkFaint }]}
+          />
+          <TouchableOpacity
+            onPress={() => setSort("newest")}
+            activeOpacity={0.7}
+          >
+            <Pill
+              label="newest"
+              variant={sort === "newest" ? "accent" : "soft"}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => setSort("stacked")}
+            activeOpacity={0.7}
+          >
+            <Pill
+              label="stacked"
+              variant={sort === "stacked" ? "accent" : "soft"}
             />
           </TouchableOpacity>
         </ScrollView>
@@ -400,6 +425,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     gap: spacing.sm,
     flexDirection: "row",
+    alignItems: "center",
+  },
+  pillDivider: {
+    width: 1,
+    height: 16,
+    marginHorizontal: spacing.xs,
   },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   card: {
