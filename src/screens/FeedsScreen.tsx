@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -52,28 +53,33 @@ export default function FeedsScreen({ navigation }: Props) {
   }, []);
 
   const handleDeleteFeed = (feed: Feed) => {
-    Alert.alert(
-      "Remove Feed",
-      `Remove "${feed.title}"? All associated items will be deleted.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteFeed(feed.id);
-              setFeeds((prev) => prev.filter((f) => f.id !== feed.id));
-            } catch (err) {
-              Alert.alert(
-                "Error",
-                "Could not delete feed: " + (err as Error).message
-              );
-            }
-          },
-        },
-      ]
-    );
+    const message = `Remove "${feed.title}"? All associated items will be deleted.`;
+
+    const doDelete = async () => {
+      try {
+        await deleteFeed(feed.id);
+        setFeeds((prev) => prev.filter((f) => f.id !== feed.id));
+      } catch (err) {
+        const errMsg = "Could not delete feed: " + (err as Error).message;
+        if (Platform.OS === "web") {
+          window.alert(errMsg);
+        } else {
+          Alert.alert("Error", errMsg);
+        }
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm(message)) {
+        doDelete();
+      }
+      return;
+    }
+
+    Alert.alert("Remove Feed", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: doDelete },
+    ]);
   };
 
   useFocusEffect(
