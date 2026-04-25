@@ -8,6 +8,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Platform,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -52,28 +53,33 @@ export default function FeedsScreen({ navigation }: Props) {
   }, []);
 
   const handleDeleteFeed = (feed: Feed) => {
-    Alert.alert(
-      "Remove Feed",
-      `Remove "${feed.title}"? All associated items will be deleted.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteFeed(feed.id);
-              setFeeds((prev) => prev.filter((f) => f.id !== feed.id));
-            } catch (err) {
-              Alert.alert(
-                "Error",
-                "Could not delete feed: " + (err as Error).message
-              );
-            }
-          },
-        },
-      ]
-    );
+    const message = `Remove "${feed.title}"? All associated items will be deleted.`;
+
+    const doDelete = async () => {
+      try {
+        await deleteFeed(feed.id);
+        setFeeds((prev) => prev.filter((f) => f.id !== feed.id));
+      } catch (err) {
+        const errMsg = "Could not delete feed: " + (err as Error).message;
+        if (Platform.OS === "web") {
+          window.alert(errMsg);
+        } else {
+          Alert.alert("Error", errMsg);
+        }
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm(message)) {
+        doDelete();
+      }
+      return;
+    }
+
+    Alert.alert("Remove Feed", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Remove", style: "destructive", onPress: doDelete },
+    ]);
   };
 
   useFocusEffect(
@@ -105,23 +111,36 @@ export default function FeedsScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <View
-        style={[
-          styles.searchRow,
-          { borderColor: colors.inkFaint, backgroundColor: colors.paperWarm },
-        ]}
-      >
-        <Feather name="search" size={14} color={colors.inkSoft} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.ink }]}
-          placeholder="search by title or url…"
-          placeholderTextColor={colors.inkFaint}
-          value={search}
-          onChangeText={setSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
-          clearButtonMode="while-editing"
-        />
+      <View style={styles.topRow}>
+        <View
+          style={[
+            styles.searchRow,
+            { borderColor: colors.inkFaint, backgroundColor: colors.paperWarm },
+          ]}
+        >
+          <Feather name="search" size={14} color={colors.inkSoft} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.ink }]}
+            placeholder="search by title or url…"
+            placeholderTextColor={colors.inkFaint}
+            value={search}
+            onChangeText={setSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+            clearButtonMode="while-editing"
+          />
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.addBtn,
+            { backgroundColor: colors.accent, borderColor: colors.ink },
+          ]}
+          onPress={() => navigation.navigate("AddFeed")}
+          accessibilityLabel="Add feed"
+          activeOpacity={0.8}
+        >
+          <Feather name="plus" size={18} color={colors.paper} />
+        </TouchableOpacity>
       </View>
 
       {feeds.length === 0 ? (
@@ -130,7 +149,7 @@ export default function FeedsScreen({ navigation }: Props) {
             No feeds yet.
           </Text>
           <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            Add feeds from the Home tab or Settings.
+            Tap the plus button above to add your first feed.
           </Text>
         </View>
       ) : visibleFeeds.length === 0 ? (
@@ -205,15 +224,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: spacing.xl,
   },
-  searchRow: {
+  topRow: {
     flexDirection: "row",
     alignItems: "center",
     margin: spacing.md,
+    gap: spacing.sm,
+  },
+  searchRow: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderWidth: 1.5,
     borderRadius: radii.sm,
     gap: spacing.sm,
+  },
+  addBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: radii.sm,
+    borderWidth: 1.5,
+    alignItems: "center",
+    justifyContent: "center",
   },
   searchInput: {
     flex: 1,
