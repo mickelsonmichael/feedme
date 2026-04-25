@@ -71,26 +71,6 @@ async function initializeSchema(
   } catch {
     // Column already exists — ignore
   }
-
-  // Migration: add saved_posts table if it doesn't exist yet (for existing installs
-  // that were created before the saved_posts feature was added).
-  try {
-    await database.execAsync(`
-      CREATE TABLE IF NOT EXISTS saved_posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        item_id INTEGER,
-        feed_title TEXT NOT NULL,
-        title TEXT NOT NULL,
-        url TEXT,
-        content TEXT,
-        published_at INTEGER,
-        saved_at INTEGER NOT NULL,
-        UNIQUE (item_id)
-      )
-    `);
-  } catch {
-    // Table already exists — ignore
-  }
 }
 
 // ── Feeds ──────────────────────────────────────────────────────────────────
