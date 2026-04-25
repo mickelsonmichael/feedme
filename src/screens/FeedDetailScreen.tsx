@@ -251,7 +251,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             styles.input,
             {
               backgroundColor: colors.paper,
-              borderColor: colors.ink,
+              borderColor: colors.border,
               color: colors.ink,
             },
           ]}
@@ -270,7 +270,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             styles.input,
             {
               backgroundColor: colors.paper,
-              borderColor: colors.ink,
+              borderColor: colors.border,
               color: colors.ink,
             },
           ]}
@@ -321,8 +321,8 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   errorBox: {
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.md,
   },
@@ -340,8 +340,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   input: {
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: fontSize.bodyLg,

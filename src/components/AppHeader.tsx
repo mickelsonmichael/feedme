@@ -22,7 +22,7 @@ export function AppHeader({ subtitle }: { subtitle?: string }) {
       style={[
         styles.header,
         {
-          borderBottomColor: colors.ink,
+          borderBottomColor: colors.border,
           backgroundColor: colors.paper,
           paddingTop,
         },
@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
-    borderBottomWidth: 1.2,
+    borderBottomWidth: 1,
     gap: spacing.sm,
   },
   title: {

@@ -9,6 +9,8 @@ export const colors = {
   ink: "#1e1a3a",
   inkSoft: "#6a6487",
   inkFaint: "#b8b2cc",
+  // Structural border: lighter black on light mode for a softer look
+  border: "#ccc8db",
   accent: "#3d358f",
   accentSoft: "#7e78c4",
   highlight: "#ffe27a",
@@ -23,6 +25,8 @@ export const darkColors = {
   ink: "#e8e4f5",
   inkSoft: "#9992c0",
   inkFaint: "#3d3958",
+  // Structural border: darker white on dark mode for a softer look
+  border: "#4a4665",
   accent: "#7e78c4",
   accentSoft: "#3d358f",
   highlight: "#ffe27a",
@@ -36,6 +40,7 @@ export type ColorTokens = {
   ink: string;
   inkSoft: string;
   inkFaint: string;
+  border: string;
   accent: string;
   accentSoft: string;
   highlight: string;
@@ -55,6 +60,7 @@ export const radii = {
   sm: 2,
   md: 4,
   lg: 8,
+  xl: 12,
   pill: 999,
 } as const;
 

@@ -52,6 +52,43 @@ function Row({
   );
 }
 
+function Toggle({
+  label,
+  on,
+  onChange,
+}: {
+  label: string;
+  on: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <TouchableOpacity
+      style={[styles.row, { borderBottomColor: colors.inkFaint }]}
+      onPress={() => onChange(!on)}
+      activeOpacity={0.6}
+    >
+      <Text style={[styles.rowLabel, { color: colors.ink }]}>{label}</Text>
+      <View
+        style={[
+          styles.toggle,
+          { borderColor: colors.border, backgroundColor: colors.paper },
+          on && { backgroundColor: colors.accent, borderColor: colors.accent },
+        ]}
+      >
+        <View
+          style={[
+            styles.knob,
+            on
+              ? { backgroundColor: colors.paper, alignSelf: "flex-end" }
+              : { backgroundColor: colors.ink, alignSelf: "flex-start" },
+          ]}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
 function Segmented<T extends string>({
   value,
   options,
@@ -66,7 +103,7 @@ function Segmented<T extends string>({
     <View
       style={[
         styles.segmented,
-        { borderColor: colors.ink, backgroundColor: colors.paper },
+        { borderColor: colors.border, backgroundColor: colors.paper },
       ]}
     >
       {options.map((opt) => {
@@ -145,12 +182,25 @@ const styles = StyleSheet.create({
   },
   rowValue: {
     fontSize: fontSize.body,
-    fontFamily: fonts.sans,
+    fontFamily: fonts.mono,
+  },
+  toggle: {
+    width: 36,
+    height: 20,
+    borderWidth: 1,
+    borderRadius: 999,
+    justifyContent: "center",
+    padding: 1,
+  },
+  knob: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
   },
   segmented: {
     flexDirection: "row",
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     padding: 3,
     alignSelf: "flex-start",
   },

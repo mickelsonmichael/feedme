@@ -206,7 +206,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                   styles.card,
                   {
                     backgroundColor: colors.paper,
-                    borderColor: colors.ink,
+                    borderColor: colors.border,
                   },
                 ]}
               >
@@ -358,8 +358,8 @@ const styles = StyleSheet.create({
   spacer: { flex: 1 },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   card: {
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     overflow: "hidden",
   },
   cardRow: {
@@ -422,8 +422,8 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   fetchBtn: {
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
   },

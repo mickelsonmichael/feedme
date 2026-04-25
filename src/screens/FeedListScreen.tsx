@@ -278,7 +278,7 @@ export default function FeedListScreen({ navigation }: Props) {
                   styles.card,
                   {
                     backgroundColor: colors.paper,
-                    borderColor: colors.ink,
+                    borderColor: colors.border,
                   },
                 ]}
               >
@@ -436,8 +436,8 @@ const styles = StyleSheet.create({
   },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   card: {
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     overflow: "hidden",
   },
   cardRow: {

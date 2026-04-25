@@ -133,7 +133,7 @@ export default function FeedsScreen({ navigation }: Props) {
         <TouchableOpacity
           style={[
             styles.addBtn,
-            { backgroundColor: colors.accent, borderColor: colors.ink },
+            { borderColor: colors.border, backgroundColor: colors.accent },
           ]}
           onPress={() => navigation.navigate("AddFeed")}
           accessibilityLabel="Add feed"
@@ -236,15 +236,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
-    borderWidth: 1.5,
-    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
     gap: spacing.sm,
   },
   addBtn: {
     width: 44,
     height: 44,
-    borderRadius: radii.sm,
-    borderWidth: 1.5,
+    borderRadius: radii.md,
+    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
   },

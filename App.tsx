@@ -116,7 +116,7 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
     <View
       style={[
         styles.sidebar,
-        { backgroundColor: colors.paper, borderRightColor: colors.ink },
+        { backgroundColor: colors.paper, borderRightColor: colors.border },
       ]}
     >
       <View style={styles.sidebarTop}>{MAIN_NAV.map(renderItem)}</View>
@@ -139,8 +139,8 @@ function Tabs() {
         tabBarInactiveTintColor: colors.inkSoft,
         tabBarStyle: {
           backgroundColor: colors.paper,
-          borderTopWidth: 1.5,
-          borderTopColor: colors.ink,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
           height: 62,
           paddingBottom: 6,
           paddingTop: 6,
@@ -298,7 +298,7 @@ const styles = StyleSheet.create({
   },
   sidebar: {
     width: WEB_SIDEBAR_WIDTH,
-    borderRightWidth: 1.5,
+    borderRightWidth: 1,
     paddingTop: spacing.md,
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.md,
