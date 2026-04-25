@@ -1,4 +1,4 @@
-import { parseFeed, extractFeedTitle } from "../feedParser";
+import { parseFeed, extractFeedTitle, extractImageUrl } from "../feedParser";
 import { ParsedFeedItem } from "../types";
 
 const RSS_FEED = `<?xml version="1.0" encoding="UTF-8"?>
@@ -18,6 +18,38 @@ const RSS_FEED = `<?xml version="1.0" encoding="UTF-8"?>
       <link>https://example.com/second</link>
       <description>Plain text description</description>
       <pubDate>Tue, 02 Jan 2024 12:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`;
+
+const RSS_FEED_WITH_IMAGES = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Image RSS Feed</title>
+    <item>
+      <title>Media Content Post</title>
+      <link>https://example.com/media</link>
+      <media:content url="https://example.com/image1.jpg" medium="image"/>
+    </item>
+    <item>
+      <title>Media Thumbnail Post</title>
+      <link>https://example.com/thumb</link>
+      <media:thumbnail url="https://example.com/thumb1.jpg"/>
+    </item>
+    <item>
+      <title>Enclosure Post</title>
+      <link>https://example.com/enclosure</link>
+      <enclosure url="https://example.com/image2.jpg" type="image/jpeg" length="12345"/>
+    </item>
+    <item>
+      <title>Img Tag Post</title>
+      <link>https://example.com/img</link>
+      <description><![CDATA[<p><img src="https://example.com/image3.png" alt="photo"/></p>]]></description>
+    </item>
+    <item>
+      <title>No Image Post</title>
+      <link>https://example.com/no-image</link>
+      <description>Just text here</description>
     </item>
   </channel>
 </rss>`;
@@ -124,6 +156,85 @@ describe("parseFeed – return type", () => {
       expect(
         item.publishedAt === null || typeof item.publishedAt === "number"
       ).toBe(true);
+      expect(item.imageUrl === null || typeof item.imageUrl === "string").toBe(
+        true
+      );
     });
+  });
+});
+
+describe("parseFeed – image extraction (RSS)", () => {
+  it("extracts image_url from media:content", () => {
+    // Arrange & Act
+    const items = parseFeed(RSS_FEED_WITH_IMAGES);
+    const item = items.find((i) => i.title === "Media Content Post")!;
+
+    // Assert
+    expect(item.imageUrl).toBe("https://example.com/image1.jpg");
+  });
+
+  it("extracts image_url from media:thumbnail", () => {
+    // Arrange & Act
+    const items = parseFeed(RSS_FEED_WITH_IMAGES);
+    const item = items.find((i) => i.title === "Media Thumbnail Post")!;
+
+    // Assert
+    expect(item.imageUrl).toBe("https://example.com/thumb1.jpg");
+  });
+
+  it("extracts image_url from enclosure with image MIME type", () => {
+    // Arrange & Act
+    const items = parseFeed(RSS_FEED_WITH_IMAGES);
+    const item = items.find((i) => i.title === "Enclosure Post")!;
+
+    // Assert
+    expect(item.imageUrl).toBe("https://example.com/image2.jpg");
+  });
+
+  it("extracts image_url from <img> tag in content", () => {
+    // Arrange & Act
+    const items = parseFeed(RSS_FEED_WITH_IMAGES);
+    const item = items.find((i) => i.title === "Img Tag Post")!;
+
+    // Assert
+    expect(item.imageUrl).toBe("https://example.com/image3.png");
+  });
+
+  it("sets imageUrl to null when no image is present", () => {
+    // Arrange & Act
+    const items = parseFeed(RSS_FEED_WITH_IMAGES);
+    const item = items.find((i) => i.title === "No Image Post")!;
+
+    // Assert
+    expect(item.imageUrl).toBeNull();
+  });
+});
+
+describe("extractImageUrl", () => {
+  it("returns undefined when block has no image references", () => {
+    // Arrange & Act & Assert
+    expect(extractImageUrl("<item><title>Hi</title></item>")).toBeUndefined();
+  });
+
+  it("prefers media:content over media:thumbnail", () => {
+    // Arrange
+    const block = `
+      <media:content url="https://example.com/big.jpg" medium="image"/>
+      <media:thumbnail url="https://example.com/small.jpg"/>
+    `;
+
+    // Act & Assert
+    expect(extractImageUrl(block)).toBe("https://example.com/big.jpg");
+  });
+
+  it("falls back to <img> in html content when no dedicated image tag exists", () => {
+    // Arrange
+    const block = "<item></item>";
+    const htmlContent = '<p><img src="https://example.com/inline.png"/></p>';
+
+    // Act & Assert
+    expect(extractImageUrl(block, htmlContent)).toBe(
+      "https://example.com/inline.png"
+    );
   });
 });

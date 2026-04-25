@@ -246,6 +246,7 @@ export async function upsertItems(
       title: item.title,
       url: item.url ?? null,
       content: item.content ?? null,
+      image_url: item.imageUrl ?? null,
       published_at: item.publishedAt ?? null,
       read: 0,
     });
