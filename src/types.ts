@@ -4,6 +4,7 @@ export type Feed = {
   url: string;
   description: string | null;
   last_fetched: number | null;
+  error: string | null;
 };
 
 export type FeedItem = {
@@ -29,13 +30,14 @@ export type RootStackParamList = {
   Tabs: undefined;
   AddFeed: undefined;
   FeedItems: { feed: Feed };
+  FeedDetail: { feedId: number };
   ImportExport: undefined;
 };
 
 export type TabParamList = {
   Feed: undefined;
   Saved: undefined;
-  Discover: undefined;
+  Feeds: undefined;
   Settings: undefined;
 };
 

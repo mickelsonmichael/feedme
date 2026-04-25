@@ -1,0 +1,250 @@
+import React, { useState, useCallback, useMemo } from "react";
+import {
+  View,
+  Text,
+  FlatList,
+  TouchableOpacity,
+  TextInput,
+  StyleSheet,
+  ActivityIndicator,
+} from "react-native";
+import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { CompositeScreenProps } from "@react-navigation/native";
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { getFeeds } from "../database";
+import { Feed, RootStackParamList, TabParamList } from "../types";
+import { DashedDivider } from "../components/ui";
+import { fonts, fontSize, radii, spacing } from "../theme";
+import { useTheme } from "../context/ThemeContext";
+
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<TabParamList, "Feeds">,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+function fuzzyMatch(query: string, text: string): boolean {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  let qi = 0;
+  for (let i = 0; i < t.length && qi < q.length; i++) {
+    if (t[i] === q[qi]) qi++;
+  }
+  return qi === q.length;
+}
+
+export default function FeedsScreen({ navigation }: Props) {
+  const { colors } = useTheme();
+  const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+
+  const loadFeeds = useCallback(async () => {
+    try {
+      const data = await getFeeds();
+      setFeeds(data);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadFeeds();
+    }, [loadFeeds])
+  );
+
+  const visibleFeeds = useMemo(() => {
+    if (!search.trim()) return feeds;
+    return feeds.filter(
+      (f) => fuzzyMatch(search, f.title) || fuzzyMatch(search, f.url)
+    );
+  }, [feeds, search]);
+
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.container,
+          styles.center,
+          { backgroundColor: colors.paper },
+        ]}
+      >
+        <ActivityIndicator size="large" color={colors.accent} />
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.paper }]}>
+      <View style={[styles.header, { borderBottomColor: colors.ink }]}>
+        <Feather name="rss" size={18} color={colors.ink} />
+        <Text style={[styles.headerTitle, { color: colors.ink }]}>feeds</Text>
+      </View>
+
+      <View
+        style={[
+          styles.searchRow,
+          { borderColor: colors.inkFaint, backgroundColor: colors.paperWarm },
+        ]}
+      >
+        <Feather name="search" size={14} color={colors.inkSoft} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.ink }]}
+          placeholder="search by title or url…"
+          placeholderTextColor={colors.inkFaint}
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
+          clearButtonMode="while-editing"
+        />
+      </View>
+
+      {feeds.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+            No feeds yet.
+          </Text>
+          <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
+            Add feeds from the Home tab or Settings.
+          </Text>
+        </View>
+      ) : visibleFeeds.length === 0 ? (
+        <View style={styles.center}>
+          <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+            No matches.
+          </Text>
+          <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
+            Try a different search term.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={visibleFeeds}
+          keyExtractor={(item) => String(item.id)}
+          contentContainerStyle={styles.list}
+          ItemSeparatorComponent={() => <DashedDivider />}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              style={styles.row}
+              onPress={() =>
+                navigation.navigate("FeedDetail", { feedId: item.id })
+              }
+              activeOpacity={0.7}
+            >
+              <View style={styles.rowBody}>
+                <Text style={[styles.feedTitle, { color: colors.ink }]}>
+                  {item.title}
+                </Text>
+                <Text
+                  style={[styles.feedUrl, { color: colors.inkSoft }]}
+                  numberOfLines={1}
+                >
+                  {item.url}
+                </Text>
+              </View>
+              {item.error ? (
+                <View
+                  style={[
+                    styles.badge,
+                    {
+                      backgroundColor: colors.danger,
+                      borderColor: colors.danger,
+                    },
+                  ]}
+                >
+                  <Text style={[styles.badgeText, { color: colors.paper }]}>
+                    Error
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          )}
+        />
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  center: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    padding: spacing.xl,
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1.2,
+    gap: spacing.sm,
+  },
+  headerTitle: {
+    fontFamily: fonts.heading,
+    fontSize: fontSize.h2,
+    fontWeight: "600",
+  },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    margin: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1.5,
+    borderRadius: radii.sm,
+    gap: spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: fontSize.body,
+    fontFamily: fonts.mono,
+    paddingVertical: 0,
+  },
+  list: { paddingVertical: spacing.sm },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  rowBody: { flex: 1, gap: 2 },
+  feedTitle: {
+    fontSize: fontSize.bodyLg,
+    fontWeight: "600",
+    fontFamily: fonts.heading,
+  },
+  feedUrl: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.mono,
+  },
+  badge: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 2,
+    borderRadius: radii.pill,
+    borderWidth: 1,
+  },
+  badgeText: {
+    fontSize: fontSize.xs,
+    fontFamily: fonts.mono,
+    fontWeight: "600",
+  },
+  emptyTitle: {
+    fontSize: fontSize.h2,
+    fontFamily: fonts.heading,
+    fontWeight: "600",
+    marginBottom: spacing.sm,
+  },
+  emptySub: {
+    fontSize: fontSize.body,
+    fontFamily: fonts.mono,
+    textAlign: "center",
+  },
+});
