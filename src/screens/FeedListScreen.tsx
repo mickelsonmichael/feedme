@@ -356,23 +356,6 @@ export default function FeedListScreen({ navigation }: Props) {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
-
-      {/* FAB */}
-      <TouchableOpacity
-        style={[
-          styles.fab,
-          {
-            backgroundColor: colors.accent,
-            borderColor: colors.ink,
-            shadowColor: colors.ink,
-          },
-        ]}
-        onPress={() => navigation.navigate("AddFeed")}
-        accessibilityLabel="Add feed"
-        activeOpacity={0.8}
-      >
-        <Text style={[styles.fabText, { color: colors.paper }]}>＋</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -475,25 +458,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
     transform: [{ rotate: "-2deg" }],
     textAlign: "center",
-  },
-  fab: {
-    position: "absolute",
-    right: spacing.xl,
-    bottom: spacing.xl,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1.5,
-    elevation: 4,
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  fabText: {
-    fontSize: 28,
-    lineHeight: 32,
-    fontWeight: "600",
   },
 });
