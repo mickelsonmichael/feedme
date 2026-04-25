@@ -17,10 +17,14 @@ import {
   upsertItems,
   markItemRead,
   updateFeedLastFetched,
+  savePost,
+  unsavePost,
+  getSavedItemIds,
 } from "../database";
 import { fetchFeed } from "../feedParser";
 import { FeedItem, RootStackParamList } from "../types";
 import { MetaText } from "../components/ui";
+import { Feather } from "@expo/vector-icons";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
@@ -38,8 +42,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // Mock per-session state. Save / hide aren't persisted yet — real storage
-  // will land with issues #13 (Save forever) and #14 (Read later).
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
 
@@ -49,8 +51,12 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
 
   const loadItems = useCallback(async () => {
     try {
-      const data = await getItemsForFeed(feed.id);
+      const [data, ids] = await Promise.all([
+        getItemsForFeed(feed.id),
+        getSavedItemIds(),
+      ]);
       setItems(data);
+      setSavedIds(ids);
     } catch (err) {
       Alert.alert("Error", "Failed to load items: " + (err as Error).message);
     } finally {
@@ -90,13 +96,23 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     }
   };
 
-  const toggleSave = (id: number) => {
-    setSavedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleSave = async (item: FeedItem) => {
+    const alreadySaved = savedIds.has(item.id);
+    try {
+      if (alreadySaved) {
+        await unsavePost(item.id);
+        setSavedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
+      } else {
+        await savePost(item, feed.title);
+        setSavedIds((prev) => new Set(prev).add(item.id));
+      }
+    } catch (err) {
+      Alert.alert("Error", "Could not update saved status.");
+    }
   };
 
   const hideItem = (id: number) => {
@@ -260,19 +276,15 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                   </Text>
                   <View style={styles.spacer} />
                   <TouchableOpacity
-                    onPress={() => toggleSave(item.id)}
+                    onPress={() => toggleSave(item)}
                     activeOpacity={0.6}
                     hitSlop={8}
                   >
-                    <Text
-                      style={[
-                        styles.actionIcon,
-                        { color: colors.inkSoft },
-                        saved && { color: colors.accent },
-                      ]}
-                    >
-                      {saved ? "❤" : "♡"}
-                    </Text>
+                    <Feather
+                      name="bookmark"
+                      size={18}
+                      color={saved ? colors.accent : colors.inkSoft}
+                    />
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => hideItem(item.id)}

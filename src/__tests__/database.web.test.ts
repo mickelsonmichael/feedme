@@ -15,9 +15,13 @@ import {
   getFeeds,
   getItemCountForFeed,
   getItemsForFeed,
+  getSavedItemIds,
+  getSavedPosts,
   getUnreadCount,
   markItemRead,
+  savePost,
   setFeedError,
+  unsavePost,
   updateFeed,
   updateFeedLastFetched,
   upsertItems,
@@ -239,5 +243,162 @@ describe("database.web — items", () => {
     const otherItems = await getItemsForFeed(otherFeedId);
     expect(otherItems).toHaveLength(1);
     expect(otherItems[0].title).toBe("c");
+  });
+});
+
+describe("database.web — saved posts", () => {
+  let feedId: number;
+
+  beforeEach(async () => {
+    feedId = await addFeed({
+      title: "My Feed",
+      url: "https://example.com/feed",
+      description: null,
+    });
+  });
+
+  it("starts with no saved posts", async () => {
+    // Arrange & Act
+    const posts = await getSavedPosts();
+
+    // Assert
+    expect(posts).toEqual([]);
+  });
+
+  it("saves a post and retrieves it", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      {
+        title: "Hello World",
+        url: "https://example.com/1",
+        content: "<p>Content</p>",
+        publishedAt: 1000,
+      },
+    ]);
+    const items = await getItemsForFeed(feedId);
+    const item = items[0];
+
+    // Act
+    await savePost(item, "My Feed");
+    const posts = await getSavedPosts();
+
+    // Assert
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      item_id: item.id,
+      feed_title: "My Feed",
+      title: "Hello World",
+      url: "https://example.com/1",
+      content: "<p>Content</p>",
+      published_at: 1000,
+    });
+    expect(typeof posts[0].saved_at).toBe("number");
+    expect(posts[0].saved_at).toBeGreaterThan(0);
+  });
+
+  it("does not duplicate a saved post (idempotent save)", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      {
+        title: "Post",
+        url: "https://example.com/1",
+        content: null,
+        publishedAt: 1,
+      },
+    ]);
+    const item = (await getItemsForFeed(feedId))[0];
+
+    // Act
+    await savePost(item, "My Feed");
+    await savePost(item, "My Feed");
+
+    // Assert
+    expect(await getSavedPosts()).toHaveLength(1);
+  });
+
+  it("unsaves a post by item_id", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      {
+        title: "Post",
+        url: "https://example.com/1",
+        content: null,
+        publishedAt: 1,
+      },
+    ]);
+    const item = (await getItemsForFeed(feedId))[0];
+    await savePost(item, "My Feed");
+
+    // Act
+    await unsavePost(item.id);
+
+    // Assert
+    expect(await getSavedPosts()).toEqual([]);
+  });
+
+  it("getSavedItemIds returns a set of item IDs", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      { title: "A", url: "https://x/a", content: null, publishedAt: 1 },
+      { title: "B", url: "https://x/b", content: null, publishedAt: 2 },
+    ]);
+    const items = await getItemsForFeed(feedId);
+    await savePost(items[0], "My Feed");
+
+    // Act
+    const ids = await getSavedItemIds();
+
+    // Assert
+    expect(ids.has(items[0].id)).toBe(true);
+    expect(ids.has(items[1].id)).toBe(false);
+  });
+
+  it("getSavedPosts returns posts sorted by saved_at descending", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      { title: "Older", url: "https://x/old", content: null, publishedAt: 100 },
+      { title: "Newer", url: "https://x/new", content: null, publishedAt: 200 },
+    ]);
+    const items = await getItemsForFeed(feedId);
+    const olderItem = items.find((i) => i.title === "Older")!;
+    const newerItem = items.find((i) => i.title === "Newer")!;
+
+    // Act: save older item first (earlier timestamp), then newer item (later timestamp)
+    const dateSpy = jest
+      .spyOn(Date, "now")
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(2000);
+    await savePost(olderItem, "My Feed");
+    await savePost(newerItem, "My Feed");
+    dateSpy.mockRestore();
+
+    const posts = await getSavedPosts();
+
+    // Assert: most recently saved appears first
+    expect(posts[0].title).toBe("Newer");
+    expect(posts[1].title).toBe("Older");
+  });
+
+  it("saved posts are independent of feed deletion", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      {
+        title: "Precious Post",
+        url: "https://x/p",
+        content: "body",
+        publishedAt: 1,
+      },
+    ]);
+    const item = (await getItemsForFeed(feedId))[0];
+    await savePost(item, "My Feed");
+
+    // Act: delete the feed (cascades to items)
+    await deleteFeed(feedId);
+
+    // Assert: saved post still exists
+    const posts = await getSavedPosts();
+    expect(posts).toHaveLength(1);
+    expect(posts[0].title).toBe("Precious Post");
+    expect(posts[0].content).toBe("body");
   });
 });

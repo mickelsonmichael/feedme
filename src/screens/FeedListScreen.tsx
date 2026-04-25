@@ -15,7 +15,15 @@ import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { getFeeds, getAllItems, markItemRead } from "../database";
+import {
+  getFeeds,
+  getAllItems,
+  markItemRead,
+  savePost,
+  unsavePost,
+  getSavedItemIds,
+} from "../database";
+import { Feather } from "@expo/vector-icons";
 import { refreshFeeds } from "../feedRefresher";
 import {
   Feed,
@@ -48,8 +56,6 @@ export default function FeedListScreen({ navigation }: Props) {
   // available on the Feed model yet. The selected value persists during
   // the session so the UI still feels interactive.
   const [filter, setFilter] = useState<"all" | "unread" | "starred">("all");
-  // Mock per-session state. Save / hide aren't persisted yet — real storage
-  // will land with issues #13 (Save forever) and #14 (Read later).
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
 
@@ -65,8 +71,12 @@ export default function FeedListScreen({ navigation }: Props) {
         }
       }
 
-      const itemData = await getAllItems();
+      const [itemData, ids] = await Promise.all([
+        getAllItems(),
+        getSavedItemIds(),
+      ]);
       setItems(itemData);
+      setSavedIds(ids);
     } catch (err) {
       Alert.alert("Error", "Failed to load: " + (err as Error).message);
     } finally {
@@ -99,13 +109,23 @@ export default function FeedListScreen({ navigation }: Props) {
     }
   };
 
-  const toggleSave = (id: number) => {
-    setSavedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  const toggleSave = async (item: FeedItemWithFeed) => {
+    const alreadySaved = savedIds.has(item.id);
+    try {
+      if (alreadySaved) {
+        await unsavePost(item.id);
+        setSavedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
+      } else {
+        await savePost(item, item.feed_title);
+        setSavedIds((prev) => new Set(prev).add(item.id));
+      }
+    } catch (err) {
+      Alert.alert("Error", "Could not update saved status.");
+    }
   };
 
   const hideItem = (id: number) => {
@@ -294,19 +314,15 @@ export default function FeedListScreen({ navigation }: Props) {
                   </Text>
                   <View style={styles.spacer} />
                   <TouchableOpacity
-                    onPress={() => toggleSave(item.id)}
+                    onPress={() => toggleSave(item)}
                     activeOpacity={0.6}
                     hitSlop={8}
                   >
-                    <Text
-                      style={[
-                        styles.actionIcon,
-                        { color: colors.inkSoft },
-                        saved && { color: colors.accent },
-                      ]}
-                    >
-                      {saved ? "❤" : "♡"}
-                    </Text>
+                    <Feather
+                      name={saved ? "bookmark" : "bookmark"}
+                      size={18}
+                      color={saved ? colors.accent : colors.inkSoft}
+                    />
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={() => hideItem(item.id)}
