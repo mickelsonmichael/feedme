@@ -15,14 +15,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import {
-  getFeeds,
-  getAllItems,
-  markItemRead,
-  upsertItems,
-  updateFeedLastFetched,
-} from "../database";
-import { fetchFeed } from "../feedParser";
+import { getFeeds, getAllItems, markItemRead } from "../database";
+import { refreshFeeds } from "../feedRefresher";
 import {
   Feed,
   FeedItemWithFeed,
@@ -62,11 +56,17 @@ export default function FeedListScreen({ navigation }: Props) {
 
   const loadData = useCallback(async () => {
     try {
-      const [feedData, itemData] = await Promise.all([
-        getFeeds(),
-        getAllItems(),
-      ]);
+      const feedData = await getFeeds();
       setFeeds(feedData);
+
+      if (feedData.length > 0) {
+        const errors = await refreshFeeds(feedData);
+        if (errors > 0) {
+          Alert.alert("Refresh", `${errors} feed(s) could not be refreshed.`);
+        }
+      }
+
+      const itemData = await getAllItems();
       setItems(itemData);
     } catch (err) {
       Alert.alert("Error", "Failed to load: " + (err as Error).message);
@@ -78,25 +78,13 @@ export default function FeedListScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
+      setRefreshing(true);
       loadData();
     }, [loadData])
   );
 
   const handleRefreshAll = async () => {
     setRefreshing(true);
-    let errors = 0;
-    for (const feed of feeds) {
-      try {
-        const fetched = await fetchFeed(feed.url);
-        await upsertItems(feed.id, fetched);
-        await updateFeedLastFetched(feed.id);
-      } catch {
-        errors++;
-      }
-    }
-    if (errors > 0) {
-      Alert.alert("Refresh", `${errors} feed(s) could not be refreshed.`);
-    }
     await loadData();
   };
 
