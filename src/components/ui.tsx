@@ -49,7 +49,7 @@ export function Avatar({ label, size = 28 }: { label: string; size?: number }) {
           width: size,
           height: size,
           borderRadius: size / 2,
-          borderColor: colors.inkFaint,
+          borderColor: colors.border,
           backgroundColor: colors.paperWarm,
         },
       ]}
@@ -80,7 +80,7 @@ export function Pill({
     variant === "accent"
       ? { borderColor: colors.accent, backgroundColor: colors.accent }
       : variant === "outline"
-        ? { borderColor: colors.inkFaint, backgroundColor: colors.paper }
+        ? { borderColor: colors.border, backgroundColor: colors.paper }
         : {
             borderColor: colors.inkSoft,
             backgroundColor: "transparent" as const,
