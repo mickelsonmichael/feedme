@@ -5,7 +5,19 @@ let db: SQLite.SQLiteDatabase | null = null;
 
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!db) {
-    db = await SQLite.openDatabaseAsync("feedme.db");
+    try {
+      db = await SQLite.openDatabaseAsync("feedme.db");
+    } catch (error) {
+      // Persistent storage (OPFS) is unavailable on this platform or context
+      // (e.g. web without Cross-Origin-Isolated headers). Fall back to an
+      // in-memory database so the app remains functional, though data will
+      // not persist across page reloads.
+      console.warn(
+        "OPFS unavailable, falling back to in-memory database:",
+        error
+      );
+      db = await SQLite.openDatabaseAsync(":memory:");
+    }
     await initializeSchema(db);
   }
   return db;
