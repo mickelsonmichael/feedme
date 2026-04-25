@@ -27,6 +27,7 @@ import ImportExportScreen from "./src/screens/ImportExportScreen";
 import { RootStackParamList, TabParamList } from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
+import { AppHeader } from "./src/components/AppHeader";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -71,6 +72,11 @@ const MAIN_NAV = TAB_CONFIG.filter(({ name }) => name !== "Settings");
 const SETTINGS_NAV = TAB_CONFIG.find(
   ({ name }) => name === "Settings"
 ) as (typeof TAB_CONFIG)[number];
+
+// Pre-built map from route name to subtitle label for O(1) lookup in the layout callback
+const TAB_SUBTITLE_MAP = Object.fromEntries(
+  TAB_CONFIG.map(({ name, label }) => [name, label])
+) as Record<string, string>;
 
 function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
@@ -142,9 +148,17 @@ function Tabs() {
         tabBarLabelStyle: styles.tabLabel,
       }}
       tabBar={useSidebar ? () => null : undefined}
-      layout={
-        useSidebar
-          ? ({ state, navigation, children }) => (
+      layout={({ state, navigation, children }) => {
+        const currentRoute = state.routes[state.index]?.name ?? "";
+        // Subtitle is the tab's display label; falls back to the lowercased
+        // route name as a safety net (all tabs are expected to be in TAB_CONFIG).
+        const subtitle =
+          TAB_SUBTITLE_MAP[currentRoute] ?? currentRoute.toLowerCase();
+
+        if (useSidebar) {
+          return (
+            <View style={styles.tabsRoot}>
+              <AppHeader subtitle={subtitle} />
               <View style={styles.webLayout}>
                 <WebSideNav
                   state={state}
@@ -154,9 +168,17 @@ function Tabs() {
                 />
                 <View style={styles.webContent}>{children}</View>
               </View>
-            )
-          : undefined
-      }
+            </View>
+          );
+        }
+
+        return (
+          <View style={styles.tabsRoot}>
+            <AppHeader subtitle={subtitle} />
+            {children}
+          </View>
+        );
+      }}
     >
       <Tab.Screen
         name="Feed"
@@ -256,6 +278,7 @@ export default function App() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  tabsRoot: { flex: 1 },
   headerTitle: {
     fontFamily: fonts.heading,
     fontWeight: "600",
@@ -276,7 +299,7 @@ const styles = StyleSheet.create({
   sidebar: {
     width: WEB_SIDEBAR_WIDTH,
     borderRightWidth: 1.5,
-    paddingTop: spacing.xl,
+    paddingTop: spacing.md,
     paddingBottom: spacing.xl,
     paddingHorizontal: spacing.md,
     justifyContent: "space-between",

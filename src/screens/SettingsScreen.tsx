@@ -11,7 +11,6 @@ import {
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { AppHeader } from "../components/AppHeader";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { RootStackParamList, TabParamList } from "../types";
 import { useTheme, type ThemeMode } from "../context/ThemeContext";
@@ -149,8 +148,6 @@ export default function SettingsScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <AppHeader subtitle="settings" />
-
       <ScrollView contentContainerStyle={styles.content}>
         <SectionHeading label="Reading" />
         <Row label="Open links in" value="reader view" />
