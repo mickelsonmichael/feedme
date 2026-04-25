@@ -13,18 +13,47 @@ import {
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { addFeed } from "../database";
-import { fetchFeed, extractFeedTitle } from "../feedParser";
+import { extractFeedTitle } from "../feedParser";
 import { RootStackParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { buildRedditFeedUrl } from "../redditUtils";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
 
+type FeedSource = "url" | "reddit";
+
 export default function AddFeedScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const [source, setSource] = useState<FeedSource>("url");
   const [url, setUrl] = useState("");
+  const [subreddit, setSubreddit] = useState("");
   const [title, setTitle] = useState("");
+  const [titleManuallyEdited, setTitleManuallyEdited] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [feedError, setFeedError] = useState<string | null>(null);
+
+  const handleSourceChange = (newSource: FeedSource) => {
+    setSource(newSource);
+    setUrl("");
+    setSubreddit("");
+    setTitle("");
+    setTitleManuallyEdited(false);
+    setFeedError(null);
+  };
+
+  const handleSubredditChange = (value: string) => {
+    setSubreddit(value);
+    if (!titleManuallyEdited) {
+      const cleaned = value.trim().replace(/^r\//, "");
+      setTitle(cleaned ? `Reddit - r/${cleaned}` : "");
+    }
+  };
+
+  const handleTitleChange = (value: string) => {
+    setTitle(value);
+    setTitleManuallyEdited(true);
+  };
 
   const handleFetchTitle = async () => {
     const trimmed = url.trim();
@@ -43,6 +72,48 @@ export default function AddFeedScreen({ navigation }: Props) {
   };
 
   const handleAdd = async () => {
+    setFeedError(null);
+
+    if (source === "reddit") {
+      const cleanedSubreddit = subreddit.trim().replace(/^r\//, "");
+      if (!cleanedSubreddit) {
+        Alert.alert("Validation", "Please enter a subreddit name.");
+        return;
+      }
+      const redditUrl = buildRedditFeedUrl(cleanedSubreddit);
+      const feedTitle = title.trim() || `Reddit - r/${cleanedSubreddit}`;
+      setLoading(true);
+      try {
+        const response = await fetch(redditUrl);
+        if (!response.ok) {
+          if (response.status === 404) {
+            setFeedError(
+              `The subreddit https://reddit.com/r/${cleanedSubreddit} was not found. Check the subreddit name and try again.`
+            );
+          } else {
+            setFeedError(
+              `Failed to connect to ${redditUrl}. Please check your connection and try again.`
+            );
+          }
+          return;
+        }
+        await addFeed({ title: feedTitle, url: redditUrl, description: null });
+        navigation.goBack();
+      } catch (err) {
+        if ((err as Error).message?.includes("UNIQUE")) {
+          Alert.alert("Duplicate", "This feed is already in your list.");
+        } else {
+          setFeedError(
+            `Failed to connect to ${redditUrl}. Please check your connection and try again.`
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // URL mode
     const trimmedUrl = url.trim();
     const trimmedTitle = title.trim();
 
@@ -85,6 +156,48 @@ export default function AddFeedScreen({ navigation }: Props) {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
+        <Text style={[styles.label, { color: colors.inkSoft }]}>source</Text>
+        <View style={[styles.segmentedControl, { borderColor: colors.ink }]}>
+          <TouchableOpacity
+            style={[
+              styles.segmentBtn,
+              source === "url" && {
+                backgroundColor: colors.accent,
+              },
+            ]}
+            onPress={() => handleSourceChange("url")}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.segmentBtnText,
+                { color: source === "url" ? colors.paper : colors.ink },
+              ]}
+            >
+              URL
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.segmentBtn,
+              source === "reddit" && {
+                backgroundColor: colors.accent,
+              },
+            ]}
+            onPress={() => handleSourceChange("reddit")}
+            activeOpacity={0.8}
+          >
+            <Text
+              style={[
+                styles.segmentBtnText,
+                { color: source === "reddit" ? colors.paper : colors.ink },
+              ]}
+            >
+              Reddit
+            </Text>
+          </TouchableOpacity>
+        </View>
+
         <View
           style={[
             styles.hintBox,
@@ -92,33 +205,61 @@ export default function AddFeedScreen({ navigation }: Props) {
           ]}
         >
           <Text style={[styles.hintText, { color: colors.inkSoft }]}>
-            paste an RSS/Atom feed URL or a site URL — we’ll try to find the
-            feed.
+            {source === "reddit"
+              ? "enter a subreddit name to subscribe to its RSS feed."
+              : "paste an RSS/Atom feed URL or a site URL — we'll try to find the feed."}
           </Text>
         </View>
 
-        <Text style={[styles.label, { color: colors.inkSoft }]}>
-          feed url *
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.paper,
-              borderColor: colors.ink,
-              color: colors.ink,
-            },
-          ]}
-          placeholder="https://example.com/feed.xml"
-          placeholderTextColor={colors.inkFaint}
-          value={url}
-          onChangeText={setUrl}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          onBlur={handleFetchTitle}
-          returnKeyType="next"
-        />
+        {source === "url" ? (
+          <>
+            <Text style={[styles.label, { color: colors.inkSoft }]}>
+              feed url *
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.paper,
+                  borderColor: colors.ink,
+                  color: colors.ink,
+                },
+              ]}
+              placeholder="https://example.com/feed.xml"
+              placeholderTextColor={colors.inkFaint}
+              value={url}
+              onChangeText={setUrl}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              onBlur={handleFetchTitle}
+              returnKeyType="next"
+            />
+          </>
+        ) : (
+          <>
+            <Text style={[styles.label, { color: colors.inkSoft }]}>
+              subreddit *
+            </Text>
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.paper,
+                  borderColor: colors.ink,
+                  color: colors.ink,
+                },
+              ]}
+              placeholder="pics"
+              placeholderTextColor={colors.inkFaint}
+              value={subreddit}
+              onChangeText={handleSubredditChange}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="next"
+            />
+          </>
+        )}
 
         <Text style={[styles.label, { color: colors.inkSoft }]}>
           title (optional)
@@ -132,15 +273,33 @@ export default function AddFeedScreen({ navigation }: Props) {
               color: colors.ink,
             },
           ]}
-          placeholder="My Favourite Blog"
+          placeholder={
+            source === "reddit" ? "Reddit - r/subreddit" : "My Favourite Blog"
+          }
           placeholderTextColor={colors.inkFaint}
           value={title}
-          onChangeText={setTitle}
+          onChangeText={handleTitleChange}
           returnKeyType="done"
         />
 
         {loading && (
           <ActivityIndicator style={styles.spinner} color={colors.accent} />
+        )}
+
+        {feedError !== null && (
+          <View
+            style={[
+              styles.errorBox,
+              {
+                borderColor: colors.danger,
+                backgroundColor: colors.paperWarm,
+              },
+            ]}
+          >
+            <Text style={[styles.errorText, { color: colors.danger }]}>
+              {feedError}
+            </Text>
+          </View>
         )}
 
         <TouchableOpacity
@@ -169,6 +328,23 @@ export default function AddFeedScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { padding: spacing.lg },
+  segmentedControl: {
+    flexDirection: "row",
+    borderWidth: 1.5,
+    borderRadius: radii.sm,
+    overflow: "hidden",
+    marginBottom: spacing.lg,
+  },
+  segmentBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+  },
+  segmentBtnText: {
+    fontSize: fontSize.body,
+    fontFamily: fonts.mono,
+    fontWeight: "600",
+  },
   hintBox: {
     borderWidth: 1.5,
     borderStyle: "dashed",
@@ -197,6 +373,17 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyLg,
   },
   spinner: { marginTop: spacing.md },
+  errorBox: {
+    marginTop: spacing.md,
+    borderWidth: 1.5,
+    borderRadius: radii.sm,
+    padding: spacing.md,
+  },
+  errorText: {
+    fontSize: fontSize.body,
+    fontFamily: fonts.mono,
+    lineHeight: 18,
+  },
   primaryBtn: {
     marginTop: spacing.xxl,
     borderWidth: 1.5,
