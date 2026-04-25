@@ -88,7 +88,7 @@ export default function AddFeedScreen({ navigation }: Props) {
         if (!response.ok) {
           if (response.status === 404) {
             setFeedError(
-              `The subreddit https://reddit.com/r/${cleanedSubreddit} was not found. Check the subreddit name and try again.`
+              `The subreddit https://www.reddit.com/r/${cleanedSubreddit} was not found. Check the subreddit name and try again.`
             );
           } else {
             setFeedError(
