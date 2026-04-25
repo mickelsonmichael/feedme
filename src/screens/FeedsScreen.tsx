@@ -80,7 +80,7 @@ export default function FeedsScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <AppHeader subtitle="/ feeds" />
+      <AppHeader subtitle="feeds" />
 
       <View
         style={[

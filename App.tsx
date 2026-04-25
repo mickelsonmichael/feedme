@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Platform,
   TouchableOpacity,
+  useWindowDimensions,
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -63,8 +64,48 @@ function FeatherTabIcon({
   );
 }
 
+// Width breakpoint at which the web layout switches to the sidebar
+const WEB_BREAKPOINT = 768;
+
+const MAIN_NAV = TAB_CONFIG.filter(({ name }) => name !== "Settings");
+const SETTINGS_NAV = TAB_CONFIG.find(
+  ({ name }) => name === "Settings"
+) as (typeof TAB_CONFIG)[number];
+
 function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
+  const currentRoute = state.routes[state.index]?.name;
+
+  const renderItem = ({ name, icon, label }: (typeof TAB_CONFIG)[number]) => {
+    const focused = currentRoute === name;
+    return (
+      <TouchableOpacity
+        key={name}
+        style={[
+          styles.sidebarItem,
+          focused && { backgroundColor: colors.paperWarm },
+        ]}
+        onPress={() => navigation.navigate(name)}
+        activeOpacity={0.7}
+      >
+        <Feather
+          name={icon}
+          size={20}
+          color={focused ? colors.ink : colors.inkSoft}
+        />
+        <Text
+          style={[
+            styles.sidebarLabel,
+            { color: focused ? colors.ink : colors.inkSoft },
+            focused && { fontWeight: "600" },
+          ]}
+        >
+          {label}
+        </Text>
+      </TouchableOpacity>
+    );
+  };
+
   return (
     <View
       style={[
@@ -72,43 +113,17 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
         { backgroundColor: colors.paper, borderRightColor: colors.ink },
       ]}
     >
-      <Text style={[styles.sidebarTitle, { color: colors.ink }]}>FeedMe</Text>
-      {TAB_CONFIG.map(({ name, icon, label }, index) => {
-        const focused = state.index === index;
-        return (
-          <TouchableOpacity
-            key={name}
-            style={[
-              styles.sidebarItem,
-              focused && { backgroundColor: colors.paperWarm },
-            ]}
-            onPress={() => navigation.navigate(name)}
-            activeOpacity={0.7}
-          >
-            <Feather
-              name={icon}
-              size={20}
-              color={focused ? colors.ink : colors.inkSoft}
-            />
-            <Text
-              style={[
-                styles.sidebarLabel,
-                { color: focused ? colors.ink : colors.inkSoft },
-                focused && { fontWeight: "600" },
-              ]}
-            >
-              {label}
-            </Text>
-          </TouchableOpacity>
-        );
-      })}
+      <View style={styles.sidebarTop}>{MAIN_NAV.map(renderItem)}</View>
+      <View>{renderItem(SETTINGS_NAV)}</View>
     </View>
   );
 }
 
 function Tabs() {
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
+  const useSidebar = isWeb && width >= WEB_BREAKPOINT;
 
   return (
     <Tab.Navigator
@@ -126,9 +141,9 @@ function Tabs() {
         },
         tabBarLabelStyle: styles.tabLabel,
       }}
-      tabBar={isWeb ? () => null : undefined}
+      tabBar={useSidebar ? () => null : undefined}
       layout={
-        isWeb
+        useSidebar
           ? ({ state, navigation, children }) => (
               <View style={styles.webLayout}>
                 <WebSideNav
@@ -262,16 +277,12 @@ const styles = StyleSheet.create({
     width: WEB_SIDEBAR_WIDTH,
     borderRightWidth: 1.5,
     paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
     paddingHorizontal: spacing.md,
-    gap: spacing.xs,
+    justifyContent: "space-between",
   },
-  sidebarTitle: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.h2,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    marginBottom: spacing.lg,
-    paddingHorizontal: spacing.sm,
+  sidebarTop: {
+    gap: spacing.xs,
   },
   sidebarItem: {
     flexDirection: "row",

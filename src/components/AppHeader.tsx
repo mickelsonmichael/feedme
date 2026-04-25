@@ -31,7 +31,7 @@ export function AppHeader({ subtitle }: { subtitle?: string }) {
       <Text style={[styles.title, { color: colors.ink }]}>FeedMe</Text>
       {subtitle ? (
         <Text style={[styles.subtitle, { color: colors.inkSoft }]}>
-          {subtitle}
+          / {subtitle}
         </Text>
       ) : null}
     </View>
