@@ -7,13 +7,14 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { getFeeds } from "../database";
+import { getFeeds, deleteFeed } from "../database";
 import { Feed, RootStackParamList, TabParamList } from "../types";
 import { DashedDivider } from "../components/ui";
 import { AppHeader } from "../components/AppHeader";
@@ -50,6 +51,31 @@ export default function FeedsScreen({ navigation }: Props) {
       setLoading(false);
     }
   }, []);
+
+  const handleDeleteFeed = (feed: Feed) => {
+    Alert.alert(
+      "Remove Feed",
+      `Remove "${feed.title}"? All associated items will be deleted.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              await deleteFeed(feed.id);
+              setFeeds((prev) => prev.filter((f) => f.id !== feed.id));
+            } catch (err) {
+              Alert.alert(
+                "Error",
+                "Could not delete feed: " + (err as Error).message
+              );
+            }
+          },
+        },
+      ]
+    );
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -159,6 +185,13 @@ export default function FeedsScreen({ navigation }: Props) {
                   </Text>
                 </View>
               ) : null}
+              <TouchableOpacity
+                onPress={() => handleDeleteFeed(item)}
+                hitSlop={8}
+                accessibilityLabel={`Delete ${item.title}`}
+              >
+                <Feather name="trash-2" size={18} color={colors.danger} />
+              </TouchableOpacity>
             </TouchableOpacity>
           )}
         />
