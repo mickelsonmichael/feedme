@@ -36,6 +36,7 @@ import { MetaText, Pill } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { SortMode, applySortMode } from "../sortItems";
+import { FilterMode, applyFilter } from "../filterItems";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -56,10 +57,7 @@ export default function FeedListScreen({ navigation }: Props) {
   const [items, setItems] = useState<FeedItemWithFeed[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  // Filter pills are visual-only for now: unread/starred counts aren't
-  // available on the Feed model yet. The selected value persists during
-  // the session so the UI still feels interactive.
-  const [filter, setFilter] = useState<"all" | "unread" | "starred">("all");
+  const [filter, setFilter] = useState<FilterMode>("all");
   const [sort, setSort] = useState<SortMode>("stacked");
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
@@ -171,8 +169,11 @@ export default function FeedListScreen({ navigation }: Props) {
   const sortedItems = useMemo(() => applySortMode(items, sort), [items, sort]);
 
   const visibleItems = useMemo(
-    () => sortedItems.filter((i) => !hiddenIds.has(i.id)),
-    [sortedItems, hiddenIds]
+    () =>
+      applyFilter(sortedItems, filter, savedIds).filter(
+        (i) => !hiddenIds.has(i.id)
+      ),
+    [sortedItems, filter, savedIds, hiddenIds]
   );
 
   if (loading) {
@@ -261,10 +262,18 @@ export default function FeedListScreen({ navigation }: Props) {
       ) : visibleItems.length === 0 ? (
         <View style={styles.center}>
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-            No items yet.
+            {filter === "unread"
+              ? "All caught up!"
+              : filter === "starred"
+                ? "No starred items."
+                : "No items yet."}
           </Text>
           <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            Pull down to refresh your feeds.
+            {filter === "unread"
+              ? "You have no unread items."
+              : filter === "starred"
+                ? "Bookmark items to see them here."
+                : "Pull down to refresh your feeds."}
           </Text>
         </View>
       ) : (
