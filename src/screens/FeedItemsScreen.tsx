@@ -279,7 +279,10 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                     onPress={() => toggleSave(item)}
                     activeOpacity={0.6}
                     hitSlop={8}
+                    accessibilityLabel={saved ? "Unsave post" : "Save post"}
                   >
+                    {/* Feather only has one bookmark icon; saved state is
+                        distinguished by accent color vs. soft ink. */}
                     <Feather
                       name="bookmark"
                       size={18}
