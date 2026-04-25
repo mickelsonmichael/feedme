@@ -215,4 +215,29 @@ describe("database.web — items", () => {
     expect(await getItemsForFeed(feedId)).toEqual([]);
     expect(await getAllItems()).toEqual([]);
   });
+
+  it("only removes items belonging to the deleted feed, leaving other feeds' items intact", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      { title: "a", url: "https://x/a", content: null, publishedAt: 1 },
+      { title: "b", url: "https://x/b", content: null, publishedAt: 2 },
+    ]);
+    await upsertItems(otherFeedId, [
+      { title: "c", url: "https://y/c", content: null, publishedAt: 3 },
+    ]);
+
+    // Act
+    await deleteFeed(feedId);
+
+    // Assert: deleted feed and its items are gone
+    const remainingFeeds = await getFeeds();
+    expect(remainingFeeds.map((f) => f.id)).not.toContain(feedId);
+    expect(await getItemsForFeed(feedId)).toEqual([]);
+
+    // Assert: the other feed and its items are untouched
+    expect(remainingFeeds.map((f) => f.id)).toContain(otherFeedId);
+    const otherItems = await getItemsForFeed(otherFeedId);
+    expect(otherItems).toHaveLength(1);
+    expect(otherItems[0].title).toBe("c");
+  });
 });
