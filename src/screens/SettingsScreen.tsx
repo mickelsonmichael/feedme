@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xxl },
   sectionHeading: {
     fontSize: fontSize.xs,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     letterSpacing: 1.2,
     textTransform: "uppercase",
     marginTop: spacing.lg,
@@ -145,7 +145,7 @@ const styles = StyleSheet.create({
   },
   rowValue: {
     fontSize: fontSize.body,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
   },
   segmented: {
     flexDirection: "row",

@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
   },
   sourceText: {
     fontSize: fontSize.meta,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     fontWeight: "600",
   },
   metaDot: {
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
   },
   actionMeta: {
     fontSize: fontSize.meta,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
   },
   actionIcon: {
     fontSize: 18,
@@ -501,7 +501,7 @@ const styles = StyleSheet.create({
   },
   fetchBtnText: {
     fontWeight: "600",
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
   },
   expandPanel: {
     padding: spacing.md,

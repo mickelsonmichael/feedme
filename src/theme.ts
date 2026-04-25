@@ -59,10 +59,8 @@ export const radii = {
 } as const;
 
 export const fonts = {
-  // Use system fonts as fallbacks; custom fonts are not bundled yet, so we
-  // lean on weights + serif/sans families to evoke the wireframe feel.
   brand: "Caveat, Chalkboard SE, Marker Felt, cursive",
-  heading: "Georgia, Times New Roman, serif",
+  heading: "sans-serif",
   body: "System",
   mono: "Menlo, Monaco, Courier New, monospace",
   sans: "sans-serif",

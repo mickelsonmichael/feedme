@@ -251,7 +251,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: fontSize.body,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     paddingVertical: 0,
   },
   list: { paddingVertical: spacing.sm },
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   },
   feedUrl: {
     fontSize: fontSize.meta,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
   },
   badge: {
     paddingHorizontal: spacing.sm,
@@ -280,7 +280,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: fontSize.xs,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     fontWeight: "600",
   },
   emptyTitle: {
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
   },
   emptySub: {
     fontSize: fontSize.body,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
     textAlign: "center",
   },
 });

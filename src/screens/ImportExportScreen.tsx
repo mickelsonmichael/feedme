@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   btnDisabled: { opacity: 0.4 },
   btnText: {
     fontSize: fontSize.bodyLg,
-    fontFamily: fonts.mono,
+    fontFamily: fonts.sans,
   },
   disabledHint: {
     fontSize: fontSize.body,
