@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   title: {
-    fontFamily: "sans-serif",
+    fontFamily: fonts.sans,
     fontSize: fontSize.h2,
     fontWeight: "700",
     letterSpacing: 0.5,

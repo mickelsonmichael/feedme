@@ -266,7 +266,7 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   sidebarTitle: {
-    fontFamily: "sans-serif",
+    fontFamily: fonts.sans,
     fontSize: fontSize.h2,
     fontWeight: "700",
     letterSpacing: 0.5,
