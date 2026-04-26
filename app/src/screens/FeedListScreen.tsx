@@ -206,14 +206,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
             onPress={() => setFilter("all")}
             activeOpacity={0.7}
           >
-            <Pill label="all" variant={filter === "all" ? "accent" : "soft"} />
+            <Pill label="All" variant={filter === "all" ? "accent" : "soft"} />
           </TouchableOpacity>
           <TouchableOpacity
             onPress={() => setFilter("unread")}
             activeOpacity={0.7}
           >
             <Pill
-              label="unread"
+              label="Unread"
               variant={filter === "unread" ? "accent" : "soft"}
             />
           </TouchableOpacity>
@@ -222,7 +222,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
             activeOpacity={0.7}
           >
             <Pill
-              label="★ starred"
+              label="Saved"
+              iconName="bookmark"
               variant={filter === "starred" ? "accent" : "soft"}
             />
           </TouchableOpacity>
@@ -234,7 +235,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             activeOpacity={0.7}
           >
             <Pill
-              label="newest"
+              label="Newest"
               variant={sort === "newest" ? "accent" : "soft"}
             />
           </TouchableOpacity>
@@ -244,7 +245,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
               activeOpacity={0.7}
             >
               <Pill
-                label="stacked"
+                label="Stacked"
                 variant={sort === "stacked" ? "accent" : "soft"}
               />
             </TouchableOpacity>
@@ -270,7 +271,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             {filter === "unread"
               ? "All caught up!"
               : filter === "starred"
-                ? "No starred items."
+                ? "No saved items."
                 : "No items yet."}
           </Text>
           <Text style={[styles.emptySub, { color: colors.inkSoft }]}>

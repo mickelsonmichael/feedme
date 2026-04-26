@@ -243,8 +243,8 @@ describe("FeedListScreen", () => {
     // Assert
     expect(allText).toContain("Alpha post");
     expect(allText).not.toContain("Beta post");
-    expect(allText).toContain("newest");
-    expect(allText).not.toContain("stacked");
+    expect(allText).toContain("Newest");
+    expect(allText).not.toContain("Stacked");
 
     await act(async () => {
       tree!.unmount();

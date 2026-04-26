@@ -11,6 +11,7 @@ import {
   TextStyle,
   StyleProp,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
@@ -68,10 +69,12 @@ export function Avatar({ label, size = 28 }: { label: string; size?: number }) {
 
 export function Pill({
   label,
+  iconName,
   variant = "soft",
   style,
 }: {
   label: string;
+  iconName?: React.ComponentProps<typeof Feather>["name"];
   variant?: "soft" | "accent" | "outline";
   style?: StyleProp<ViewStyle>;
 }) {
@@ -88,6 +91,14 @@ export function Pill({
   const textColor = variant === "accent" ? colors.paper : colors.inkSoft;
   return (
     <View style={[styles.pillBase, pillStyle, style]}>
+      {iconName ? (
+        <Feather
+          name={iconName}
+          size={12}
+          color={textColor}
+          style={styles.pillIcon}
+        />
+      ) : null}
       <Text style={[styles.pillText, { color: textColor }]}>{label}</Text>
     </View>
   );
@@ -141,11 +152,16 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   pillBase: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 10,
     paddingVertical: 2,
     borderRadius: radii.pill,
     borderWidth: 1,
     alignSelf: "flex-start",
+  },
+  pillIcon: {
+    marginRight: 4,
   },
   pillText: {
     fontSize: fontSize.meta,
