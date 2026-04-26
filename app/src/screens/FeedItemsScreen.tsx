@@ -384,10 +384,11 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                       },
                     ]}
                   >
-                    {item.image_url || item.url ? (
+                    {item.image_url || item.url || item.content ? (
                       <ExpandedFeedMedia
                         imageUrl={item.image_url}
                         itemUrl={item.url}
+                        content={item.content}
                         testID={`expanded-media-${item.id}`}
                       />
                     ) : null}

@@ -398,11 +398,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
                     },
                   ]}
                 >
-                  {item.image_url || item.url ? (
+                  {item.image_url || item.url || item.content ? (
                     <ExpandedFeedMedia
                       imageUrl={item.image_url}
                       imageAlignment="center"
                       itemUrl={item.url}
+                      content={item.content}
                       testID={`card-media-${item.id}`}
                     />
                   ) : null}
@@ -673,10 +674,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
                       },
                     ]}
                   >
-                    {item.image_url || item.url ? (
+                    {item.image_url || item.url || item.content ? (
                       <ExpandedFeedMedia
                         imageUrl={item.image_url}
                         itemUrl={item.url}
+                        content={item.content}
                         testID={`expanded-media-${item.id}`}
                       />
                     ) : null}

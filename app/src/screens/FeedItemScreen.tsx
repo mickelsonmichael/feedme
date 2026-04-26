@@ -247,8 +247,12 @@ export default function FeedItemScreen({ route, navigation }: Props) {
             {item.title}
           </Text>
 
-          {item.imageUrl || item.url ? (
-            <ExpandedFeedMedia imageUrl={item.imageUrl} itemUrl={item.url} />
+          {item.imageUrl || item.url || item.content ? (
+            <ExpandedFeedMedia
+              imageUrl={item.imageUrl}
+              itemUrl={item.url}
+              content={item.content}
+            />
           ) : null}
 
           <Text style={[styles.article, { color: colors.ink }]}>
