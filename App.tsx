@@ -5,6 +5,7 @@ import {
   StyleSheet,
   Platform,
   TouchableOpacity,
+  ScrollView,
   useWindowDimensions,
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
@@ -24,10 +25,11 @@ import FeedsScreen from "./src/screens/FeedsScreen";
 import FeedDetailScreen from "./src/screens/FeedDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
-import { RootStackParamList, TabParamList } from "./src/types";
+import { Feed, RootStackParamList, TabParamList } from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { AppHeader } from "./src/components/AppHeader";
+import { getFeeds } from "./src/database";
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -42,10 +44,10 @@ const TAB_CONFIG: {
   icon: FeatherIconName;
   label: string;
 }[] = [
-  { name: "Feed", icon: "home", label: "feed" },
-  { name: "Saved", icon: "bookmark", label: "saved" },
-  { name: "Feeds", icon: "rss", label: "feeds" },
-  { name: "Settings", icon: "settings", label: "settings" },
+  { name: "Feed", icon: "inbox", label: "All Feeds" },
+  { name: "Saved", icon: "bookmark", label: "Saved" },
+  { name: "Feeds", icon: "rss", label: "Manage Feeds" },
+  { name: "Settings", icon: "settings", label: "Settings" },
 ];
 
 function FeatherTabIcon({
@@ -80,10 +82,36 @@ const TAB_SUBTITLE_MAP = Object.fromEntries(
 
 function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
+  const [feeds, setFeeds] = React.useState<Feed[]>([]);
   const currentRoute = state.routes[state.index]?.name;
+  const feedRoute = state.routes.find((route) => route.name === "Feed");
+  const selectedFeedId =
+    feedRoute?.params &&
+    typeof (feedRoute.params as { selectedFeedId?: unknown }).selectedFeedId ===
+      "number"
+      ? (feedRoute.params as { selectedFeedId?: number }).selectedFeedId
+      : undefined;
 
-  const renderItem = ({ name, icon, label }: (typeof TAB_CONFIG)[number]) => {
-    const focused = currentRoute === name;
+  const loadFeeds = React.useCallback(async () => {
+    try {
+      const data = await getFeeds();
+      setFeeds(data);
+    } catch {
+      setFeeds([]);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    loadFeeds();
+  }, [loadFeeds, currentRoute]);
+
+  const renderItem = (
+    { name, icon, label }: (typeof TAB_CONFIG)[number],
+    iconSize = 20
+  ) => {
+    const focused =
+      currentRoute === name &&
+      !(name === "Feed" && selectedFeedId !== undefined);
     return (
       <TouchableOpacity
         key={name}
@@ -91,12 +119,18 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
           styles.sidebarItem,
           focused && { backgroundColor: colors.paperWarm },
         ]}
-        onPress={() => navigation.navigate(name)}
+        onPress={() => {
+          if (name === "Feed") {
+            navigation.navigate("Feed", {});
+            return;
+          }
+          navigation.navigate(name);
+        }}
         activeOpacity={0.7}
       >
         <Feather
           name={icon}
-          size={20}
+          size={iconSize}
           color={focused ? colors.ink : colors.inkSoft}
         />
         <Text
@@ -119,8 +153,67 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
         { backgroundColor: colors.paper, borderRightColor: colors.border },
       ]}
     >
-      <View style={styles.sidebarTop}>{MAIN_NAV.map(renderItem)}</View>
-      <View>{renderItem(SETTINGS_NAV)}</View>
+      <View style={styles.sidebarMain}>
+        <Text style={[styles.sidebarSectionHeader, { color: colors.inkFaint }]}>
+          VIEWS
+        </Text>
+        <View style={styles.sidebarTop}>
+          {MAIN_NAV.map((item) => renderItem(item, 16))}
+        </View>
+        <View style={styles.sidebarFeedSpacer} />
+        <View style={styles.sidebarSectionRow}>
+          <Text
+            style={[styles.sidebarSectionHeader, { color: colors.inkFaint }]}
+          >
+            FEEDS
+          </Text>
+          <TouchableOpacity
+            style={styles.sidebarSectionAddButton}
+            onPress={() => navigation.getParent()?.navigate("AddFeed" as never)}
+            accessibilityLabel="Add feed"
+            activeOpacity={0.7}
+          >
+            <Feather name="plus" size={14} color={colors.inkSoft} />
+          </TouchableOpacity>
+        </View>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.feedList}
+        >
+          {feeds.map((feed) => {
+            const focused =
+              currentRoute === "Feed" && selectedFeedId === feed.id;
+            return (
+              <TouchableOpacity
+                key={feed.id}
+                style={[
+                  styles.feedItem,
+                  focused && { backgroundColor: colors.paperWarm },
+                ]}
+                onPress={() =>
+                  navigation.navigate("Feed", {
+                    selectedFeedId: feed.id,
+                    selectedFeedTitle: feed.title,
+                  })
+                }
+                activeOpacity={0.7}
+              >
+                <Text
+                  style={[
+                    styles.feedItemLabel,
+                    { color: focused ? colors.ink : colors.inkSoft },
+                    focused && { fontWeight: "600" },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {feed.title}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+      <View style={styles.sidebarSettings}>{renderItem(SETTINGS_NAV, 18)}</View>
     </View>
   );
 }
@@ -300,23 +393,63 @@ const styles = StyleSheet.create({
     width: WEB_SIDEBAR_WIDTH,
     borderRightWidth: 1,
     paddingTop: spacing.md,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing.sm,
     paddingHorizontal: spacing.md,
-    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  sidebarMain: {
+    flex: 1,
   },
   sidebarTop: {
     gap: spacing.xs,
   },
+  sidebarSectionHeader: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.xs,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+  },
+  sidebarSectionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: spacing.xs,
+  },
+  sidebarSectionAddButton: {
+    marginLeft: "auto",
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  sidebarFeedSpacer: {
+    height: spacing.md,
+  },
+  feedList: {
+    gap: 2,
+    paddingBottom: spacing.sm,
+  },
   sidebarItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.md,
-    paddingVertical: spacing.md,
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
     borderRadius: 4,
   },
+  feedItem: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 4,
+  },
+  feedItemLabel: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+  },
+  sidebarSettings: {
+    marginTop: spacing.md,
+  },
   sidebarLabel: {
     fontFamily: fonts.sans,
-    fontSize: fontSize.bodyLg,
+    fontSize: fontSize.body,
   },
 });

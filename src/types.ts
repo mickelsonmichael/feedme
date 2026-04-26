@@ -48,7 +48,12 @@ export type RootStackParamList = {
 };
 
 export type TabParamList = {
-  Feed: undefined;
+  Feed:
+    | {
+        selectedFeedId?: number;
+        selectedFeedTitle?: string;
+      }
+    | undefined;
   Saved: undefined;
   Feeds: undefined;
   Settings: undefined;

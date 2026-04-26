@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import {
   View,
   Text,
@@ -46,7 +46,7 @@ type Props = CompositeScreenProps<
 
 const CARD_IMAGE_WIDTH = 100;
 
-export default function FeedListScreen({ navigation }: Props) {
+export default function FeedListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [items, setItems] = useState<FeedItemWithFeed[]>([]);
@@ -56,6 +56,7 @@ export default function FeedListScreen({ navigation }: Props) {
   const [sort, setSort] = useState<SortMode>("stacked");
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const selectedFeedId = route.params?.selectedFeedId;
 
   const loadData = useCallback(async () => {
     try {
@@ -155,7 +156,21 @@ export default function FeedListScreen({ navigation }: Props) {
     });
   };
 
-  const sortedItems = useMemo(() => applySortMode(items, sort), [items, sort]);
+  useEffect(() => {
+    if (selectedFeedId !== undefined && sort === "stacked") {
+      setSort("newest");
+    }
+  }, [selectedFeedId, sort]);
+
+  const scopedItems = useMemo(() => {
+    if (selectedFeedId === undefined) return items;
+    return items.filter((item) => item.feed_id === selectedFeedId);
+  }, [items, selectedFeedId]);
+
+  const sortedItems = useMemo(
+    () => applySortMode(scopedItems, sort),
+    [scopedItems, sort]
+  );
 
   const visibleItems = useMemo(
     () => applyFilter(sortedItems, filter, savedIds),
@@ -221,15 +236,17 @@ export default function FeedListScreen({ navigation }: Props) {
               variant={sort === "newest" ? "accent" : "soft"}
             />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setSort("stacked")}
-            activeOpacity={0.7}
-          >
-            <Pill
-              label="stacked"
-              variant={sort === "stacked" ? "accent" : "soft"}
-            />
-          </TouchableOpacity>
+          {selectedFeedId === undefined ? (
+            <TouchableOpacity
+              onPress={() => setSort("stacked")}
+              activeOpacity={0.7}
+            >
+              <Pill
+                label="stacked"
+                variant={sort === "stacked" ? "accent" : "soft"}
+              />
+            </TouchableOpacity>
+          ) : null}
         </ScrollView>
       </View>
 
