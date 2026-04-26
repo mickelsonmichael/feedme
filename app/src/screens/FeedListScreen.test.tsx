@@ -354,6 +354,7 @@ describe("FeedListScreen", () => {
         publishedAt: 1_700_000_000_000,
         feedTitle: "Alpha",
         read: 0,
+        useProxy: false,
       },
     });
 

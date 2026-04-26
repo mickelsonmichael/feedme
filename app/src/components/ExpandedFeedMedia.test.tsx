@@ -124,7 +124,8 @@ describe("ExpandedFeedMedia", () => {
 
     // Assert initial state
     expect(mockFetchRedditGalleryImageUrls).toHaveBeenCalledWith(
-      "https://www.reddit.com/gallery/1sw5l42"
+      "https://www.reddit.com/gallery/1sw5l42",
+      false
     );
     expect(previousButton.props.disabled).toBe(true);
     expect(nextButton.props.disabled).toBe(false);
@@ -200,5 +201,63 @@ describe("ExpandedFeedMedia", () => {
     expect(fallbackImage.props.imageUrl).toBe(
       "https://preview.redd.it/thumb.jpg?width=140"
     );
+  });
+
+  it("forwards useProxy when fetching gallery metadata and routes images through the proxy", async () => {
+    // Arrange
+    Object.defineProperty(globalThis, "location", {
+      configurable: true,
+      value: { hostname: "feedme.app" },
+    });
+    process.env.EXPO_PUBLIC_FEED_PROXY_TARGET = "live";
+    process.env.EXPO_PUBLIC_FEED_PROXY_LIVE_URL =
+      "https://proxy.example.workers.dev";
+
+    mockExtractRedditGalleryUrl.mockReturnValue(
+      "https://www.reddit.com/gallery/1sw5l42"
+    );
+    mockFetchRedditGalleryImageUrls.mockResolvedValue([
+      "https://preview.redd.it/full-1.jpg",
+    ]);
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://www.reddit.com/r/castiron/comments/1sw5l42/post/"
+          content='<a href="https://www.reddit.com/gallery/1sw5l42">[link]</a>'
+          imageUrl="https://preview.redd.it/thumb.jpg?width=140"
+          testID="expanded-media"
+          useProxy
+        />
+      );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const activeImage = tree!.root.findByProps({
+      testID: "expanded-media-image-0",
+    });
+
+    // Assert
+    expect(mockFetchRedditGalleryImageUrls).toHaveBeenCalledWith(
+      "https://www.reddit.com/gallery/1sw5l42",
+      true
+    );
+    expect(activeImage.props.source.uri).toBe(
+      "https://proxy.example.workers.dev/?url=https%3A%2F%2Fpreview.redd.it%2Ffull-1.jpg"
+    );
+
+    // Cleanup
+    Reflect.deleteProperty(globalThis, "location");
+    delete process.env.EXPO_PUBLIC_FEED_PROXY_TARGET;
+    delete process.env.EXPO_PUBLIC_FEED_PROXY_LIVE_URL;
   });
 });

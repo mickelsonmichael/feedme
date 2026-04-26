@@ -138,6 +138,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         publishedAt: item.published_at,
         feedTitle: item.feed_title,
         read: item.read,
+        useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
       },
     });
   };
@@ -511,7 +512,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
             feedLayout === "card" ? styles.cardList : null,
           ]}
           renderItem={({ item }) => {
-            const isFeedNsfw = feedDetailsById.get(item.feed_id)?.nsfw === 1;
+            const sourceFeed = feedDetailsById.get(item.feed_id);
+            const isFeedNsfw = sourceFeed?.nsfw === 1;
+            const feedUseProxy = sourceFeed?.use_proxy === 1;
 
             if (feedLayout === "card") {
               const cardWidth = Math.min(
@@ -524,6 +527,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   feedTitle={item.feed_title}
                   layout="card"
                   nsfw={isFeedNsfw}
+                  useProxy={feedUseProxy}
                   saved={savedIds.has(item.id)}
                   cardMediaRevealed={revealedNsfwCardIds.has(item.id)}
                   cardWidth={cardWidth}
@@ -546,6 +550,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 feedTitle={item.feed_title}
                 layout="compact"
                 nsfw={isFeedNsfw}
+                useProxy={feedUseProxy}
                 saved={savedIds.has(item.id)}
                 expanded={expandedIds.has(item.id)}
                 showExpand

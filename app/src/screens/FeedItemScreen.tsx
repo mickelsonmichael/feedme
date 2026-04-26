@@ -282,6 +282,7 @@ export default function FeedItemScreen({ route, navigation }: Props) {
               imageUrl={item.imageUrl}
               itemUrl={item.url}
               content={item.content}
+              useProxy={item.useProxy ?? false}
             />
           ) : null}
 

@@ -57,6 +57,7 @@ export type RootStackParamList = {
       publishedAt: number | null;
       feedTitle: string;
       read: number;
+      useProxy?: boolean;
     };
   };
   FeedDetail: { feedId: number };
@@ -85,6 +86,7 @@ export type TabParamList = {
       publishedAt: number | null;
       feedTitle: string;
       read: number;
+      useProxy?: boolean;
     };
   };
   FeedDetail: { feedId: number };

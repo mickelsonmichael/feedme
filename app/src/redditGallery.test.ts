@@ -97,11 +97,34 @@ describe("fetchRedditGalleryImageUrls", () => {
 
     // Assert
     expect(mockFetchWithProxyFallback).toHaveBeenCalledWith(
-      "https://www.reddit.com/comments/1sw5l42.json?raw_json=1"
+      "https://www.reddit.com/comments/1sw5l42.json?raw_json=1",
+      undefined,
+      undefined
     );
     expect(result).toEqual([
       "https://preview.redd.it/first.jpg?width=1080&height=720",
       "https://preview.redd.it/second.jpg?width=1080&height=720",
     ]);
+  });
+
+  it("forwards forceProxy when requested", async () => {
+    // Arrange
+    mockFetchWithProxyFallback.mockResolvedValue({
+      response: new Response(JSON.stringify([]), { status: 200 }),
+      usedProxy: true,
+    });
+
+    // Act
+    await fetchRedditGalleryImageUrls(
+      "https://www.reddit.com/gallery/1sw5l42",
+      true
+    );
+
+    // Assert
+    expect(mockFetchWithProxyFallback).toHaveBeenCalledWith(
+      "https://www.reddit.com/comments/1sw5l42.json?raw_json=1",
+      undefined,
+      true
+    );
   });
 });

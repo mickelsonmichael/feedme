@@ -21,6 +21,7 @@ import {
   extractRedditGalleryUrl,
   fetchRedditGalleryImageUrls,
 } from "../redditGallery";
+import { proxiedImageUrl } from "../proxyFetch";
 import { useTheme } from "../context/ThemeContext";
 import {
   extractYouTubeVideoId,
@@ -40,6 +41,7 @@ type Props = {
   imageAlignment?: "flex-start" | "center";
   testID?: string;
   blur?: boolean;
+  useProxy?: boolean;
 };
 
 /**
@@ -54,6 +56,7 @@ export function ExpandedFeedMedia({
   imageAlignment = "flex-start",
   testID,
   blur = false,
+  useProxy = false,
 }: Props) {
   const { colors } = useTheme();
   const galleryScrollRef = useRef<ScrollView | null>(null);
@@ -94,13 +97,16 @@ export function ExpandedFeedMedia({
     setIsLoadingGallery(true);
     setActiveGalleryIndex(0);
 
-    fetchRedditGalleryImageUrls(redditGalleryUrl)
+    fetchRedditGalleryImageUrls(redditGalleryUrl, useProxy)
       .then((urls) => {
         if (!active) {
           return;
         }
 
-        setGalleryImageUrls(urls.length ? urls : null);
+        const proxiedUrls = urls
+          .map((url) => proxiedImageUrl(url, useProxy))
+          .filter((url): url is string => Boolean(url));
+        setGalleryImageUrls(proxiedUrls.length ? proxiedUrls : null);
         setIsLoadingGallery(false);
       })
       .catch(() => {
@@ -115,7 +121,7 @@ export function ExpandedFeedMedia({
     return () => {
       active = false;
     };
-  }, [redditGalleryUrl]);
+  }, [redditGalleryUrl, useProxy]);
 
   useEffect(() => {
     if (!galleryImageUrls?.length) {
@@ -398,6 +404,7 @@ export function ExpandedFeedMedia({
         alignment={imageAlignment}
         testID={testID}
         blur={blur}
+        useProxy={useProxy}
       />
     );
   }

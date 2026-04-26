@@ -94,6 +94,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
         publishedAt: item.published_at,
         feedTitle: feed.title,
         read: item.read,
+        useProxy: feed.use_proxy === 1,
       },
     });
   };
@@ -233,6 +234,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                 feedTitle={feed.title}
                 layout="compact"
                 nsfw={feed.nsfw === 1}
+                useProxy={feed.use_proxy === 1}
                 saved={savedIds.has(item.id)}
                 expanded={expandedIds.has(item.id)}
                 showExpand

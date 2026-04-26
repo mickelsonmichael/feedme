@@ -282,6 +282,7 @@ describe("FeedItemsScreen – View Raw", () => {
         publishedAt: mockItem.published_at,
         feedTitle: "Test Feed",
         read: 0,
+        useProxy: false,
       },
     });
 

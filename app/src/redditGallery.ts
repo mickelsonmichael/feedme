@@ -134,7 +134,8 @@ export function extractRedditGalleryUrl(
 }
 
 export async function fetchRedditGalleryImageUrls(
-  galleryUrl: string
+  galleryUrl: string,
+  forceProxy?: boolean
 ): Promise<string[]> {
   const postId = extractRedditPostIdFromUrl(galleryUrl);
   if (!postId) {
@@ -142,7 +143,9 @@ export async function fetchRedditGalleryImageUrls(
   }
 
   const { response } = await fetchWithProxyFallback(
-    `https://www.reddit.com/comments/${postId}.json?raw_json=1`
+    `https://www.reddit.com/comments/${postId}.json?raw_json=1`,
+    undefined,
+    forceProxy
   );
 
   if (!response.ok) {

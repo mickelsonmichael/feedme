@@ -109,6 +109,35 @@ export function buildProxyRequestUrl(
   }
 }
 
+export function proxiedImageUrl(
+  url: string,
+  useProxy?: boolean,
+  env?: EnvMap
+): string;
+export function proxiedImageUrl(
+  url: null | undefined,
+  useProxy?: boolean,
+  env?: EnvMap
+): null;
+export function proxiedImageUrl(
+  url: string | null | undefined,
+  useProxy?: boolean,
+  env?: EnvMap
+): string | null;
+export function proxiedImageUrl(
+  url: string | null | undefined,
+  useProxy?: boolean,
+  env: EnvMap = getEnvironmentVariables()
+): string | null {
+  if (!url) {
+    return null;
+  }
+  if (!useProxy) {
+    return url;
+  }
+  return buildProxyRequestUrl(url, env) ?? url;
+}
+
 export function isLikelyCorsBlockedError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;

@@ -3,6 +3,7 @@ import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import { parseContentAndLinks } from "../utils/contentActions";
+import { proxiedImageUrl } from "../proxyFetch";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { MetaText } from "./ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -24,6 +25,7 @@ type Props = {
   feedTitle: string;
   layout: "compact" | "card";
   nsfw?: boolean;
+  useProxy?: boolean;
   saved: boolean;
   expanded?: boolean;
   showExpand?: boolean;
@@ -47,6 +49,7 @@ export function FeedPostCard({
   feedTitle,
   layout,
   nsfw = false,
+  useProxy = false,
   saved,
   expanded = false,
   showExpand = false,
@@ -109,6 +112,7 @@ export function FeedPostCard({
               content={item.content}
               testID={cardMediaTestID}
               blur={isCardMediaBlurred}
+              useProxy={useProxy}
             />
             {isCardMediaBlurred ? (
               <TouchableOpacity
@@ -213,7 +217,7 @@ export function FeedPostCard({
       <View style={styles.cardRow}>
         {item.image_url ? (
           <Image
-            source={{ uri: item.image_url }}
+            source={{ uri: proxiedImageUrl(item.image_url, useProxy) }}
             blurRadius={nsfw ? 12 : 0}
             style={styles.cardImage}
             resizeMode="cover"
@@ -322,6 +326,7 @@ export function FeedPostCard({
               itemUrl={item.url}
               content={item.content}
               testID={expandedMediaTestID}
+              useProxy={useProxy}
             />
           ) : null}
           {item.content ? (

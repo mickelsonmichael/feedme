@@ -10,6 +10,7 @@ import {
   getExpandedImageSize,
   MAX_EXPANDED_IMAGE_EDGE,
 } from "../expandedImageSize";
+import { proxiedImageUrl } from "../proxyFetch";
 import { radii } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
@@ -20,6 +21,7 @@ type Props = {
   alignment?: "flex-start" | "center";
   testID?: string;
   blur?: boolean;
+  useProxy?: boolean;
 };
 
 export function ExpandedFeedImage({
@@ -27,7 +29,9 @@ export function ExpandedFeedImage({
   alignment = "flex-start",
   testID,
   blur = false,
+  useProxy = false,
 }: Props) {
+  const resolvedImageUrl = proxiedImageUrl(imageUrl, useProxy);
   const { colors } = useTheme();
   const [contentWidth, setContentWidth] = useState<number | null>(null);
   const [sourceSize, setSourceSize] = useState<{
@@ -44,7 +48,7 @@ export function ExpandedFeedImage({
     setDidMetadataLookupFail(false);
     setIsLoadingMetadata(true);
     Image.getSize(
-      imageUrl,
+      resolvedImageUrl,
       (width, height) => {
         if (!active) {
           return;
@@ -70,7 +74,7 @@ export function ExpandedFeedImage({
     return () => {
       active = false;
     };
-  }, [imageUrl]);
+  }, [resolvedImageUrl]);
 
   const handleLayout = useCallback((event: LayoutChangeEvent) => {
     const nextWidth = event.nativeEvent.layout.width;
@@ -103,7 +107,7 @@ export function ExpandedFeedImage({
         </View>
       ) : (
         <Image
-          source={{ uri: imageUrl }}
+          source={{ uri: resolvedImageUrl }}
           blurRadius={blur ? 14 : 0}
           style={[
             styles.image,

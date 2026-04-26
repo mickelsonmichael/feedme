@@ -3,6 +3,7 @@ import {
   fetchWithProxyFallback,
   getProxyBaseUrl,
   isLikelyCorsBlockedError,
+  proxiedImageUrl,
 } from "./proxyFetch";
 
 describe("getProxyBaseUrl", () => {
@@ -129,6 +130,67 @@ describe("buildProxyRequestUrl", () => {
     expect(result).toBe(
       "http://localhost:8787/?url=https%3A%2F%2Fexample.com%2Ffeed.xml"
     );
+  });
+});
+
+describe("proxiedImageUrl", () => {
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, "location");
+  });
+
+  it("returns the original url when useProxy is false", () => {
+    // Arrange
+    Object.defineProperty(globalThis, "location", {
+      value: { hostname: "localhost" },
+      configurable: true,
+    });
+    const env = {
+      EXPO_PUBLIC_FEED_PROXY_TARGET: "local",
+      EXPO_PUBLIC_FEED_PROXY_LOCAL_URL: "http://localhost:8787",
+    };
+
+    // Act
+    const result = proxiedImageUrl("https://i.redd.it/example.jpg", false, env);
+
+    // Assert
+    expect(result).toBe("https://i.redd.it/example.jpg");
+  });
+
+  it("rewrites the url through the proxy when useProxy is true", () => {
+    // Arrange
+    Object.defineProperty(globalThis, "location", {
+      value: { hostname: "localhost" },
+      configurable: true,
+    });
+    const env = {
+      EXPO_PUBLIC_FEED_PROXY_TARGET: "local",
+      EXPO_PUBLIC_FEED_PROXY_LOCAL_URL: "http://localhost:8787",
+    };
+
+    // Act
+    const result = proxiedImageUrl("https://i.redd.it/example.jpg", true, env);
+
+    // Assert
+    expect(result).toBe(
+      "http://localhost:8787/?url=https%3A%2F%2Fi.redd.it%2Fexample.jpg"
+    );
+  });
+
+  it("falls back to the original url when no proxy is configured", () => {
+    // Arrange — no location -> not web runtime, so no proxy base
+    const env = {};
+
+    // Act
+    const result = proxiedImageUrl("https://i.redd.it/example.jpg", true, env);
+
+    // Assert
+    expect(result).toBe("https://i.redd.it/example.jpg");
+  });
+
+  it("returns null for null/undefined urls", () => {
+    // Arrange / Act / Assert
+    expect(proxiedImageUrl(null, true)).toBeNull();
+    expect(proxiedImageUrl(undefined, true)).toBeNull();
   });
 });
 
