@@ -10,8 +10,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  useWindowDimensions,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Feather } from "@expo/vector-icons";
 import { addFeed } from "../database";
 import { extractFeedTitle } from "../feedParser";
 import { RootStackParamList } from "../types";
@@ -34,6 +36,8 @@ const PROXY_ALERT_MESSAGE =
 
 export default function AddFeedScreen({ navigation }: Props) {
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === "web" && width >= 768;
   const [source, setSource] = useState<FeedSource>("url");
   const [url, setUrl] = useState("");
   const [subreddit, setSubreddit] = useState("");
@@ -248,221 +252,264 @@ export default function AddFeedScreen({ navigation }: Props) {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ScrollView
-        contentContainerStyle={styles.container}
+        contentContainerStyle={[
+          styles.container,
+          isDesktopWeb ? styles.desktopContent : null,
+        ]}
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={[styles.label, { color: colors.inkSoft }]}>source</Text>
-        <View style={[styles.segmentedControl, { borderColor: colors.border }]}>
-          <TouchableOpacity
-            style={[
-              styles.segmentBtn,
-              source === "url" && {
-                backgroundColor: colors.accent,
-              },
-            ]}
-            onPress={() => handleSourceChange("url")}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                styles.segmentBtnText,
-                { color: source === "url" ? colors.paper : colors.ink },
-              ]}
-            >
-              URL
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.segmentBtn,
-              source === "reddit" && {
-                backgroundColor: colors.accent,
-              },
-            ]}
-            onPress={() => handleSourceChange("reddit")}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                styles.segmentBtnText,
-                { color: source === "reddit" ? colors.paper : colors.ink },
-              ]}
-            >
-              Reddit
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[
-              styles.segmentBtn,
-              source === "youtube" && {
-                backgroundColor: colors.accent,
-              },
-            ]}
-            onPress={() => handleSourceChange("youtube")}
-            activeOpacity={0.8}
-          >
-            <Text
-              style={[
-                styles.segmentBtnText,
-                { color: source === "youtube" ? colors.paper : colors.ink },
-              ]}
-            >
-              YouTube
-            </Text>
-          </TouchableOpacity>
-        </View>
-
         <View
-          style={[
-            styles.hintBox,
-            { borderColor: colors.border, backgroundColor: colors.paperWarm },
-          ]}
-        >
-          <Text style={[styles.hintText, { color: colors.inkSoft }]}>
-            {source === "reddit"
-              ? "enter a subreddit name to subscribe to its RSS feed."
-              : source === "youtube"
-                ? "enter a YouTube channel name or URL to subscribe to its RSS feed."
-                : "paste an RSS/Atom feed URL or a site URL — we'll try to find the feed."}
-          </Text>
-        </View>
-
-        {source === "url" ? (
-          <>
-            <Text style={[styles.label, { color: colors.inkSoft }]}>
-              feed url *
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.paper,
-                  borderColor: colors.border,
-                  color: colors.ink,
-                },
-              ]}
-              placeholder="https://example.com/feed.xml"
-              placeholderTextColor={colors.inkFaint}
-              value={url}
-              onChangeText={setUrl}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              onBlur={handleFetchTitle}
-              returnKeyType="next"
-            />
-          </>
-        ) : source === "reddit" ? (
-          <>
-            <Text style={[styles.label, { color: colors.inkSoft }]}>
-              subreddit *
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.paper,
-                  borderColor: colors.border,
-                  color: colors.ink,
-                },
-              ]}
-              placeholder="pics"
-              placeholderTextColor={colors.inkFaint}
-              value={subreddit}
-              onChangeText={handleSubredditChange}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="next"
-            />
-          </>
-        ) : (
-          <>
-            <Text style={[styles.label, { color: colors.inkSoft }]}>
-              channel *
-            </Text>
-            <TextInput
-              style={[
-                styles.input,
-                {
-                  backgroundColor: colors.paper,
-                  borderColor: colors.border,
-                  color: colors.ink,
-                },
-              ]}
-              placeholder="@atrioc"
-              placeholderTextColor={colors.inkFaint}
-              value={youtubeChannel}
-              onChangeText={handleYoutubeChannelChange}
-              autoCapitalize="none"
-              autoCorrect={false}
-              returnKeyType="next"
-            />
-          </>
-        )}
-
-        <Text style={[styles.label, { color: colors.inkSoft }]}>
-          title (optional)
-        </Text>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.paper,
-              borderColor: colors.border,
-              color: colors.ink,
-            },
-          ]}
-          placeholder={
-            source === "reddit"
-              ? "Reddit - r/subreddit"
-              : source === "youtube"
-                ? "YouTube - ChannelName"
-                : "My Favourite Blog"
+          style={
+            isDesktopWeb
+              ? [
+                  styles.card,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: colors.border,
+                    shadowColor: colors.ink,
+                  },
+                ]
+              : undefined
           }
-          placeholderTextColor={colors.inkFaint}
-          value={title}
-          onChangeText={handleTitleChange}
-          returnKeyType="done"
-        />
+        >
+          {isDesktopWeb ? (
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.actionBtn, { borderColor: colors.border }]}
+                onPress={() => navigation.goBack()}
+                activeOpacity={0.7}
+                accessibilityLabel="Back"
+              >
+                <Feather name="arrow-left" size={16} color={colors.ink} />
+                <Text style={[styles.actionText, { color: colors.ink }]}>
+                  Back
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
 
-        {loading && (
-          <ActivityIndicator style={styles.spinner} color={colors.accent} />
-        )}
+          <Text style={[styles.label, { color: colors.inkSoft }]}>Source</Text>
+          <View
+            style={[styles.segmentedControl, { borderColor: colors.border }]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.segmentBtn,
+                source === "url" && {
+                  backgroundColor: colors.accent,
+                },
+              ]}
+              onPress={() => handleSourceChange("url")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentBtnText,
+                  { color: source === "url" ? colors.paper : colors.ink },
+                ]}
+              >
+                URL
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.segmentBtn,
+                source === "reddit" && {
+                  backgroundColor: colors.accent,
+                },
+              ]}
+              onPress={() => handleSourceChange("reddit")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentBtnText,
+                  { color: source === "reddit" ? colors.paper : colors.ink },
+                ]}
+              >
+                Reddit
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.segmentBtn,
+                source === "youtube" && {
+                  backgroundColor: colors.accent,
+                },
+              ]}
+              onPress={() => handleSourceChange("youtube")}
+              activeOpacity={0.8}
+            >
+              <Text
+                style={[
+                  styles.segmentBtnText,
+                  { color: source === "youtube" ? colors.paper : colors.ink },
+                ]}
+              >
+                YouTube
+              </Text>
+            </TouchableOpacity>
+          </View>
 
-        {feedError !== null && (
           <View
             style={[
-              styles.errorBox,
-              {
-                borderColor: colors.danger,
-                backgroundColor: colors.paperWarm,
-              },
+              styles.hintBox,
+              { borderColor: colors.border, backgroundColor: colors.paperWarm },
             ]}
           >
-            <Text style={[styles.errorText, { color: colors.danger }]}>
-              {feedError}
+            <Text style={[styles.hintText, { color: colors.inkSoft }]}>
+              {source === "reddit"
+                ? "Enter a subreddit name to subscribe to its RSS feed."
+                : source === "youtube"
+                  ? "Enter a YouTube channel name or URL to subscribe to its RSS feed."
+                  : "Paste an RSS/Atom feed URL or a site URL - we'll try to find the feed."}
             </Text>
           </View>
-        )}
 
-        <TouchableOpacity
-          style={[
-            styles.primaryBtn,
-            { backgroundColor: colors.accent, borderColor: colors.border },
-            loading && styles.btnDisabled,
-          ]}
-          onPress={handleAdd}
-          disabled={loading}
-          activeOpacity={0.8}
-        >
-          <Text style={[styles.primaryBtnText, { color: colors.paper }]}>
-            add feed →
+          {source === "url" ? (
+            <>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                Feed URL *
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: colors.border,
+                    color: colors.ink,
+                  },
+                ]}
+                placeholder="https://example.com/feed.xml"
+                placeholderTextColor={colors.inkFaint}
+                value={url}
+                onChangeText={setUrl}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="url"
+                onBlur={handleFetchTitle}
+                returnKeyType="next"
+              />
+            </>
+          ) : source === "reddit" ? (
+            <>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                Subreddit *
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: colors.border,
+                    color: colors.ink,
+                  },
+                ]}
+                placeholder="pics"
+                placeholderTextColor={colors.inkFaint}
+                value={subreddit}
+                onChangeText={handleSubredditChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+            </>
+          ) : (
+            <>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                Channel *
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: colors.border,
+                    color: colors.ink,
+                  },
+                ]}
+                placeholder="@atrioc"
+                placeholderTextColor={colors.inkFaint}
+                value={youtubeChannel}
+                onChangeText={handleYoutubeChannelChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+            </>
+          )}
+
+          <Text style={[styles.label, { color: colors.inkSoft }]}>
+            Title (Optional)
           </Text>
-        </TouchableOpacity>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.paper,
+                borderColor: colors.border,
+                color: colors.ink,
+              },
+            ]}
+            placeholder={
+              source === "reddit"
+                ? "Reddit - r/subreddit"
+                : source === "youtube"
+                  ? "YouTube - ChannelName"
+                  : "My Favourite Blog"
+            }
+            placeholderTextColor={colors.inkFaint}
+            value={title}
+            onChangeText={handleTitleChange}
+            returnKeyType="done"
+          />
 
-        <Text style={[styles.scrawl, { color: colors.accent }]}>
-          or import OPML via Settings ↗
-        </Text>
+          {loading && (
+            <ActivityIndicator style={styles.spinner} color={colors.accent} />
+          )}
+
+          {feedError !== null && (
+            <View
+              style={[
+                styles.errorBox,
+                {
+                  borderColor: colors.danger,
+                  backgroundColor: colors.paperWarm,
+                },
+              ]}
+            >
+              <Text style={[styles.errorText, { color: colors.danger }]}>
+                {feedError}
+              </Text>
+            </View>
+          )}
+
+          <TouchableOpacity
+            style={[
+              styles.primaryBtn,
+              { backgroundColor: colors.accent, borderColor: colors.border },
+              loading && styles.btnDisabled,
+            ]}
+            onPress={handleAdd}
+            disabled={loading}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.primaryBtnText, { color: colors.paper }]}>
+              Add Feed
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.linkBtn}
+            onPress={() => navigation.navigate("ImportExport")}
+            activeOpacity={0.7}
+            accessibilityLabel="Open OPML Import Export"
+          >
+            <Text style={[styles.linkText, { color: colors.accent }]}>
+              Open OPML Import/Export
+            </Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -471,6 +518,42 @@ export default function AddFeedScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
   flex: { flex: 1 },
   container: { padding: spacing.lg },
+  desktopContent: {
+    alignItems: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 920,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+    marginBottom: spacing.sm,
+  },
+  actionBtn: {
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  actionText: {
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+    fontSize: fontSize.meta,
+  },
   segmentedControl: {
     flexDirection: "row",
     borderWidth: 1,
@@ -540,11 +623,15 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontFamily: fonts.sans,
   },
-  scrawl: {
-    fontFamily: fonts.brand,
-    fontSize: fontSize.bodyLg,
+  linkBtn: {
     marginTop: spacing.xl,
-    textAlign: "center",
-    transform: [{ rotate: "-2deg" }],
+    alignItems: "center",
+  },
+  linkText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+    fontWeight: "600",
+    textDecorationLine: "underline",
+    textDecorationStyle: "solid",
   },
 });
