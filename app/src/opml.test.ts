@@ -1,4 +1,4 @@
-import { generateOpml, parseOpml } from "../opml";
+import { generateOpml, parseOpml } from "./opml";
 
 const SAMPLE_FEEDS = [
   {

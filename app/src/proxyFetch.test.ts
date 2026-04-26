@@ -3,7 +3,7 @@ import {
   fetchWithProxyFallback,
   getProxyBaseUrl,
   isLikelyCorsBlockedError,
-} from "../proxyFetch";
+} from "./proxyFetch";
 
 describe("getProxyBaseUrl", () => {
   afterEach(() => {

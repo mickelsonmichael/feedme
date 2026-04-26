@@ -1,4 +1,4 @@
-import { toggleExpandedId } from "../expandItemIds";
+import { toggleExpandedId } from "./expandItemIds";
 
 describe("toggleExpandedId", () => {
   describe("when the id is NOT in the set", () => {

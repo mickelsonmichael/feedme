@@ -1,5 +1,5 @@
-import { applyFilter } from "../filterItems";
-import { FeedItemWithFeed } from "../types";
+import { applyFilter } from "./filterItems";
+import { FeedItemWithFeed } from "./types";
 
 function makeItem(id: number, read: 0 | 1 = 0, feedId = 1): FeedItemWithFeed {
   return {

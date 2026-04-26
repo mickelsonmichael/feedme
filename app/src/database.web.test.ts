@@ -25,7 +25,7 @@ import {
   updateFeed,
   updateFeedLastFetched,
   upsertItems,
-} from "../database.web";
+} from "./database.web";
 
 // jsdom provides `localStorage`; jest-expo's default environment is node, so
 // install a minimal in-memory shim if it isn't already present.
@@ -120,9 +120,9 @@ describe("database.web — feeds", () => {
     // Re-import via Jest's isolateModules to get a fresh module-level cache,
     // proving the data was actually persisted to localStorage rather than
     // just held in memory.
-    let reloaded: typeof import("../database.web");
+    let reloaded: typeof import("./database.web");
     jest.isolateModules(() => {
-      reloaded = require("../database.web");
+      reloaded = require("./database.web");
     });
     const feeds = await reloaded!.getFeeds();
     expect(feeds.map((f) => f.title)).toEqual(["Persistent"]);

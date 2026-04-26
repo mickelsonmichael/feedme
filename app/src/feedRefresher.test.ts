@@ -1,14 +1,14 @@
-import { refreshFeeds } from "../feedRefresher";
-import { fetchFeed } from "../feedParser";
-import * as database from "../database";
-import { Feed, ParsedFeedItem } from "../types";
+import { refreshFeeds } from "./feedRefresher";
+import { fetchFeed } from "./feedParser";
+import * as database from "./database";
+import { Feed, ParsedFeedItem } from "./types";
 
 // Mock network and database calls so tests run offline and touch no real storage
-jest.mock("../feedParser", () => ({
+jest.mock("./feedParser", () => ({
   fetchFeed: jest.fn(),
 }));
 
-jest.mock("../database", () => ({
+jest.mock("./database", () => ({
   upsertItems: jest.fn(),
   updateFeedLastFetched: jest.fn(),
 }));

@@ -1,7 +1,7 @@
 import {
   getExpandedImageSize,
   MAX_EXPANDED_IMAGE_EDGE,
-} from "../expandedImageSize";
+} from "./expandedImageSize";
 
 describe("getExpandedImageSize", () => {
   it("returns the original size when the image is already within the limits", () => {

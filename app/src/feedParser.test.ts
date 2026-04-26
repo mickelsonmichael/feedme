@@ -1,5 +1,5 @@
-import { parseFeed, extractFeedTitle, extractImageUrl } from "../feedParser";
-import { ParsedFeedItem } from "../types";
+import { parseFeed, extractFeedTitle, extractImageUrl } from "./feedParser";
+import { ParsedFeedItem } from "./types";
 
 const RSS_FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0">

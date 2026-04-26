@@ -1,5 +1,5 @@
-import { sortNewest, sortStacked, applySortMode } from "../sortItems";
-import { FeedItemWithFeed } from "../types";
+import { sortNewest, sortStacked, applySortMode } from "./sortItems";
+import { FeedItemWithFeed } from "./types";
 
 function makeItem(
   id: number,
