@@ -20,13 +20,13 @@ export const colors = {
 
 export const darkColors = {
   // Paper / ink palette (dark)
-  paper: "#1a1826",
-  paperWarm: "#221f30",
-  ink: "#e8e4f5",
-  inkSoft: "#9992c0",
-  inkFaint: "#3d3958",
+  paper: "#0f1012",
+  paperWarm: "#16181c",
+  ink: "#eceef2",
+  inkSoft: "#adb3be",
+  inkFaint: "#2a2f38",
   // Structural border: darker white on dark mode for a softer look
-  border: "#4a4665",
+  border: "#3a404b",
   accent: "#7e78c4",
   accentSoft: "#3d358f",
   highlight: "#ffe27a",
