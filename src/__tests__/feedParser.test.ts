@@ -72,6 +72,18 @@ const ATOM_FEED = `<?xml version="1.0" encoding="UTF-8"?>
   </entry>
 </feed>`;
 
+const REDDIT_ATOM_FEED_WITH_THUMBNAIL = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
+  <title>Reddit Pics</title>
+  <entry>
+    <title>Reddit Entry</title>
+    <content type="html">&lt;table&gt;&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;https://www.reddit.com/r/pics/comments/abc123/sample/&quot;&gt;&lt;img src=&quot;https://preview.redd.it/hojmv7hcahxg1.jpeg?width=640&amp;amp;crop=smart&amp;amp;auto=webp&amp;amp;s=ae2800&quot; /&gt;&lt;/a&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</content>
+    <media:thumbnail url="https://preview.redd.it/hojmv7hcahxg1.jpeg?width=640&amp;crop=smart&amp;auto=webp&amp;s=ae2800" />
+    <link href="https://www.reddit.com/r/pics/comments/abc123/sample/" />
+    <updated>2026-04-26T06:25:04+00:00</updated>
+  </entry>
+</feed>`;
+
 describe("parseFeed – RSS 2.0", () => {
   it("returns an array of items", () => {
     const items = parseFeed(RSS_FEED);
@@ -210,6 +222,20 @@ describe("parseFeed – image extraction (RSS)", () => {
 
     // Assert
     expect(item.imageUrl).toBeNull();
+  });
+});
+
+describe("parseFeed – image extraction (Atom/Reddit)", () => {
+  it("uses media:thumbnail as the preview image for Reddit Atom entries", () => {
+    // Arrange
+    const expectedImage =
+      "https://preview.redd.it/hojmv7hcahxg1.jpeg?width=640&crop=smart&auto=webp&s=ae2800";
+
+    // Act
+    const [item] = parseFeed(REDDIT_ATOM_FEED_WITH_THUMBNAIL);
+
+    // Assert
+    expect(item.imageUrl).toBe(expectedImage);
   });
 });
 

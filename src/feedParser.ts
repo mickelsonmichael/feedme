@@ -125,8 +125,17 @@ function extractCData(xml: string, tag: string): string | undefined {
 function extractAtomLink(block: string): string | undefined {
   // Prefer <link href="..."> (alternate)
   const hrefMatch = block.match(/<link[^>]+href=["']([^"']+)["'][^>]*\/?>/i);
-  if (hrefMatch) return hrefMatch[1];
+  if (hrefMatch) return decodeXmlEntities(hrefMatch[1]);
   return extractTagText(block, "link");
+}
+
+function decodeXmlEntities(value: string): string {
+  return value
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&");
 }
 
 // ── Image extraction patterns ──────────────────────────────────────────────
@@ -150,22 +159,23 @@ export function extractImageUrl(
   htmlContent?: string | null
 ): string | undefined {
   const mediaContent = block.match(MEDIA_CONTENT_RE);
-  if (mediaContent) return mediaContent[1];
+  if (mediaContent) return decodeXmlEntities(mediaContent[1]);
 
   const mediaThumbnail = block.match(MEDIA_THUMBNAIL_RE);
-  if (mediaThumbnail) return mediaThumbnail[1];
+  if (mediaThumbnail) return decodeXmlEntities(mediaThumbnail[1]);
 
   // <enclosure> with an image MIME type (url may appear before or after type)
   const enclosure1 = block.match(ENCLOSURE_URL_FIRST_RE);
-  if (enclosure1) return enclosure1[1];
+  if (enclosure1) return decodeXmlEntities(enclosure1[1]);
 
   const enclosure2 = block.match(ENCLOSURE_TYPE_FIRST_RE);
-  if (enclosure2) return enclosure2[1];
+  if (enclosure2) return decodeXmlEntities(enclosure2[1]);
 
   // Fall back to the first <img src="..."> in the HTML content
   if (htmlContent) {
-    const imgTag = htmlContent.match(IMG_SRC_RE);
-    if (imgTag) return imgTag[1];
+    const decodedHtml = decodeXmlEntities(htmlContent);
+    const imgTag = decodedHtml.match(IMG_SRC_RE);
+    if (imgTag) return decodeXmlEntities(imgTag[1]);
   }
 
   return undefined;
