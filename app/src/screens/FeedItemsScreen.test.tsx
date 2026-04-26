@@ -100,7 +100,7 @@ const mockItem = {
   title: "Test Item Title",
   url: "https://example.com/item",
   content:
-    '&lt;p&gt;Item content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://example.com/comments"&gt;[comments]&lt;/a&gt;',
+    '&lt;p&gt;Item content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://www.reddit.com/r/castiron/comments/1sw5l42/post/"&gt;[comments]&lt;/a&gt;',
   image_url: null,
   raw_xml:
     "<item><title>Test Item Title</title><link>https://example.com/item</link></item>",
@@ -277,7 +277,7 @@ describe("FeedItemsScreen – View Raw", () => {
         title: "Test Item Title",
         url: "https://example.com/item",
         content:
-          '&lt;p&gt;Item content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://example.com/comments"&gt;[comments]&lt;/a&gt;',
+          '&lt;p&gt;Item content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://www.reddit.com/r/castiron/comments/1sw5l42/post/"&gt;[comments]&lt;/a&gt;',
         imageUrl: null,
         publishedAt: mockItem.published_at,
         feedTitle: "Test Feed",
@@ -319,7 +319,7 @@ describe("FeedItemsScreen – View Raw", () => {
     });
   });
 
-  it("shows expanded content action buttons and opens their links", async () => {
+  it("shows post and expanded action buttons and removes the link chip", async () => {
     // Arrange
     jest.useFakeTimers();
     const props = buildProps();
@@ -342,25 +342,23 @@ describe("FeedItemsScreen – View Raw", () => {
     const openOriginalLinkButton = tree!.root.findByProps({
       accessibilityLabel: "Open original link",
     });
-    const openLinkButton = tree!.root.findByProps({
-      accessibilityLabel: "Open Link",
-    });
     const openCommentsButton = tree!.root.findByProps({
-      accessibilityLabel: "Open Comments",
+      accessibilityLabel: "Open Reddit comments",
     });
+    expect(
+      tree!.root.findAllByProps({ accessibilityLabel: "Open Link" })
+    ).toHaveLength(0);
 
     // Act
     await act(async () => {
       await openOriginalLinkButton.props.onPress();
-      await openLinkButton.props.onPress();
       await openCommentsButton.props.onPress();
     });
 
     // Assert
     expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/item");
-    expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/direct");
     expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://example.com/comments"
+      "https://www.reddit.com/r/castiron/comments/1sw5l42/post/"
     );
 
     await act(async () => {

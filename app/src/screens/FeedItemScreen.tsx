@@ -40,6 +40,22 @@ export default function FeedItemScreen({ route, navigation }: Props) {
     () => parseContentAndLinks(item.content),
     [item.content]
   );
+  const redditCommentsLink = React.useMemo(
+    () =>
+      contentLinks.find(
+        (link) => link.label === "Comments" && isRedditCommentsUrl(link.url)
+      ) ?? null,
+    [contentLinks]
+  );
+  const visibleContentLinks = React.useMemo(
+    () =>
+      contentLinks.filter(
+        (link) =>
+          link.label !== "Link" &&
+          !(link.label === "Comments" && isRedditCommentsUrl(link.url))
+      ),
+    [contentLinks]
+  );
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: item.feedTitle || "post" });
@@ -237,6 +253,20 @@ export default function FeedItemScreen({ route, navigation }: Props) {
                 Open External
               </Text>
             </TouchableOpacity>
+
+            {redditCommentsLink ? (
+              <TouchableOpacity
+                style={[styles.actionBtn, { borderColor: colors.border }]}
+                onPress={() => handleOpenContentLink(redditCommentsLink.url)}
+                activeOpacity={0.7}
+                accessibilityLabel="Open Reddit comments"
+              >
+                <Feather name="message-circle" size={16} color={colors.ink} />
+                <Text style={[styles.actionText, { color: colors.ink }]}>
+                  Comments
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           <Text style={[styles.meta, { color: colors.inkSoft }]}>
@@ -259,9 +289,9 @@ export default function FeedItemScreen({ route, navigation }: Props) {
             {contentText || "No content available."}
           </Text>
 
-          {contentLinks.length ? (
+          {visibleContentLinks.length ? (
             <View style={styles.contentLinkRow}>
-              {contentLinks.map((link) => (
+              {visibleContentLinks.map((link) => (
                 <TouchableOpacity
                   key={`${link.label}:${link.url}`}
                   style={[
@@ -298,6 +328,21 @@ function formatDate(ts: number | null): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function isRedditCommentsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    if (!(hostname === "reddit.com" || hostname.endsWith(".reddit.com"))) {
+      return false;
+    }
+    return parsed.pathname.toLowerCase().includes("/comments/");
+  } catch {
+    return /(?:https?:\/\/)?(?:(?:www|old)\.)?reddit\.com\/.*\/comments\//i.test(
+      url
+    );
+  }
 }
 
 const styles = StyleSheet.create({

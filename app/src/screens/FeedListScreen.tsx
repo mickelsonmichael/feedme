@@ -45,6 +45,7 @@ import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
 import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { parseContentAndLinks } from "../utils/contentActions";
+import { FeedPostCard } from "../components/FeedPostCard";
 import { loadConfig } from "../storage";
 
 type Props = CompositeScreenProps<
@@ -507,356 +508,44 @@ export default function FeedListScreen({ navigation, route }: Props) {
             feedLayout === "card" ? styles.cardList : null,
           ]}
           renderItem={({ item }) => {
-            const saved = savedIds.has(item.id);
-            const expanded = expandedIds.has(item.id);
-            const { text: contentText, links: contentLinks } =
-              parseContentAndLinks(item.content);
-
             if (feedLayout === "card") {
               const cardWidth = Math.min(
                 CARD_LAYOUT_WIDTH,
                 Math.max(0, viewportWidth - spacing.md * 2)
               );
               return (
-                <View
-                  style={[
-                    styles.card,
-                    styles.cardLayout,
-                    { width: cardWidth },
-                    {
-                      backgroundColor: colors.paper,
-                      borderColor: colors.border,
-                    },
-                  ]}
-                >
-                  {item.image_url || item.url || item.content ? (
-                    <ExpandedFeedMedia
-                      imageUrl={item.image_url}
-                      imageAlignment="center"
-                      itemUrl={item.url}
-                      content={item.content}
-                      testID={`card-media-${item.id}`}
-                    />
-                  ) : null}
-                  <View style={styles.cardLayoutContent}>
-                    <View style={styles.cardMeta}>
-                      <Text style={[styles.sourceText, { color: colors.ink }]}>
-                        {item.feed_title}
-                      </Text>
-                      <Text style={[styles.metaDot, { color: colors.inkSoft }]}>
-                        ·
-                      </Text>
-                      <MetaText>{formatDate(item.published_at)}</MetaText>
-                      {!item.read && (
-                        <View
-                          style={[
-                            styles.unreadDot,
-                            { backgroundColor: colors.accent },
-                          ]}
-                        />
-                      )}
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => handleOpenItem(item)}
-                      activeOpacity={0.7}
-                      accessibilityLabel={`Open post: ${item.title}`}
-                    >
-                      <Text
-                        style={[
-                          styles.title,
-                          { color: colors.ink },
-                          item.read
-                            ? { color: colors.inkSoft, fontWeight: "500" }
-                            : null,
-                        ]}
-                        numberOfLines={4}
-                      >
-                        {item.title}
-                      </Text>
-                      {item.content ? (
-                        <Text
-                          style={[styles.summary, { color: colors.inkSoft }]}
-                          numberOfLines={6}
-                        >
-                          {contentText}
-                        </Text>
-                      ) : null}
-                    </TouchableOpacity>
-                    {contentLinks.length ? (
-                      <View style={styles.contentLinkRow}>
-                        {contentLinks.map((link) => (
-                          <TouchableOpacity
-                            key={`${item.id}:${link.label}:${link.url}`}
-                            style={[
-                              styles.contentLinkBtn,
-                              { borderColor: colors.border },
-                            ]}
-                            onPress={() => handleOpenContentLink(link.url)}
-                            activeOpacity={0.7}
-                            accessibilityLabel={`Open ${link.label}`}
-                          >
-                            <Feather
-                              name={
-                                link.label === "Comments"
-                                  ? "message-circle"
-                                  : "link"
-                              }
-                              size={14}
-                              color={colors.inkSoft}
-                            />
-                            <Text
-                              style={[
-                                styles.contentLinkText,
-                                { color: colors.ink },
-                              ]}
-                            >
-                              {link.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    ) : null}
-                    <View
-                      style={[
-                        styles.actionRow,
-                        { borderTopColor: colors.inkFaint },
-                      ]}
-                    >
-                      <TouchableOpacity
-                        onPress={() => toggleRead(item)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                        accessibilityLabel={
-                          item.read
-                            ? "Mark post as unread"
-                            : "Mark post as read"
-                        }
-                      >
-                        <Feather
-                          name={item.read ? "eye-off" : "eye"}
-                          size={18}
-                          color={item.read ? colors.inkSoft : colors.accent}
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => toggleSave(item)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                        accessibilityLabel={saved ? "Unsave post" : "Save post"}
-                      >
-                        <Feather
-                          name="bookmark"
-                          size={18}
-                          color={saved ? colors.accent : colors.inkSoft}
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleOpenOriginalLink(item.url)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                        accessibilityLabel="Open original link"
-                        disabled={!item.url}
-                      >
-                        <Feather
-                          name="external-link"
-                          size={18}
-                          color={item.url ? colors.inkSoft : colors.inkFaint}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
+                <FeedPostCard
+                  item={item}
+                  feedTitle={item.feed_title}
+                  layout="card"
+                  saved={savedIds.has(item.id)}
+                  cardWidth={cardWidth}
+                  cardMediaTestID={`card-media-${item.id}`}
+                  onOpenItem={() => handleOpenItem(item)}
+                  onToggleRead={() => toggleRead(item)}
+                  onToggleSave={() => toggleSave(item)}
+                  onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
+                  onOpenContentLink={handleOpenContentLink}
+                />
               );
             }
 
             return (
-              <View
-                style={[
-                  styles.card,
-                  {
-                    backgroundColor: colors.paper,
-                    borderColor: colors.border,
-                  },
-                ]}
-              >
-                <View style={styles.cardRow}>
-                  {item.image_url ? (
-                    <Image
-                      source={{ uri: item.image_url }}
-                      style={styles.cardImage}
-                      resizeMode="cover"
-                    />
-                  ) : null}
-                  <View style={styles.cardContent}>
-                    <View style={styles.cardMeta}>
-                      <Text style={[styles.sourceText, { color: colors.ink }]}>
-                        {item.feed_title}
-                      </Text>
-                      <Text style={[styles.metaDot, { color: colors.inkSoft }]}>
-                        ·
-                      </Text>
-                      <MetaText>{formatDate(item.published_at)}</MetaText>
-                      {!item.read && (
-                        <View
-                          style={[
-                            styles.unreadDot,
-                            { backgroundColor: colors.accent },
-                          ]}
-                        />
-                      )}
-                    </View>
-                    <TouchableOpacity
-                      onPress={() => handleOpenItem(item)}
-                      activeOpacity={0.7}
-                      accessibilityLabel={`Open post: ${item.title}`}
-                    >
-                      <Text
-                        style={[
-                          styles.title,
-                          { color: colors.ink },
-                          item.read
-                            ? { color: colors.inkSoft, fontWeight: "500" }
-                            : null,
-                        ]}
-                        numberOfLines={3}
-                      >
-                        {item.title}
-                      </Text>
-                      {item.content ? (
-                        <Text
-                          style={[styles.summary, { color: colors.inkSoft }]}
-                          numberOfLines={2}
-                        >
-                          {contentText}
-                        </Text>
-                      ) : null}
-                    </TouchableOpacity>
-                    <View
-                      style={[
-                        styles.actionRow,
-                        { borderTopColor: colors.inkFaint },
-                      ]}
-                    >
-                      <TouchableOpacity
-                        onPress={() => handleToggleExpand(item)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                        accessibilityLabel={
-                          expanded ? "Collapse post" : "Expand post"
-                        }
-                      >
-                        <Feather
-                          name={expanded ? "chevron-up" : "chevron-down"}
-                          size={18}
-                          color={expanded ? colors.accent : colors.inkSoft}
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => toggleRead(item)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                        accessibilityLabel={
-                          item.read
-                            ? "Mark post as unread"
-                            : "Mark post as read"
-                        }
-                      >
-                        <Feather
-                          name={item.read ? "eye-off" : "eye"}
-                          size={18}
-                          color={item.read ? colors.inkSoft : colors.accent}
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => toggleSave(item)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                        accessibilityLabel={saved ? "Unsave post" : "Save post"}
-                      >
-                        <Feather
-                          name="bookmark"
-                          size={18}
-                          color={saved ? colors.accent : colors.inkSoft}
-                        />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleOpenOriginalLink(item.url)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                        accessibilityLabel="Open original link"
-                        disabled={!item.url}
-                      >
-                        <Feather
-                          name="external-link"
-                          size={18}
-                          color={item.url ? colors.inkSoft : colors.inkFaint}
-                        />
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-                {expanded ? (
-                  <View
-                    style={[
-                      styles.expandPanel,
-                      {
-                        borderTopColor: colors.inkFaint,
-                        backgroundColor: colors.paperWarm,
-                      },
-                    ]}
-                  >
-                    {item.image_url || item.url || item.content ? (
-                      <ExpandedFeedMedia
-                        imageUrl={item.image_url}
-                        itemUrl={item.url}
-                        content={item.content}
-                        testID={`expanded-media-${item.id}`}
-                      />
-                    ) : null}
-                    {item.content ? (
-                      <Text
-                        style={[styles.expandContent, { color: colors.ink }]}
-                      >
-                        {contentText}
-                      </Text>
-                    ) : null}
-                    {contentLinks.length ? (
-                      <View style={styles.contentLinkRow}>
-                        {contentLinks.map((link) => (
-                          <TouchableOpacity
-                            key={`${item.id}:${link.label}:${link.url}`}
-                            style={[
-                              styles.contentLinkBtn,
-                              { borderColor: colors.border },
-                            ]}
-                            onPress={() => handleOpenContentLink(link.url)}
-                            activeOpacity={0.7}
-                            accessibilityLabel={`Open ${link.label}`}
-                          >
-                            <Feather
-                              name={
-                                link.label === "Comments"
-                                  ? "message-circle"
-                                  : "link"
-                              }
-                              size={14}
-                              color={colors.inkSoft}
-                            />
-                            <Text
-                              style={[
-                                styles.contentLinkText,
-                                { color: colors.ink },
-                              ]}
-                            >
-                              {link.label}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
-              </View>
+              <FeedPostCard
+                item={item}
+                feedTitle={item.feed_title}
+                layout="compact"
+                saved={savedIds.has(item.id)}
+                expanded={expandedIds.has(item.id)}
+                showExpand
+                expandedMediaTestID={`expanded-media-${item.id}`}
+                onOpenItem={() => handleOpenItem(item)}
+                onToggleExpand={() => handleToggleExpand(item)}
+                onToggleRead={() => toggleRead(item)}
+                onToggleSave={() => toggleSave(item)}
+                onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
+                onOpenContentLink={handleOpenContentLink}
+              />
             );
           }}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
@@ -864,6 +553,21 @@ export default function FeedListScreen({ navigation, route }: Props) {
       )}
     </View>
   );
+}
+
+function isRedditCommentsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    if (!(hostname === "reddit.com" || hostname.endsWith(".reddit.com"))) {
+      return false;
+    }
+    return parsed.pathname.toLowerCase().includes("/comments/");
+  } catch {
+    return /(?:https?:\/\/)?(?:(?:www|old)\.)?reddit\.com\/.*\/comments\//i.test(
+      url
+    );
+  }
 }
 
 const styles = StyleSheet.create({

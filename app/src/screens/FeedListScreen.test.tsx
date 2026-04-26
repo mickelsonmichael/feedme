@@ -590,7 +590,7 @@ describe("FeedListScreen", () => {
     });
   });
 
-  it("removes reddit action placeholders in preview and opens expanded action links", async () => {
+  it("removes reddit action placeholders and keeps comments action only", async () => {
     // Arrange
     (getFeeds as jest.Mock).mockResolvedValue([
       {
@@ -611,7 +611,7 @@ describe("FeedListScreen", () => {
         title: "Photo post",
         url: "https://alpha.example/photo",
         content:
-          '&lt;table&gt;&lt;tr&gt;&lt;td&gt;&amp;#32; submitted by &amp;#32; /u/SingingSkyPhoto &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://example.com/comments"&gt;[comments]&lt;/a&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;',
+          '&lt;table&gt;&lt;tr&gt;&lt;td&gt;&amp;#32; submitted by &amp;#32; /u/SingingSkyPhoto &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://www.reddit.com/r/castiron/comments/1sw5l42/post/"&gt;[comments]&lt;/a&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;',
         image_url: null,
         published_at: Date.now(),
         read: 0,
@@ -652,22 +652,20 @@ describe("FeedListScreen", () => {
       await expandButton.props.onPress();
     });
 
-    const openLinkButton = tree!.root.findByProps({
-      accessibilityLabel: "Open Link",
-    });
+    expect(
+      tree!.root.findAllByProps({ accessibilityLabel: "Open Link" })
+    ).toHaveLength(0);
     const openCommentsButton = tree!.root.findByProps({
-      accessibilityLabel: "Open Comments",
+      accessibilityLabel: "Open Reddit comments",
     });
 
     await act(async () => {
-      await openLinkButton.props.onPress();
       await openCommentsButton.props.onPress();
     });
 
     // Assert expanded action chips open links
-    expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/direct");
     expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://example.com/comments"
+      "https://www.reddit.com/r/castiron/comments/1sw5l42/post/"
     );
 
     await act(async () => {
@@ -697,7 +695,7 @@ describe("FeedListScreen", () => {
         title: "Card item",
         url: "https://alpha.example/post",
         content:
-          '&lt;p&gt;Card content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt;',
+          '&lt;p&gt;Card content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://www.reddit.com/r/castiron/comments/1sw5l42/post/"&gt;[comments]&lt;/a&gt;',
         image_url: "https://alpha.example/image.jpg",
         published_at: Date.now(),
         read: 0,
@@ -728,10 +726,13 @@ describe("FeedListScreen", () => {
     ).toHaveLength(0);
     expect(tree!.root.findByProps({ testID: "card-media-401" })).toBeTruthy();
     expect(
-      tree!.root.findByProps({ accessibilityLabel: "Open Link" })
-    ).toBeTruthy();
+      tree!.root.findAllByProps({ accessibilityLabel: "Open Link" })
+    ).toHaveLength(0);
     expect(
       tree!.root.findByProps({ accessibilityLabel: "Open original link" })
+    ).toBeTruthy();
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Open Reddit comments" })
     ).toBeTruthy();
     expect(
       mockExpandedFeedMedia.mock.calls.some(

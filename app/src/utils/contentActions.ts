@@ -21,8 +21,16 @@ export function parseContentAndLinks(html: string | null): {
       const url = href.trim();
       if (!url) return " ";
 
-      if (!links.some((existing) => existing.url === url)) {
+      const existingIndex = links.findIndex((existing) => existing.url === url);
+      if (existingIndex < 0) {
         links.push({ label, url });
+      } else if (
+        label === "Comments" &&
+        links[existingIndex].label === "Link"
+      ) {
+        // Text posts have [link] and [comments] pointing to the same URL.
+        // Prefer the "Comments" label so the comments button is shown.
+        links[existingIndex] = { label, url };
       }
 
       return " ";

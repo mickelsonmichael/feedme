@@ -223,7 +223,7 @@ describe("FeedItemScreen", () => {
     });
   });
 
-  it("renders reddit content link buttons and opens their urls", async () => {
+  it("renders reddit comments in the action row and removes the link button", async () => {
     // Arrange
     const props = buildPropsWithContent(
       '&lt;table&gt;&lt;tr&gt;&lt;td&gt;&amp;#32; submitted by &amp;#32; &lt;a href="https://i.redd.it/9tn836q5uixg1.jpeg"&gt;[link]&lt;/a&gt; &amp;#32; &lt;a href="https://www.reddit.com/r/EarthPorn/comments/1sw5nrw/grand_canyon_of_the_yellowstone_and_the_lower/"&gt;[comments]&lt;/a&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;'
@@ -235,23 +235,19 @@ describe("FeedItemScreen", () => {
       await Promise.resolve();
     });
 
-    const openLinkButton = tree!.root.findByProps({
-      accessibilityLabel: "Open Link",
-    });
+    expect(
+      tree!.root.findAllByProps({ accessibilityLabel: "Open Link" })
+    ).toHaveLength(0);
     const openCommentsButton = tree!.root.findByProps({
-      accessibilityLabel: "Open Comments",
+      accessibilityLabel: "Open Reddit comments",
     });
 
     // Act
     await act(async () => {
-      await openLinkButton.props.onPress();
       await openCommentsButton.props.onPress();
     });
 
     // Assert
-    expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://i.redd.it/9tn836q5uixg1.jpeg"
-    );
     expect(Linking.openURL).toHaveBeenCalledWith(
       "https://www.reddit.com/r/EarthPorn/comments/1sw5nrw/grand_canyon_of_the_yellowstone_and_the_lower/"
     );
