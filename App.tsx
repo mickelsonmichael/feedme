@@ -9,7 +9,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
-import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import {
   createBottomTabNavigator,
   BottomTabBarProps,
@@ -20,18 +19,18 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import FeedListScreen from "./src/screens/FeedListScreen";
 import AddFeedScreen from "./src/screens/AddFeedScreen";
 import FeedItemsScreen from "./src/screens/FeedItemsScreen";
+import FeedItemScreen from "./src/screens/FeedItemScreen";
 import SavedScreen from "./src/screens/SavedScreen";
 import FeedsScreen from "./src/screens/FeedsScreen";
 import FeedDetailScreen from "./src/screens/FeedDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
-import { Feed, RootStackParamList, TabParamList } from "./src/types";
+import { Feed, TabParamList } from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { AppHeader } from "./src/components/AppHeader";
 import { getFeeds } from "./src/database";
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
 // Width of the left sidebar on web
@@ -74,11 +73,6 @@ const MAIN_NAV = TAB_CONFIG.filter(({ name }) => name !== "Settings");
 const SETTINGS_NAV = TAB_CONFIG.find(
   ({ name }) => name === "Settings"
 ) as (typeof TAB_CONFIG)[number];
-
-// Pre-built map from route name to subtitle label for O(1) lookup in the layout callback
-const TAB_SUBTITLE_MAP = Object.fromEntries(
-  TAB_CONFIG.map(({ name, label }) => [name, label])
-) as Record<string, string>;
 
 function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
@@ -169,7 +163,7 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
           </Text>
           <TouchableOpacity
             style={styles.sidebarSectionAddButton}
-            onPress={() => navigation.getParent()?.navigate("AddFeed" as never)}
+            onPress={() => navigation.navigate("AddFeed")}
             accessibilityLabel="Add feed"
             activeOpacity={0.7}
           >
@@ -242,16 +236,10 @@ function Tabs() {
       }}
       tabBar={useSidebar ? () => null : undefined}
       layout={({ state, navigation, children }) => {
-        const currentRoute = state.routes[state.index]?.name ?? "";
-        // Subtitle is the tab's display label; falls back to the lowercased
-        // route name as a safety net (all tabs are expected to be in TAB_CONFIG).
-        const subtitle =
-          TAB_SUBTITLE_MAP[currentRoute] ?? currentRoute.toLowerCase();
-
         if (useSidebar) {
           return (
             <View style={styles.tabsRoot}>
-              <AppHeader subtitle={subtitle} />
+              <AppHeader />
               <View style={styles.webLayout}>
                 <WebSideNav
                   state={state}
@@ -267,7 +255,7 @@ function Tabs() {
 
         return (
           <View style={styles.tabsRoot}>
-            <AppHeader subtitle={subtitle} />
+            <AppHeader />
             {children}
           </View>
         );
@@ -309,6 +297,41 @@ function Tabs() {
           ),
         }}
       />
+      <Tab.Screen
+        name="AddFeed"
+        component={AddFeedScreen}
+        options={{
+          tabBarButton: () => null,
+        }}
+      />
+      <Tab.Screen
+        name="FeedItems"
+        component={FeedItemsScreen}
+        options={{
+          tabBarButton: () => null,
+        }}
+      />
+      <Tab.Screen
+        name="FeedItemView"
+        component={FeedItemScreen}
+        options={{
+          tabBarButton: () => null,
+        }}
+      />
+      <Tab.Screen
+        name="FeedDetail"
+        component={FeedDetailScreen}
+        options={{
+          tabBarButton: () => null,
+        }}
+      />
+      <Tab.Screen
+        name="ImportExport"
+        component={ImportExportScreen}
+        options={{
+          tabBarButton: () => null,
+        }}
+      />
     </Tab.Navigator>
   );
 }
@@ -319,41 +342,7 @@ function AppContent() {
     <View style={[styles.root, { backgroundColor: colors.paper }]}>
       <NavigationContainer>
         <StatusBar style={isDark ? "light" : "dark"} />
-        <Stack.Navigator
-          screenOptions={{
-            headerStyle: { backgroundColor: colors.paper },
-            headerTintColor: colors.ink,
-            headerTitleStyle: [styles.headerTitle, { color: colors.ink }],
-            headerShadowVisible: false,
-            contentStyle: { backgroundColor: colors.paper },
-          }}
-        >
-          <Stack.Screen
-            name="Tabs"
-            component={Tabs}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="AddFeed"
-            component={AddFeedScreen}
-            options={{ title: "add feed" }}
-          />
-          <Stack.Screen
-            name="FeedItems"
-            component={FeedItemsScreen}
-            options={{ title: "" }}
-          />
-          <Stack.Screen
-            name="FeedDetail"
-            component={FeedDetailScreen}
-            options={{ headerShown: false }}
-          />
-          <Stack.Screen
-            name="ImportExport"
-            component={ImportExportScreen}
-            options={{ title: "import / export" }}
-          />
-        </Stack.Navigator>
+        <Tabs />
       </NavigationContainer>
     </View>
   );

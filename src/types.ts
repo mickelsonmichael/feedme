@@ -45,6 +45,18 @@ export type RootStackParamList = {
   Tabs: undefined;
   AddFeed: undefined;
   FeedItems: { feed: Feed };
+  FeedItemView: {
+    item: {
+      itemId: number | null;
+      title: string;
+      url: string | null;
+      content: string | null;
+      imageUrl: string | null;
+      publishedAt: number | null;
+      feedTitle: string;
+      read: number;
+    };
+  };
   FeedDetail: { feedId: number };
   ImportExport: undefined;
 };
@@ -59,6 +71,22 @@ export type TabParamList = {
   Saved: undefined;
   Feeds: undefined;
   Settings: undefined;
+  AddFeed: undefined;
+  FeedItems: { feed: Feed };
+  FeedItemView: {
+    item: {
+      itemId: number | null;
+      title: string;
+      url: string | null;
+      content: string | null;
+      imageUrl: string | null;
+      publishedAt: number | null;
+      feedTitle: string;
+      read: number;
+    };
+  };
+  FeedDetail: { feedId: number };
+  ImportExport: undefined;
 };
 
 export const THEME_MODES = ["light", "dark", "system"] as const;

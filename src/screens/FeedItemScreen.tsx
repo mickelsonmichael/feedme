@@ -1,0 +1,276 @@
+import React from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  Alert,
+  StyleSheet,
+  ScrollView,
+  Linking,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
+import { Feather } from "@expo/vector-icons";
+import {
+  getSavedItemIds,
+  markItemRead,
+  savePost,
+  unsavePost,
+} from "../database";
+import { ExpandedFeedImage } from "../components/ExpandedFeedImage";
+import { fonts, fontSize, radii, spacing } from "../theme";
+import { useTheme } from "../context/ThemeContext";
+import { FeedItem, RootStackParamList } from "../types";
+
+type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
+
+export default function FeedItemScreen({ route, navigation }: Props) {
+  const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const { item } = route.params;
+  const [saved, setSaved] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const isDesktopWeb = Platform.OS === "web" && width >= 768;
+
+  React.useLayoutEffect(() => {
+    navigation.setOptions({ title: item.feedTitle || "post" });
+  }, [navigation, item.feedTitle]);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    const hydrate = async () => {
+      try {
+        if (item.itemId !== null) {
+          const ids = await getSavedItemIds();
+          if (isMounted) {
+            setSaved(ids.has(item.itemId));
+          }
+        }
+
+        if (item.itemId !== null && !item.read) {
+          await markItemRead(item.itemId);
+        }
+      } catch {
+        // Ignore stale read/save refresh failures on entry.
+      }
+    };
+
+    hydrate();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [item.itemId, item.read]);
+
+  const handleOpenExternal = () => {
+    if (!item.url) return;
+    Linking.openURL(item.url).catch(() =>
+      Alert.alert("Error", "Cannot open this URL.")
+    );
+  };
+
+  const handleToggleSave = async () => {
+    if (item.itemId === null || saving) return;
+
+    setSaving(true);
+    try {
+      if (saved) {
+        await unsavePost(item.itemId);
+        setSaved(false);
+      } else {
+        const post: FeedItem = {
+          id: item.itemId,
+          feed_id: 0,
+          title: item.title,
+          url: item.url,
+          content: item.content,
+          image_url: item.imageUrl,
+          raw_xml: null,
+          published_at: item.publishedAt,
+          read: 1,
+        };
+        await savePost(post, item.feedTitle);
+        setSaved(true);
+      }
+    } catch {
+      Alert.alert("Error", "Could not update saved status.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.paper }]}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.content,
+          isDesktopWeb ? styles.desktopContent : null,
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View
+          style={[
+            styles.card,
+            {
+              backgroundColor: colors.paper,
+              borderColor: colors.border,
+              shadowColor: colors.ink,
+            },
+          ]}
+        >
+          <View style={styles.actionRow}>
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: colors.border }]}
+              onPress={() => navigation.goBack()}
+              activeOpacity={0.7}
+              accessibilityLabel="Back"
+            >
+              <Feather name="arrow-left" size={16} color={colors.ink} />
+              <Text style={[styles.actionText, { color: colors.ink }]}>
+                Back
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionBtn,
+                {
+                  borderColor: saved ? colors.accent : colors.border,
+                  backgroundColor: saved ? colors.accent : colors.paper,
+                },
+              ]}
+              onPress={handleToggleSave}
+              activeOpacity={0.7}
+              disabled={item.itemId === null || saving}
+              accessibilityLabel={saved ? "Unsave" : "Save"}
+            >
+              <Feather
+                name="bookmark"
+                size={16}
+                color={saved ? colors.paper : colors.ink}
+              />
+              <Text
+                style={[
+                  styles.actionText,
+                  { color: saved ? colors.paper : colors.ink },
+                ]}
+              >
+                {saved ? "Saved" : "Save"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: colors.border }]}
+              onPress={handleOpenExternal}
+              activeOpacity={0.7}
+              disabled={!item.url}
+              accessibilityLabel="Open External"
+            >
+              <Feather name="external-link" size={16} color={colors.ink} />
+              <Text style={[styles.actionText, { color: colors.ink }]}>
+                Open External
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <Text style={[styles.meta, { color: colors.inkSoft }]}>
+            {item.feedTitle} - {formatDate(item.publishedAt)}
+          </Text>
+
+          <Text style={[styles.title, { color: colors.ink }]}>
+            {item.title}
+          </Text>
+
+          {item.imageUrl ? (
+            <ExpandedFeedImage imageUrl={item.imageUrl} />
+          ) : null}
+
+          <Text style={[styles.article, { color: colors.ink }]}>
+            {item.content ? stripHtml(item.content) : "No content available."}
+          </Text>
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+function formatDate(ts: number | null): string {
+  if (!ts) return "unknown";
+  return new Date(ts).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function stripHtml(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  content: {
+    padding: spacing.md,
+    gap: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  desktopContent: {
+    alignItems: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 920,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    gap: spacing.md,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+  },
+  actionBtn: {
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  actionText: {
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+    fontSize: fontSize.meta,
+  },
+  meta: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+  },
+  title: {
+    fontFamily: fonts.heading,
+    fontWeight: "700",
+    fontSize: fontSize.h1,
+    lineHeight: 34,
+  },
+  article: {
+    fontSize: fontSize.bodyLg,
+    lineHeight: 24,
+    fontFamily: fonts.sans,
+  },
+});

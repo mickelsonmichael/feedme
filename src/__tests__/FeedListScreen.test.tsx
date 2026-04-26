@@ -242,4 +242,78 @@ describe("FeedListScreen", () => {
       tree!.unmount();
     });
   });
+
+  it("opens the in-app item view when a post is tapped", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 101,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Open me",
+        url: "https://alpha.example/open-me",
+        content: "body",
+        image_url: null,
+        published_at: 1_700_000_000_000,
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-open",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <FeedListScreen navigation={navigation} route={route} />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const openButton = tree!.root.findByProps({
+      accessibilityLabel: "Open post: Open me",
+    });
+
+    await act(async () => {
+      await openButton.props.onPress();
+    });
+
+    // Assert
+    expect(navigation.navigate).toHaveBeenCalledWith("FeedItemView", {
+      item: {
+        itemId: 101,
+        title: "Open me",
+        url: "https://alpha.example/open-me",
+        content: "body",
+        imageUrl: null,
+        publishedAt: 1_700_000_000_000,
+        feedTitle: "Alpha",
+        read: 0,
+      },
+    });
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
 });

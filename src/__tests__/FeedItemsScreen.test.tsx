@@ -238,4 +238,50 @@ describe("FeedItemsScreen – View Raw", () => {
       jest.runOnlyPendingTimers();
     });
   });
+
+  it("opens the in-app item view when a post is tapped", async () => {
+    // Arrange
+    jest.useFakeTimers();
+    const props = buildProps();
+    const navigate = jest.fn();
+    props.navigation = {
+      ...props.navigation,
+      navigate,
+    } as unknown as Props["navigation"];
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedItemsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const openButton = tree!.root.findByProps({
+      accessibilityLabel: "Open post: Test Item Title",
+    });
+
+    // Act
+    await act(async () => {
+      await openButton.props.onPress();
+    });
+
+    // Assert
+    expect(navigate).toHaveBeenCalledWith("FeedItemView", {
+      item: {
+        itemId: 10,
+        title: "Test Item Title",
+        url: "https://example.com/item",
+        content: "<p>Item content</p>",
+        imageUrl: null,
+        publishedAt: mockItem.published_at,
+        feedTitle: "Test Feed",
+        read: 0,
+      },
+    });
+
+    await act(async () => {
+      tree!.unmount();
+      jest.runOnlyPendingTimers();
+    });
+  });
 });

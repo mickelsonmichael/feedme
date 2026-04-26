@@ -7,17 +7,23 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
-  Linking,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { CompositeScreenProps, useFocusEffect } from "@react-navigation/native";
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import { getSavedPosts, unsavePost } from "../database";
-import { SavedPost } from "../types";
+import { RootStackParamList, SavedPost, TabParamList } from "../types";
 import { MetaText } from "../components/ui";
 import { useTheme } from "../context/ThemeContext";
 import { fonts, fontSize, radii, spacing } from "../theme";
 
-export default function SavedScreen() {
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<TabParamList, "Saved">,
+  NativeStackScreenProps<RootStackParamList>
+>;
+
+export default function SavedScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [posts, setPosts] = useState<SavedPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,10 +59,18 @@ export default function SavedScreen() {
   };
 
   const handleOpen = (post: SavedPost) => {
-    if (!post.url) return;
-    Linking.openURL(post.url).catch(() =>
-      Alert.alert("Error", "Cannot open this URL.")
-    );
+    navigation.navigate("FeedItemView", {
+      item: {
+        itemId: post.item_id,
+        title: post.title,
+        url: post.url,
+        content: post.content,
+        imageUrl: null,
+        publishedAt: post.published_at,
+        feedTitle: post.feed_title,
+        read: 1,
+      },
+    });
   };
 
   const formatDate = (ts: number | null): string => {
@@ -127,6 +141,7 @@ export default function SavedScreen() {
               onPress={() => handleOpen(post)}
               activeOpacity={0.7}
               disabled={!post.url}
+              accessibilityLabel={`Open post: ${post.title}`}
             >
               <Text style={[styles.title, { color: colors.ink }]}>
                 {post.title}

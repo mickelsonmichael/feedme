@@ -1,5 +1,4 @@
-// Shared header component used across all tab screens.
-// Shows the "FeedMe" app name in sans-serif with an optional subtitle.
+// Shared header component used across all app screens.
 // Handles top safe-area insets so the header stays below device notches/cameras.
 
 import React from "react";
@@ -8,7 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fonts, fontSize, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
-export function AppHeader({ subtitle }: { subtitle?: string }) {
+export function AppHeader() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
 
@@ -29,11 +28,6 @@ export function AppHeader({ subtitle }: { subtitle?: string }) {
       ]}
     >
       <Text style={[styles.title, { color: colors.ink }]}>FeedMe</Text>
-      {subtitle ? (
-        <Text style={[styles.subtitle, { color: colors.inkSoft }]}>
-          / {subtitle}
-        </Text>
-      ) : null}
     </View>
   );
 }
@@ -52,9 +46,5 @@ const styles = StyleSheet.create({
     fontSize: fontSize.h2,
     fontWeight: "700",
     letterSpacing: 0.5,
-  },
-  subtitle: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.meta,
   },
 });

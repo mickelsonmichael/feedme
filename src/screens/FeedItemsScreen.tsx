@@ -7,7 +7,6 @@ import {
   Alert,
   StyleSheet,
   ActivityIndicator,
-  Linking,
   Image,
   Modal,
   ScrollView,
@@ -86,15 +85,18 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   );
 
   const handleOpenItem = async (item: FeedItem) => {
-    await markItemRead(item.id);
-    setItems((prev) =>
-      prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
-    );
-    if (item.url) {
-      Linking.openURL(item.url).catch(() =>
-        Alert.alert("Error", "Cannot open this URL.")
-      );
-    }
+    navigation.navigate("FeedItemView", {
+      item: {
+        itemId: item.id,
+        title: item.title,
+        url: item.url,
+        content: item.content,
+        imageUrl: item.image_url,
+        publishedAt: item.published_at,
+        feedTitle: feed.title,
+        read: item.read,
+      },
+    });
   };
 
   const toggleSave = async (item: FeedItem) => {
@@ -242,6 +244,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                     <TouchableOpacity
                       onPress={() => handleOpenItem(item)}
                       activeOpacity={0.7}
+                      accessibilityLabel={`Open post: ${item.title}`}
                     >
                       <Text
                         style={[
