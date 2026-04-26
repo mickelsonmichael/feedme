@@ -121,10 +121,10 @@ describe("sortStacked", () => {
 
   it("gives an infrequent feed top representation when its newest item is fresh relative to its cadence", () => {
     // Arrange — a monthly feed whose newest item is fresher (relative to its
-    // own cadence) than the hourly feed's freshest is to its cadence. The
-    // score formula is `age * avg_interval`, so the monthly newest (age 1min,
-    // interval 1 month) scores far below an hourly item from 5 hours ago
-    // (age 5h, interval 1h = 5h²) yet above the very freshest hourly item.
+    // own cadence) than the hourly feed's freshest is to its cadence. With
+    // the `age² / avg_interval` formula the monthly newest (age 1min,
+    // interval 1 month) scores ≈ 0, while older monthly items get crushed by
+    // the squared-age term and rank well below recent hourly items.
     const items = [
       // Hourly feed (id 1): items 5h, 6h, 7h, 8h, 9h ago
       makeItem(1, 1, NOW - 5 * HOUR),
