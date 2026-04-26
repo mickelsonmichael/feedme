@@ -496,6 +496,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.meta,
     fontFamily: fonts.sans,
   },
+  expandPanel: {
+    padding: spacing.md,
+    gap: spacing.md,
+    borderTopWidth: 1,
+    borderStyle: "dashed",
+  },
   expandContent: {
     fontSize: fontSize.body,
     lineHeight: 20,
