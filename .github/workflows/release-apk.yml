@@ -10,6 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    defaults:
+      run:
+        working-directory: app
 
     steps:
       - name: Checkout repository
@@ -20,6 +23,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: app/package-lock.json
 
       - name: Set up Java 17
         uses: actions/setup-java@v5
@@ -40,12 +44,12 @@ jobs:
         run: chmod +x android/gradlew
 
       - name: Build release APK
-        working-directory: android
+        working-directory: app/android
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2
         with:
-          files: android/app/build/outputs/apk/release/app-release.apk
+          files: app/android/app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
