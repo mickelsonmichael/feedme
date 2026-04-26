@@ -44,7 +44,7 @@ export type ParsedFeedItem = {
 
 export type RootStackParamList = {
   Tabs: undefined;
-  AddFeed: undefined;
+  AddFeed: { from?: string } | undefined;
   FeedItems: { feed: Feed };
   FeedItemView: {
     item: {
@@ -72,7 +72,7 @@ export type TabParamList = {
   Saved: undefined;
   Feeds: undefined;
   Settings: undefined;
-  AddFeed: undefined;
+  AddFeed: { from?: string } | undefined;
   FeedItems: { feed: Feed };
   FeedItemView: {
     item: {
@@ -92,3 +92,6 @@ export type TabParamList = {
 
 export const THEME_MODES = ["light", "dark", "system"] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
+
+export const FEED_LAYOUT_MODES = ["compact", "card"] as const;
+export type FeedLayoutMode = (typeof FEED_LAYOUT_MODES)[number];

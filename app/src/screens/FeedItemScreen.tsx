@@ -15,6 +15,7 @@ import { Feather } from "@expo/vector-icons";
 import {
   getSavedItemIds,
   markItemRead,
+  markItemUnread,
   savePost,
   unsavePost,
 } from "../database";
@@ -32,6 +33,8 @@ export default function FeedItemScreen({ route, navigation }: Props) {
   const { item } = route.params;
   const [saved, setSaved] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [read, setRead] = React.useState(item.read === 1);
+  const [updatingRead, setUpdatingRead] = React.useState(false);
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
   const { text: contentText, links: contentLinks } = React.useMemo(
     () => parseContentAndLinks(item.content),
@@ -56,6 +59,9 @@ export default function FeedItemScreen({ route, navigation }: Props) {
 
         if (item.itemId !== null && !item.read) {
           await markItemRead(item.itemId);
+          if (isMounted) {
+            setRead(true);
+          }
         }
       } catch {
         // Ignore stale read/save refresh failures on entry.
@@ -112,6 +118,25 @@ export default function FeedItemScreen({ route, navigation }: Props) {
     }
   };
 
+  const handleToggleRead = async () => {
+    if (item.itemId === null || updatingRead) return;
+
+    setUpdatingRead(true);
+    try {
+      if (read) {
+        await markItemUnread(item.itemId);
+        setRead(false);
+      } else {
+        await markItemRead(item.itemId);
+        setRead(true);
+      }
+    } catch {
+      Alert.alert("Error", "Could not update read status.");
+    } finally {
+      setUpdatingRead(false);
+    }
+  };
+
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
       <ScrollView
@@ -141,6 +166,34 @@ export default function FeedItemScreen({ route, navigation }: Props) {
               <Feather name="arrow-left" size={16} color={colors.ink} />
               <Text style={[styles.actionText, { color: colors.ink }]}>
                 Back
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionBtn,
+                {
+                  borderColor: read ? colors.border : colors.accent,
+                  backgroundColor: read ? colors.paper : colors.accent,
+                },
+              ]}
+              onPress={handleToggleRead}
+              activeOpacity={0.7}
+              disabled={item.itemId === null || updatingRead}
+              accessibilityLabel={read ? "Mark as unread" : "Mark as read"}
+            >
+              <Feather
+                name={read ? "eye-off" : "eye"}
+                size={16}
+                color={read ? colors.ink : colors.paper}
+              />
+              <Text
+                style={[
+                  styles.actionText,
+                  { color: read ? colors.ink : colors.paper },
+                ]}
+              >
+                {read ? "Unread" : "Read"}
               </Text>
             </TouchableOpacity>
 

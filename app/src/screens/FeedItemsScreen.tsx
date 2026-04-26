@@ -18,6 +18,7 @@ import {
   getItemsForFeed,
   upsertItems,
   markItemRead,
+  markItemUnread,
   updateFeedLastFetched,
   savePost,
   unsavePost,
@@ -138,6 +139,29 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       } catch {
         Alert.alert("Error", "Could not update read status.");
       }
+    }
+  };
+
+  const toggleRead = async (item: FeedItem) => {
+    try {
+      if (item.read) {
+        await markItemUnread(item.id);
+        setItems((prev) =>
+          prev.map((current) =>
+            current.id === item.id ? { ...current, read: 0 } : current
+          )
+        );
+        return;
+      }
+
+      await markItemRead(item.id);
+      setItems((prev) =>
+        prev.map((current) =>
+          current.id === item.id ? { ...current, read: 1 } : current
+        )
+      );
+    } catch {
+      Alert.alert("Error", "Could not update read status.");
     }
   };
 
@@ -295,6 +319,22 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                           name={expanded ? "chevron-up" : "chevron-down"}
                           size={18}
                           color={expanded ? colors.accent : colors.inkSoft}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => toggleRead(item)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel={
+                          item.read
+                            ? "Mark post as unread"
+                            : "Mark post as read"
+                        }
+                      >
+                        <Feather
+                          name={item.read ? "eye-off" : "eye"}
+                          size={18}
+                          color={item.read ? colors.inkSoft : colors.accent}
                         />
                       </TouchableOpacity>
                       <TouchableOpacity

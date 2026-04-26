@@ -163,7 +163,9 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
           </Text>
           <TouchableOpacity
             style={styles.sidebarSectionAddButton}
-            onPress={() => navigation.navigate("AddFeed")}
+            onPress={() =>
+              navigation.navigate("AddFeed", { from: currentRoute as string })
+            }
             accessibilityLabel="Add feed"
             activeOpacity={0.7}
           >

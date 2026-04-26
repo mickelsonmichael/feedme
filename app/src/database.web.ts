@@ -267,6 +267,15 @@ export async function markItemRead(itemId: number): Promise<void> {
   }
 }
 
+export async function markItemUnread(itemId: number): Promise<void> {
+  const state = loadState();
+  const item = state.items.find((i) => i.id === itemId);
+  if (item) {
+    item.read = 0;
+    saveState(state);
+  }
+}
+
 export async function getUnreadCount(feedId: number): Promise<number> {
   const state = loadState();
   return state.items.reduce(

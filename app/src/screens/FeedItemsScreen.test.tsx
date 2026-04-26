@@ -8,6 +8,7 @@ import {
   getItemsForFeed,
   upsertItems,
   markItemRead,
+  markItemUnread,
   updateFeedLastFetched,
   savePost,
   unsavePost,
@@ -19,6 +20,7 @@ jest.mock("../database", () => ({
   getItemsForFeed: jest.fn(),
   upsertItems: jest.fn(),
   markItemRead: jest.fn(),
+  markItemUnread: jest.fn(),
   updateFeedLastFetched: jest.fn(),
   savePost: jest.fn(),
   unsavePost: jest.fn(),
@@ -127,6 +129,7 @@ describe("FeedItemsScreen – View Raw", () => {
     (upsertItems as jest.Mock).mockResolvedValue(undefined);
     (updateFeedLastFetched as jest.Mock).mockResolvedValue(undefined);
     (markItemRead as jest.Mock).mockResolvedValue(undefined);
+    (markItemUnread as jest.Mock).mockResolvedValue(undefined);
     (savePost as jest.Mock).mockResolvedValue(undefined);
     (unsavePost as jest.Mock).mockResolvedValue(undefined);
     jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
@@ -354,6 +357,42 @@ describe("FeedItemsScreen – View Raw", () => {
     expect(Linking.openURL).toHaveBeenCalledWith(
       "https://example.com/comments"
     );
+
+    await act(async () => {
+      tree!.unmount();
+      jest.runOnlyPendingTimers();
+    });
+  });
+
+  it("marks a read post as unread from the row action", async () => {
+    // Arrange
+    jest.useFakeTimers();
+    (getItemsForFeed as jest.Mock).mockResolvedValue([
+      { ...mockItem, read: 1 },
+    ]);
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedItemsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const unreadButton = tree!.root.findByProps({
+      accessibilityLabel: "Mark post as unread",
+    });
+
+    // Act
+    await act(async () => {
+      await unreadButton.props.onPress();
+    });
+
+    // Assert
+    expect(markItemUnread).toHaveBeenCalledWith(10);
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Mark post as read" })
+    ).toBeTruthy();
 
     await act(async () => {
       tree!.unmount();

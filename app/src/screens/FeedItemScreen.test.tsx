@@ -7,6 +7,7 @@ import { RootStackParamList } from "../types";
 import {
   getSavedItemIds,
   markItemRead,
+  markItemUnread,
   savePost,
   unsavePost,
 } from "../database";
@@ -14,6 +15,7 @@ import {
 jest.mock("../database", () => ({
   getSavedItemIds: jest.fn(),
   markItemRead: jest.fn(),
+  markItemUnread: jest.fn(),
   savePost: jest.fn(),
   unsavePost: jest.fn(),
 }));
@@ -100,6 +102,7 @@ describe("FeedItemScreen", () => {
   beforeEach(() => {
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
     (markItemRead as jest.Mock).mockResolvedValue(undefined);
+    (markItemUnread as jest.Mock).mockResolvedValue(undefined);
     (savePost as jest.Mock).mockResolvedValue(undefined);
     (unsavePost as jest.Mock).mockResolvedValue(undefined);
     jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
@@ -184,6 +187,36 @@ describe("FeedItemScreen", () => {
     // Assert
     expect(savePost).toHaveBeenCalledTimes(1);
     expect(unsavePost).not.toHaveBeenCalled();
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("marks a read item as unread when the action is pressed", async () => {
+    // Arrange
+    const props = buildProps(1);
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedItemScreen {...props} />);
+      await Promise.resolve();
+    });
+
+    const unreadButton = tree!.root.findByProps({
+      accessibilityLabel: "Mark as unread",
+    });
+
+    // Act
+    await act(async () => {
+      await unreadButton.props.onPress();
+    });
+
+    // Assert
+    expect(markItemUnread).toHaveBeenCalledWith(22);
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Mark as read" })
+    ).toBeTruthy();
 
     await act(async () => {
       tree!.unmount();

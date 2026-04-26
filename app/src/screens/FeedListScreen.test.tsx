@@ -6,10 +6,12 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedListScreen from "../screens/FeedListScreen";
 import { RootStackParamList, TabParamList } from "../types";
+import { loadConfig } from "../storage";
 import {
   getFeeds,
   getAllItems,
   markItemRead,
+  markItemUnread,
   getSavedItemIds,
 } from "../database";
 import { refreshFeeds } from "../feedRefresher";
@@ -18,6 +20,7 @@ jest.mock("../database", () => ({
   getFeeds: jest.fn(),
   getAllItems: jest.fn(),
   markItemRead: jest.fn(),
+  markItemUnread: jest.fn(),
   savePost: jest.fn(),
   unsavePost: jest.fn(),
   getSavedItemIds: jest.fn(),
@@ -25,6 +28,10 @@ jest.mock("../database", () => ({
 
 jest.mock("../feedRefresher", () => ({
   refreshFeeds: jest.fn(),
+}));
+
+jest.mock("../storage", () => ({
+  loadConfig: jest.fn(() => ({})),
 }));
 
 jest.mock("../context/ThemeContext", () => ({
@@ -90,6 +97,7 @@ type FeedScreenProps = CompositeScreenProps<
 describe("FeedListScreen", () => {
   beforeEach(() => {
     jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+    (loadConfig as jest.Mock).mockReturnValue({});
   });
 
   afterEach(() => {
@@ -428,6 +436,74 @@ describe("FeedListScreen", () => {
       .findAllByType(Text)
       .map((node: renderer.ReactTestInstance) => node.props.children);
     expect(textAfterRefresh).not.toContain("Unread post");
+    expect(markItemRead).toHaveBeenCalledWith(201);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("marks a read aggregated post as unread from the row action", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 301,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Already read",
+        url: "https://alpha.example/read",
+        content: "body",
+        image_url: null,
+        published_at: Date.now(),
+        read: 1,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemUnread as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-read-toggle",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <FeedListScreen navigation={navigation} route={route} />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const unreadButton = tree!.root.findByProps({
+      accessibilityLabel: "Mark post as unread",
+    });
+
+    await act(async () => {
+      await unreadButton.props.onPress();
+    });
+
+    // Assert
+    expect(markItemUnread).toHaveBeenCalledWith(301);
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Mark post as read" })
+    ).toBeTruthy();
 
     await act(async () => {
       tree!.unmount();
@@ -514,6 +590,76 @@ describe("FeedListScreen", () => {
     expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/direct");
     expect(Linking.openURL).toHaveBeenCalledWith(
       "https://example.com/comments"
+    );
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("uses card layout from settings config and renders centered media-first cards", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "card" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 401,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Card item",
+        url: "https://alpha.example/post",
+        content:
+          '&lt;p&gt;Card content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt;',
+        image_url: "https://alpha.example/image.jpg",
+        published_at: Date.now(),
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-card",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <FeedListScreen navigation={navigation} route={route} />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(
+      tree!.root.findAllByProps({ accessibilityLabel: "Expand post" })
+    ).toHaveLength(0);
+    expect(tree!.root.findByProps({ testID: "card-media-401" })).toBeTruthy();
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Open Link" })
+    ).toBeTruthy();
+
+    const list = tree!.root.findByType(FlatList);
+    expect(list.props.contentContainerStyle).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ alignItems: "center" }),
+      ])
     );
 
     await act(async () => {

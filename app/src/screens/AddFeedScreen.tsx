@@ -12,11 +12,13 @@ import {
   ScrollView,
   useWindowDimensions,
 } from "react-native";
+import { CompositeScreenProps } from "@react-navigation/native";
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import { addFeed } from "../database";
 import { extractFeedTitle } from "../feedParser";
-import { RootStackParamList } from "../types";
+import { RootStackParamList, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { buildRedditFeedUrl, getSubreddit } from "../redditUtils";
@@ -26,7 +28,10 @@ import {
 } from "../youtubeUtils";
 import { fetchWithProxyFallback } from "../proxyFetch";
 
-type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<TabParamList, "AddFeed">,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 type FeedSource = "url" | "reddit" | "youtube";
 
@@ -34,7 +39,8 @@ const PROXY_ALERT_TITLE = "Using Feed Proxy";
 const PROXY_ALERT_MESSAGE =
   "This request was blocked in the browser, so Feedme used your configured feed proxy.";
 
-export default function AddFeedScreen({ navigation }: Props) {
+export default function AddFeedScreen({ navigation, route }: Props) {
+  const from = route.params?.from ?? "Feeds";
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
@@ -135,7 +141,7 @@ export default function AddFeedScreen({ navigation }: Props) {
           description: null,
           use_proxy: usedProxy ? 1 : 0,
         });
-        navigation.goBack();
+        navigation.navigate(from as "Feeds");
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
           Alert.alert("Duplicate", "This feed is already in your list.");
@@ -192,7 +198,7 @@ export default function AddFeedScreen({ navigation }: Props) {
           description: null,
           use_proxy: usedProxy ? 1 : 0,
         });
-        navigation.goBack();
+        navigation.navigate(from as "Feeds");
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
           Alert.alert("Duplicate", "This feed is already in your list.");
@@ -234,7 +240,7 @@ export default function AddFeedScreen({ navigation }: Props) {
         description: null,
         use_proxy: useProxy ? 1 : 0,
       });
-      navigation.goBack();
+      navigation.navigate(from as "Feeds");
     } catch (err) {
       if ((err as Error).message?.includes("UNIQUE")) {
         Alert.alert("Duplicate", "This feed is already in your list.");
@@ -276,7 +282,7 @@ export default function AddFeedScreen({ navigation }: Props) {
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.actionBtn, { borderColor: colors.border }]}
-                onPress={() => navigation.goBack()}
+                onPress={() => navigation.navigate(from as "Feeds")}
                 activeOpacity={0.7}
                 accessibilityLabel="Back"
               >

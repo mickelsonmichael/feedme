@@ -1,10 +1,16 @@
 import { Platform } from "react-native";
-import { THEME_MODES, type ThemeMode } from "./types";
+import {
+  FEED_LAYOUT_MODES,
+  THEME_MODES,
+  type FeedLayoutMode,
+  type ThemeMode,
+} from "./types";
 
 const STORAGE_KEY = "feedme_config";
 
 export type WebConfig = {
   themeMode?: ThemeMode;
+  feedLayout?: FeedLayoutMode;
 };
 
 let cachedConfig: WebConfig | null = null;
@@ -22,6 +28,14 @@ function validateConfig(raw: unknown): WebConfig {
       THEME_MODES.includes(themeMode as ThemeMode)
     ) {
       config.themeMode = themeMode as ThemeMode;
+    }
+
+    const feedLayout = (raw as Record<string, unknown>).feedLayout;
+    if (
+      typeof feedLayout === "string" &&
+      FEED_LAYOUT_MODES.includes(feedLayout as FeedLayoutMode)
+    ) {
+      config.feedLayout = feedLayout as FeedLayoutMode;
     }
   }
   return config;

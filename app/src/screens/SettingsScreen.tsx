@@ -6,12 +6,18 @@ import {
   ScrollView,
   TouchableOpacity,
 } from "react-native";
+import Svg, { Line, Rect } from "react-native-svg";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { fonts, fontSize, radii, spacing } from "../theme";
-import { RootStackParamList, TabParamList } from "../types";
+import {
+  RootStackParamList,
+  TabParamList,
+  type FeedLayoutMode,
+} from "../types";
 import { useTheme, type ThemeMode } from "../context/ThemeContext";
+import { loadConfig, saveConfig } from "../storage";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Settings">,
@@ -58,7 +64,7 @@ function Segmented<T extends string>({
   onChange,
 }: {
   value: T;
-  options: readonly T[];
+  options: readonly { value: T; label: string; icon?: React.ReactNode }[];
   onChange: (v: T) => void;
 }) {
   const { colors } = useTheme();
@@ -70,26 +76,31 @@ function Segmented<T extends string>({
       ]}
     >
       {options.map((opt) => {
-        const active = opt === value;
+        const active = opt.value === value;
         return (
           <TouchableOpacity
-            key={opt}
+            key={opt.value}
             style={[
               styles.segment,
               active && { backgroundColor: colors.accent },
             ]}
-            onPress={() => onChange(opt)}
+            onPress={() => onChange(opt.value)}
             activeOpacity={0.7}
           >
-            <Text
-              style={[
-                styles.segmentText,
-                { color: colors.ink },
-                active && { color: colors.paper, fontWeight: "600" },
-              ]}
-            >
-              {opt}
-            </Text>
+            <View style={styles.segmentContent}>
+              {opt.icon ? (
+                <View style={styles.segmentIcon}>{opt.icon}</View>
+              ) : null}
+              <Text
+                style={[
+                  styles.segmentText,
+                  { color: colors.ink },
+                  active && { color: colors.paper, fontWeight: "600" },
+                ]}
+              >
+                {opt.label}
+              </Text>
+            </View>
           </TouchableOpacity>
         );
       })}
@@ -97,8 +108,53 @@ function Segmented<T extends string>({
   );
 }
 
+function CompactLayoutIcon({ active }: { active: boolean }) {
+  const { colors } = useTheme();
+  const stroke = active ? colors.paper : colors.inkSoft;
+  const fill = active ? colors.paper : colors.paperWarm;
+
+  return (
+    <Svg width={42} height={28} viewBox="0 0 42 28" fill="none">
+      <Rect x="1" y="2" width="40" height="24" rx="5" stroke={stroke} />
+      <Rect x="4" y="6" width="8" height="6" rx="1.5" fill={fill} />
+      <Line x1="15" y1="8" x2="36" y2="8" stroke={stroke} strokeWidth="1.5" />
+      <Line x1="15" y1="11" x2="31" y2="11" stroke={stroke} strokeWidth="1.5" />
+      <Rect x="4" y="16" width="8" height="6" rx="1.5" fill={fill} />
+      <Line x1="15" y1="18" x2="36" y2="18" stroke={stroke} strokeWidth="1.5" />
+      <Line x1="15" y1="21" x2="29" y2="21" stroke={stroke} strokeWidth="1.5" />
+    </Svg>
+  );
+}
+
+function CardLayoutIcon({ active }: { active: boolean }) {
+  const { colors } = useTheme();
+  const stroke = active ? colors.paper : colors.inkSoft;
+  const fill = active ? colors.paper : colors.paperWarm;
+
+  return (
+    <Svg width={42} height={28} viewBox="0 0 42 28" fill="none">
+      <Rect x="7" y="2" width="28" height="24" rx="5" stroke={stroke} />
+      <Rect x="10" y="5" width="22" height="9" rx="2" fill={fill} />
+      <Line x1="10" y1="18" x2="31" y2="18" stroke={stroke} strokeWidth="1.5" />
+      <Line x1="10" y1="21" x2="28" y2="21" stroke={stroke} strokeWidth="1.5" />
+    </Svg>
+  );
+}
+
 export default function SettingsScreen({ navigation }: Props) {
   const { colors, mode, setMode } = useTheme();
+  const [feedLayout, setFeedLayout] = React.useState<FeedLayoutMode>(
+    () => loadConfig().feedLayout ?? "compact"
+  );
+
+  const handleLayoutChange = React.useCallback((nextLayout: FeedLayoutMode) => {
+    setFeedLayout(nextLayout);
+    try {
+      saveConfig({ feedLayout: nextLayout });
+    } catch (e) {
+      console.warn("[feedme] Failed to persist feed layout:", e);
+    }
+  }, []);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
@@ -106,8 +162,30 @@ export default function SettingsScreen({ navigation }: Props) {
         <SectionHeading label="Appearance" />
         <Segmented
           value={mode}
-          options={["light", "dark", "system"] as const}
+          options={[
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" },
+            { value: "system", label: "System" },
+          ]}
           onChange={(v) => setMode(v as ThemeMode)}
+        />
+
+        <SectionHeading label="Feed layout" />
+        <Segmented
+          value={feedLayout}
+          options={[
+            {
+              value: "compact",
+              label: "Compact",
+              icon: <CompactLayoutIcon active={feedLayout === "compact"} />,
+            },
+            {
+              value: "card",
+              label: "Card",
+              icon: <CardLayoutIcon active={feedLayout === "card"} />,
+            },
+          ]}
+          onChange={handleLayoutChange}
         />
 
         <SectionHeading label="Import / export" />
@@ -156,8 +234,16 @@ const styles = StyleSheet.create({
   },
   segment: {
     paddingHorizontal: spacing.md,
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
     borderRadius: 2,
+  },
+  segmentContent: {
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  segmentIcon: {
+    height: 28,
+    justifyContent: "center",
   },
   segmentText: {
     fontSize: fontSize.body,

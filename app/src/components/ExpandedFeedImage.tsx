@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   image: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     borderRadius: radii.sm,
   },
   pendingImage: {

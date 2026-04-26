@@ -11,8 +11,11 @@ import {
   KeyboardAvoidingView,
   Platform,
   Switch,
+  useWindowDimensions,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
+import { CompositeScreenProps } from "@react-navigation/native";
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -24,11 +27,14 @@ import {
   upsertItems,
 } from "../database";
 import { fetchFeedWithMeta } from "../feedParser";
-import { Feed, RootStackParamList } from "../types";
+import { Feed, RootStackParamList, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
-type Props = NativeStackScreenProps<RootStackParamList, "FeedDetail">;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<TabParamList, "FeedDetail">,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 const PROXY_ALERT_TITLE = "Using Feed Proxy";
 const PROXY_ALERT_MESSAGE =
@@ -47,6 +53,8 @@ function formatDate(ts: number | null): string {
 
 export default function FeedDetailScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isDesktopWeb = Platform.OS === "web" && width >= 768;
   const { feedId } = route.params;
 
   const [feed, setFeed] = useState<Feed | null>(null);
@@ -152,7 +160,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
     const doDelete = async () => {
       try {
         await deleteFeed(feedId);
-        navigation.goBack();
+        navigation.navigate("Feeds");
       } catch (err) {
         const errMsg = "Could not delete feed: " + (err as Error).message;
         if (Platform.OS === "web") {
@@ -211,118 +219,199 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
       style={[styles.container, { backgroundColor: colors.paper }]}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {/* Custom header */}
-      <View style={[styles.topBar, { borderBottomColor: colors.inkFaint }]}>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          hitSlop={8}
-          style={styles.iconBtn}
-          accessibilityLabel="Go back"
-        >
-          <Feather name="arrow-left" size={22} color={colors.ink} />
-        </TouchableOpacity>
-        <View style={styles.spacer} />
-        <TouchableOpacity
-          onPress={handleSave}
-          hitSlop={8}
-          style={[styles.iconBtn, (!hasChanges || saving) && styles.disabled]}
-          disabled={!hasChanges || saving}
-          accessibilityLabel="Save feed"
-        >
-          <Feather
-            name="save"
-            size={22}
-            color={!hasChanges || saving ? colors.inkFaint : colors.accent}
-          />
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={handleDelete}
-          hitSlop={8}
-          style={styles.iconBtn}
-          accessibilityLabel="Delete feed"
-        >
-          <Feather name="trash-2" size={22} color={colors.danger} />
-        </TouchableOpacity>
-      </View>
+      {/* Mobile header */}
+      {!isDesktopWeb ? (
+        <View style={[styles.topBar, { borderBottomColor: colors.inkFaint }]}>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("Feeds")}
+            hitSlop={8}
+            style={styles.iconBtn}
+            accessibilityLabel="Go back"
+          >
+            <Feather name="arrow-left" size={22} color={colors.ink} />
+          </TouchableOpacity>
+          <View style={styles.spacer} />
+          <TouchableOpacity
+            onPress={handleSave}
+            hitSlop={8}
+            style={[styles.iconBtn, (!hasChanges || saving) && styles.disabled]}
+            disabled={!hasChanges || saving}
+            accessibilityLabel="Save feed"
+          >
+            <Feather
+              name="save"
+              size={22}
+              color={!hasChanges || saving ? colors.inkFaint : colors.accent}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleDelete}
+            hitSlop={8}
+            style={styles.iconBtn}
+            accessibilityLabel="Delete feed"
+          >
+            <Feather name="trash-2" size={22} color={colors.danger} />
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          isDesktopWeb ? styles.desktopContent : null,
+        ]}
         keyboardShouldPersistTaps="handled"
       >
-        {feed.error ? (
-          <View
+        <View
+          style={
+            isDesktopWeb
+              ? [
+                  styles.card,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: colors.border,
+                    shadowColor: colors.ink,
+                  },
+                ]
+              : undefined
+          }
+        >
+          {isDesktopWeb ? (
+            <View style={styles.actionRow}>
+              <TouchableOpacity
+                style={[styles.actionBtn, { borderColor: colors.border }]}
+                onPress={() => navigation.navigate("Feeds")}
+                activeOpacity={0.7}
+                accessibilityLabel="Back"
+              >
+                <Feather name="arrow-left" size={16} color={colors.ink} />
+                <Text style={[styles.actionText, { color: colors.ink }]}>
+                  Back
+                </Text>
+              </TouchableOpacity>
+              <View style={styles.actionSpacer} />
+              <TouchableOpacity
+                style={[
+                  styles.actionBtn,
+                  { borderColor: colors.border },
+                  (!hasChanges || saving) && styles.actionBtnDisabled,
+                ]}
+                onPress={handleSave}
+                disabled={!hasChanges || saving}
+                activeOpacity={0.7}
+                accessibilityLabel="Save feed"
+              >
+                <Feather
+                  name="save"
+                  size={16}
+                  color={
+                    !hasChanges || saving ? colors.inkFaint : colors.accent
+                  }
+                />
+                <Text
+                  style={[
+                    styles.actionText,
+                    {
+                      color:
+                        !hasChanges || saving ? colors.inkFaint : colors.accent,
+                    },
+                  ]}
+                >
+                  Save
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionBtn,
+                  { borderColor: colors.danger + "60" },
+                ]}
+                onPress={handleDelete}
+                activeOpacity={0.7}
+                accessibilityLabel="Delete feed"
+              >
+                <Feather name="trash-2" size={16} color={colors.danger} />
+                <Text style={[styles.actionText, { color: colors.danger }]}>
+                  Delete
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {feed.error ? (
+            <View
+              style={[
+                styles.errorBox,
+                {
+                  borderColor: colors.danger,
+                  backgroundColor: colors.danger + "18",
+                },
+              ]}
+            >
+              <Text style={[styles.errorText, { color: colors.danger }]}>
+                {feed.error}
+              </Text>
+            </View>
+          ) : null}
+
+          <Text style={[styles.label, { color: colors.inkSoft }]}>title</Text>
+          <TextInput
             style={[
-              styles.errorBox,
+              styles.input,
               {
-                borderColor: colors.danger,
-                backgroundColor: colors.danger + "18",
+                backgroundColor: colors.paper,
+                borderColor: colors.border,
+                color: colors.ink,
               },
             ]}
-          >
-            <Text style={[styles.errorText, { color: colors.danger }]}>
-              {feed.error}
-            </Text>
-          </View>
-        ) : null}
-
-        <Text style={[styles.label, { color: colors.inkSoft }]}>title</Text>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.paper,
-              borderColor: colors.border,
-              color: colors.ink,
-            },
-          ]}
-          value={title}
-          onChangeText={setTitle}
-          placeholder="Feed title"
-          placeholderTextColor={colors.inkFaint}
-          autoCapitalize="sentences"
-          autoCorrect={false}
-          returnKeyType="next"
-        />
-
-        <Text style={[styles.label, { color: colors.inkSoft }]}>url</Text>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              backgroundColor: colors.paper,
-              borderColor: colors.border,
-              color: colors.ink,
-            },
-          ]}
-          value={url}
-          onChangeText={setUrl}
-          placeholder="https://example.com/feed.xml"
-          placeholderTextColor={colors.inkFaint}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          returnKeyType="done"
-        />
-
-        <Text style={[styles.lastFetch, { color: colors.inkSoft }]}>
-          Last fetch: {formatDate(feed.last_fetched)}
-        </Text>
-
-        <View style={styles.proxyRow}>
-          <View style={styles.proxyLabelGroup}>
-            <Text style={[styles.label, { color: colors.inkSoft }]}>
-              use proxy
-            </Text>
-            <Text style={[styles.proxyHint, { color: colors.inkFaint }]}>
-              Route requests through the configured proxy server
-            </Text>
-          </View>
-          <Switch
-            value={useProxy}
-            onValueChange={setUseProxy}
-            trackColor={{ false: colors.border, true: colors.accent }}
-            thumbColor={colors.paper}
+            value={title}
+            onChangeText={setTitle}
+            placeholder="Feed title"
+            placeholderTextColor={colors.inkFaint}
+            autoCapitalize="sentences"
+            autoCorrect={false}
+            returnKeyType="next"
           />
+
+          <Text style={[styles.label, { color: colors.inkSoft }]}>url</Text>
+          <TextInput
+            style={[
+              styles.input,
+              {
+                backgroundColor: colors.paper,
+                borderColor: colors.border,
+                color: colors.ink,
+              },
+            ]}
+            value={url}
+            onChangeText={setUrl}
+            placeholder="https://example.com/feed.xml"
+            placeholderTextColor={colors.inkFaint}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="url"
+            returnKeyType="done"
+          />
+
+          <Text style={[styles.lastFetch, { color: colors.inkSoft }]}>
+            Last fetch: {formatDate(feed.last_fetched)}
+          </Text>
+
+          <View style={styles.proxyRow}>
+            <View style={styles.proxyLabelGroup}>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                use proxy
+              </Text>
+              <Text style={[styles.proxyHint, { color: colors.inkFaint }]}>
+                Route requests through the configured proxy server
+              </Text>
+            </View>
+            <Switch
+              value={useProxy}
+              onValueChange={setUseProxy}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.paper}
+            />
+          </View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -407,5 +496,43 @@ const styles = StyleSheet.create({
     fontSize: fontSize.h2,
     fontFamily: fonts.heading,
     fontWeight: "600",
+  },
+  desktopContent: {
+    alignItems: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 920,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    padding: spacing.lg,
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 16,
+    elevation: 2,
+  },
+  actionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+    marginBottom: spacing.sm,
+  },
+  actionSpacer: { flex: 1 },
+  actionBtn: {
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  actionBtnDisabled: { opacity: 0.4 },
+  actionText: {
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+    fontSize: fontSize.meta,
   },
 });

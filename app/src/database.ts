@@ -211,6 +211,11 @@ export async function markItemRead(itemId: number): Promise<void> {
   await database.runAsync("UPDATE items SET read = 1 WHERE id = ?", [itemId]);
 }
 
+export async function markItemUnread(itemId: number): Promise<void> {
+  const database = await getDatabase();
+  await database.runAsync("UPDATE items SET read = 0 WHERE id = ?", [itemId]);
+}
+
 export async function getUnreadCount(feedId: number): Promise<number> {
   const database = await getDatabase();
   const row = await database.getFirstAsync<{ count: number }>(

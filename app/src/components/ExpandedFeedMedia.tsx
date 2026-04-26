@@ -76,7 +76,7 @@ export function ExpandedFeedMedia({ itemUrl, imageUrl, testID }: Props) {
 
 const styles = StyleSheet.create({
   videoContainer: {
-    alignSelf: "flex-start",
+    alignSelf: "center",
     width: "100%",
     maxWidth: MAX_EXPANDED_IMAGE_EDGE,
     maxHeight: MAX_EXPANDED_IMAGE_EDGE,

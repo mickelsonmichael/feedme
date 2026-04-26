@@ -135,7 +135,7 @@ export default function FeedsScreen({ navigation }: Props) {
             styles.addBtn,
             { borderColor: colors.border, backgroundColor: colors.accent },
           ]}
-          onPress={() => navigation.navigate("AddFeed")}
+          onPress={() => navigation.navigate("AddFeed", { from: "Feeds" })}
           accessibilityLabel="Add feed"
           activeOpacity={0.8}
         >

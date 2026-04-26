@@ -1,8 +1,10 @@
 import React from "react";
 import renderer, { act } from "react-test-renderer";
+import { CompositeScreenProps } from "@react-navigation/native";
+import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AddFeedScreen from "./AddFeedScreen";
-import { RootStackParamList } from "../types";
+import { RootStackParamList, TabParamList } from "../types";
 
 jest.mock("../database", () => ({
   addFeed: jest.fn(),
@@ -34,13 +36,17 @@ jest.mock("../context/ThemeContext", () => ({
   }),
 }));
 
-type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<TabParamList, "AddFeed">,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 function buildProps(): Props {
   return {
     navigation: {
       goBack: jest.fn(),
       navigate: jest.fn(),
+      jumpTo: jest.fn(),
     } as unknown as Props["navigation"],
     route: {
       key: "AddFeed-test",

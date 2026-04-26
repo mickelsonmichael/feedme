@@ -10,6 +10,7 @@ import {
   ScrollView,
   Image,
   Linking,
+  useWindowDimensions,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
@@ -19,6 +20,7 @@ import {
   getFeeds,
   getAllItems,
   markItemRead,
+  markItemUnread,
   savePost,
   unsavePost,
   getSavedItemIds,
@@ -26,6 +28,7 @@ import {
 import { Feather } from "@expo/vector-icons";
 import { refreshFeeds } from "../feedRefresher";
 import {
+  FeedLayoutMode,
   Feed,
   FeedItemWithFeed,
   RootStackParamList,
@@ -39,6 +42,7 @@ import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
 import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { parseContentAndLinks } from "../utils/contentActions";
+import { loadConfig } from "../storage";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -46,9 +50,14 @@ type Props = CompositeScreenProps<
 >;
 
 const CARD_IMAGE_WIDTH = 100;
+const CARD_LAYOUT_WIDTH = 760;
 
 export default function FeedListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
+  const { width: viewportWidth } = useWindowDimensions();
+  const [feedLayout, setFeedLayout] = useState<FeedLayoutMode>(
+    () => loadConfig().feedLayout ?? "compact"
+  );
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [items, setItems] = useState<FeedItemWithFeed[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,6 +99,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   useFocusEffect(
     useCallback(() => {
+      setFeedLayout(loadConfig().feedLayout ?? "compact");
       setRefreshing(true);
       loadData();
     }, [loadData])
@@ -155,6 +165,38 @@ export default function FeedListScreen({ navigation, route }: Props) {
       } catch {
         Alert.alert("Error", "Could not update read status.");
       }
+    }
+  };
+
+  const toggleRead = async (item: FeedItemWithFeed) => {
+    try {
+      if (item.read) {
+        await markItemUnread(item.id);
+        setItems((prev) =>
+          prev.map((current) =>
+            current.id === item.id ? { ...current, read: 0 } : current
+          )
+        );
+        setRetainedUnreadIds((prev) => {
+          const next = new Set(prev);
+          next.add(item.id);
+          return next;
+        });
+        return;
+      }
+
+      if (filter === "unread") {
+        setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+      }
+
+      await markItemRead(item.id);
+      setItems((prev) =>
+        prev.map((current) =>
+          current.id === item.id ? { ...current, read: 1 } : current
+        )
+      );
+    } catch {
+      Alert.alert("Error", "Could not update read status.");
     }
   };
 
@@ -319,12 +361,158 @@ export default function FeedListScreen({ navigation, route }: Props) {
           keyExtractor={(item) => String(item.id)}
           onRefresh={handleRefreshAll}
           refreshing={refreshing}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[
+            styles.list,
+            feedLayout === "card" ? styles.cardList : null,
+          ]}
           renderItem={({ item }) => {
             const saved = savedIds.has(item.id);
             const expanded = expandedIds.has(item.id);
             const { text: contentText, links: contentLinks } =
               parseContentAndLinks(item.content);
+
+            if (feedLayout === "card") {
+              const cardWidth = Math.min(
+                CARD_LAYOUT_WIDTH,
+                Math.max(0, viewportWidth - spacing.md * 2)
+              );
+              return (
+                <View
+                  style={[
+                    styles.card,
+                    styles.cardLayout,
+                    { width: cardWidth },
+                    {
+                      backgroundColor: colors.paper,
+                      borderColor: colors.border,
+                    },
+                  ]}
+                >
+                  {item.image_url || item.url ? (
+                    <ExpandedFeedMedia
+                      imageUrl={item.image_url}
+                      itemUrl={item.url}
+                      testID={`card-media-${item.id}`}
+                    />
+                  ) : null}
+                  <View style={styles.cardLayoutContent}>
+                    <View style={styles.cardMeta}>
+                      <Text style={[styles.sourceText, { color: colors.ink }]}>
+                        {item.feed_title}
+                      </Text>
+                      <Text style={[styles.metaDot, { color: colors.inkSoft }]}>
+                        ·
+                      </Text>
+                      <MetaText>{formatDate(item.published_at)}</MetaText>
+                      {!item.read && (
+                        <View
+                          style={[
+                            styles.unreadDot,
+                            { backgroundColor: colors.accent },
+                          ]}
+                        />
+                      )}
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleOpenItem(item)}
+                      activeOpacity={0.7}
+                      accessibilityLabel={`Open post: ${item.title}`}
+                    >
+                      <Text
+                        style={[
+                          styles.title,
+                          { color: colors.ink },
+                          item.read
+                            ? { color: colors.inkSoft, fontWeight: "500" }
+                            : null,
+                        ]}
+                        numberOfLines={4}
+                      >
+                        {item.title}
+                      </Text>
+                      {item.content ? (
+                        <Text
+                          style={[styles.summary, { color: colors.inkSoft }]}
+                          numberOfLines={6}
+                        >
+                          {contentText}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                    {contentLinks.length ? (
+                      <View style={styles.contentLinkRow}>
+                        {contentLinks.map((link) => (
+                          <TouchableOpacity
+                            key={`${item.id}:${link.label}:${link.url}`}
+                            style={[
+                              styles.contentLinkBtn,
+                              { borderColor: colors.border },
+                            ]}
+                            onPress={() => handleOpenContentLink(link.url)}
+                            activeOpacity={0.7}
+                            accessibilityLabel={`Open ${link.label}`}
+                          >
+                            <Feather
+                              name={
+                                link.label === "Comments"
+                                  ? "message-circle"
+                                  : "link"
+                              }
+                              size={14}
+                              color={colors.inkSoft}
+                            />
+                            <Text
+                              style={[
+                                styles.contentLinkText,
+                                { color: colors.ink },
+                              ]}
+                            >
+                              {link.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    ) : null}
+                    <View
+                      style={[
+                        styles.actionRow,
+                        { borderTopColor: colors.inkFaint },
+                      ]}
+                    >
+                      <TouchableOpacity
+                        onPress={() => toggleRead(item)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel={
+                          item.read
+                            ? "Mark post as unread"
+                            : "Mark post as read"
+                        }
+                      >
+                        <Feather
+                          name={item.read ? "eye-off" : "eye"}
+                          size={18}
+                          color={item.read ? colors.inkSoft : colors.accent}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => toggleSave(item)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel={saved ? "Unsave post" : "Save post"}
+                      >
+                        <Feather
+                          name="bookmark"
+                          size={18}
+                          color={saved ? colors.accent : colors.inkSoft}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              );
+            }
+
             return (
               <View
                 style={[
@@ -405,6 +593,22 @@ export default function FeedListScreen({ navigation, route }: Props) {
                           name={expanded ? "chevron-up" : "chevron-down"}
                           size={18}
                           color={expanded ? colors.accent : colors.inkSoft}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => toggleRead(item)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel={
+                          item.read
+                            ? "Mark post as unread"
+                            : "Mark post as read"
+                        }
+                      >
+                        <Feather
+                          name={item.read ? "eye-off" : "eye"}
+                          size={18}
+                          color={item.read ? colors.inkSoft : colors.accent}
                         />
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -517,10 +721,20 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.xs,
   },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
+  cardList: {
+    alignItems: "center",
+  },
   card: {
     borderWidth: 1,
     borderRadius: radii.md,
     overflow: "hidden",
+  },
+  cardLayout: {
+    maxWidth: CARD_LAYOUT_WIDTH,
+  },
+  cardLayoutContent: {
+    padding: spacing.md,
+    gap: spacing.sm,
   },
   cardRow: {
     flexDirection: "row",

@@ -19,6 +19,7 @@ import {
   getSavedPosts,
   getUnreadCount,
   markItemRead,
+  markItemUnread,
   savePost,
   setFeedError,
   unsavePost,
@@ -250,6 +251,19 @@ describe("database.web — items", () => {
     const items = await getItemsForFeed(feedId);
     await markItemRead(items[0].id);
     expect(await getUnreadCount(feedId)).toBe(2);
+  });
+
+  it("marks items back to unread", async () => {
+    await upsertItems(feedId, [
+      { title: "1", url: "https://x/1", content: null, publishedAt: 1 },
+    ]);
+
+    const items = await getItemsForFeed(feedId);
+    await markItemRead(items[0].id);
+    expect(await getUnreadCount(feedId)).toBe(0);
+
+    await markItemUnread(items[0].id);
+    expect(await getUnreadCount(feedId)).toBe(1);
   });
 
   it("cascades deletes from feed to items", async () => {
