@@ -75,6 +75,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [revealedNsfwCardIds, setRevealedNsfwCardIds] = useState<Set<number>>(
+    new Set()
+  );
   const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<number>>(
     new Set()
   );
@@ -508,6 +511,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
             feedLayout === "card" ? styles.cardList : null,
           ]}
           renderItem={({ item }) => {
+            const isFeedNsfw = feedDetailsById.get(item.feed_id)?.nsfw === 1;
+
             if (feedLayout === "card") {
               const cardWidth = Math.min(
                 CARD_LAYOUT_WIDTH,
@@ -518,10 +523,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   item={item}
                   feedTitle={item.feed_title}
                   layout="card"
+                  nsfw={isFeedNsfw}
                   saved={savedIds.has(item.id)}
+                  cardMediaRevealed={revealedNsfwCardIds.has(item.id)}
                   cardWidth={cardWidth}
                   cardMediaTestID={`card-media-${item.id}`}
                   onOpenItem={() => handleOpenItem(item)}
+                  onRevealCardMedia={() =>
+                    setRevealedNsfwCardIds((prev) => new Set(prev).add(item.id))
+                  }
                   onToggleRead={() => toggleRead(item)}
                   onToggleSave={() => toggleSave(item)}
                   onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
@@ -535,6 +545,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 item={item}
                 feedTitle={item.feed_title}
                 layout="compact"
+                nsfw={isFeedNsfw}
                 saved={savedIds.has(item.id)}
                 expanded={expandedIds.has(item.id)}
                 showExpand

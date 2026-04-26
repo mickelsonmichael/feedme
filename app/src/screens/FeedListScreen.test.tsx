@@ -1,6 +1,7 @@
 import React from "react";
 import {
   FlatList,
+  Image,
   Linking,
   Text,
   TextInput,
@@ -24,7 +25,8 @@ import {
 import { refreshFeeds } from "../feedRefresher";
 
 const mockExpandedFeedMedia = jest.fn(
-  (_props: { imageAlignment?: string; testID?: string }) => undefined
+  (_props: { imageAlignment?: string; testID?: string; blur?: boolean }) =>
+    undefined
 );
 
 jest.mock("../database", () => ({
@@ -101,6 +103,7 @@ jest.mock("../components/ExpandedFeedMedia", () => {
     ExpandedFeedMedia: (props: {
       imageAlignment?: string;
       testID?: string;
+      blur?: boolean;
     }) => {
       mockExpandedFeedMedia(props);
       return React.createElement(View, { testID: props.testID });
@@ -684,6 +687,7 @@ describe("FeedListScreen", () => {
         description: null,
         last_fetched: Date.now(),
         error: null,
+        nsfw: 1,
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
@@ -737,7 +741,23 @@ describe("FeedListScreen", () => {
     expect(
       mockExpandedFeedMedia.mock.calls.some(
         ([props]) =>
-          props.testID === "card-media-401" && props.imageAlignment === "center"
+          props.testID === "card-media-401" &&
+          props.imageAlignment === "center" &&
+          props.blur === true
+      )
+    ).toBe(true);
+
+    const revealNsfwButton = tree!.root.findByProps({
+      accessibilityLabel: "Reveal NSFW media",
+    });
+
+    await act(async () => {
+      await revealNsfwButton.props.onPress();
+    });
+
+    expect(
+      mockExpandedFeedMedia.mock.calls.some(
+        ([props]) => props.testID === "card-media-401" && props.blur === false
       )
     ).toBe(true);
 
@@ -747,6 +767,73 @@ describe("FeedListScreen", () => {
         expect.objectContaining({ alignItems: "center" }),
       ])
     );
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("blurs compact thumbnails for NSFW feeds", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+        nsfw: 1,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 601,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Sensitive image",
+        url: "https://alpha.example/sensitive",
+        content: "preview",
+        image_url: "https://alpha.example/sensitive.jpg",
+        published_at: Date.now(),
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-nsfw-compact",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert
+    const thumbnails = tree!.root.findAllByType(Image);
+    expect(thumbnails.length).toBeGreaterThan(0);
+    expect(
+      thumbnails.some((thumb) => {
+        const sourceUri =
+          thumb.props.source && typeof thumb.props.source === "object"
+            ? thumb.props.source.uri
+            : undefined;
+        return (
+          sourceUri === "https://alpha.example/sensitive.jpg" &&
+          thumb.props.blurRadius === 12
+        );
+      })
+    ).toBe(true);
 
     await act(async () => {
       tree!.unmount();

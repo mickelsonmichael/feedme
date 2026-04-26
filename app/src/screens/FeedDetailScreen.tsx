@@ -64,12 +64,14 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
   const [useProxy, setUseProxy] = useState(false);
+  const [isNsfw, setIsNsfw] = useState(false);
 
   const hasChanges =
     feed !== null &&
     (title.trim() !== feed.title ||
       url.trim() !== feed.url ||
-      useProxy !== (feed.use_proxy === 1));
+      useProxy !== (feed.use_proxy === 1) ||
+      isNsfw !== (feed.nsfw === 1));
 
   const loadFeed = useCallback(async () => {
     try {
@@ -80,6 +82,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         setTitle(found.title);
         setUrl(found.url);
         setUseProxy(found.use_proxy === 1);
+        setIsNsfw(found.nsfw === 1);
       }
     } finally {
       setLoading(false);
@@ -124,6 +127,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         title: trimmedTitle,
         url: trimmedUrl,
         use_proxy: useProxy ? 1 : 0,
+        nsfw: isNsfw ? 1 : 0,
       });
 
       // Refetch feed after save
@@ -408,6 +412,23 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             <Switch
               value={useProxy}
               onValueChange={setUseProxy}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.paper}
+            />
+          </View>
+
+          <View style={styles.proxyRow}>
+            <View style={styles.proxyLabelGroup}>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                nsfw
+              </Text>
+              <Text style={[styles.proxyHint, { color: colors.inkFaint }]}>
+                Blur thumbnails and require tap-to-reveal in card view
+              </Text>
+            </View>
+            <Switch
+              value={isNsfw}
+              onValueChange={setIsNsfw}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.paper}
             />

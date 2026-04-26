@@ -19,12 +19,14 @@ type Props = {
   imageUrl: string;
   alignment?: "flex-start" | "center";
   testID?: string;
+  blur?: boolean;
 };
 
 export function ExpandedFeedImage({
   imageUrl,
   alignment = "flex-start",
   testID,
+  blur = false,
 }: Props) {
   const { colors } = useTheme();
   const [contentWidth, setContentWidth] = useState<number | null>(null);
@@ -102,6 +104,7 @@ export function ExpandedFeedImage({
       ) : (
         <Image
           source={{ uri: imageUrl }}
+          blurRadius={blur ? 14 : 0}
           style={[
             styles.image,
             alignment === "center"

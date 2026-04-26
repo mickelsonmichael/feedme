@@ -79,15 +79,21 @@ describe("database.web — feeds", () => {
       description: "desc",
       last_fetched: null,
       error: null,
+      nsfw: 0,
     });
 
-    await updateFeed(id, { title: "Renamed", url: "https://example.com/v2" });
+    await updateFeed(id, {
+      title: "Renamed",
+      url: "https://example.com/v2",
+      nsfw: 1,
+    });
     await updateFeedLastFetched(id);
     await setFeedError(id, "boom");
 
     const updated = (await getFeeds())[0];
     expect(updated.title).toBe("Renamed");
     expect(updated.url).toBe("https://example.com/v2");
+    expect(updated.nsfw).toBe(1);
     expect(typeof updated.last_fetched).toBe("number");
     expect(updated.error).toBe("boom");
 

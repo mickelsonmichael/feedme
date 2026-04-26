@@ -11,6 +11,7 @@ import {
   Platform,
   ScrollView,
   useWindowDimensions,
+  Switch,
 } from "react-native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
@@ -53,6 +54,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
   const [useProxy, setUseProxy] = useState(false);
+  const [isNsfw, setIsNsfw] = useState(false);
 
   const handleSourceChange = (newSource: FeedSource) => {
     setSource(newSource);
@@ -63,6 +65,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
     setTitleManuallyEdited(false);
     setFeedError(null);
     setUseProxy(false);
+    setIsNsfw(false);
   };
 
   const handleSubredditChange = (value: string) => {
@@ -140,6 +143,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           url: redditUrl,
           description: null,
           use_proxy: usedProxy ? 1 : 0,
+          nsfw: isNsfw ? 1 : 0,
         });
         navigation.navigate(from as "Feeds");
       } catch (err) {
@@ -197,6 +201,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           url: feedUrl,
           description: null,
           use_proxy: usedProxy ? 1 : 0,
+          nsfw: isNsfw ? 1 : 0,
         });
         navigation.navigate(from as "Feeds");
       } catch (err) {
@@ -239,6 +244,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
         url: trimmedUrl,
         description: null,
         use_proxy: useProxy ? 1 : 0,
+        nsfw: isNsfw ? 1 : 0,
       });
       navigation.navigate(from as "Feeds");
     } catch (err) {
@@ -470,6 +476,23 @@ export default function AddFeedScreen({ navigation, route }: Props) {
             returnKeyType="done"
           />
 
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                nsfw
+              </Text>
+              <Text style={[styles.hintText, { color: colors.inkFaint }]}>
+                Blur thumbnails and require tap-to-reveal in card view
+              </Text>
+            </View>
+            <Switch
+              value={isNsfw}
+              onValueChange={setIsNsfw}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.paper}
+            />
+          </View>
+
           {loading && (
             <ActivityIndicator style={styles.spinner} color={colors.accent} />
           )}
@@ -603,6 +626,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
     fontSize: fontSize.bodyLg,
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.lg,
+  },
+  toggleLabelGroup: {
+    flex: 1,
+    marginRight: spacing.md,
   },
   spinner: { marginTop: spacing.md },
   errorBox: {

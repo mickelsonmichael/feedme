@@ -232,6 +232,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                 item={item}
                 feedTitle={feed.title}
                 layout="compact"
+                nsfw={feed.nsfw === 1}
                 saved={savedIds.has(item.id)}
                 expanded={expandedIds.has(item.id)}
                 showExpand

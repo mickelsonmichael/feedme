@@ -30,6 +30,14 @@ type DbState = {
   nextSavedPostId: number;
 };
 
+function normalizeFeed(raw: Feed): Feed {
+  return {
+    ...raw,
+    use_proxy: raw.use_proxy ?? 0,
+    nsfw: raw.nsfw ?? 0,
+  };
+}
+
 function emptyState(): DbState {
   return {
     feeds: [],
@@ -65,7 +73,9 @@ function loadState(): DbState {
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<DbState> | null;
       const feeds =
-        parsed && Array.isArray(parsed.feeds) ? (parsed.feeds as Feed[]) : [];
+        parsed && Array.isArray(parsed.feeds)
+          ? (parsed.feeds as Feed[]).map(normalizeFeed)
+          : [];
       const items =
         parsed && Array.isArray(parsed.items)
           ? (parsed.items as FeedItem[])
@@ -140,7 +150,11 @@ export async function addFeed({
   url,
   description,
   use_proxy,
-}: Pick<Feed, "title" | "url" | "description" | "use_proxy">): Promise<number> {
+  nsfw,
+}: Pick<
+  Feed,
+  "title" | "url" | "description" | "use_proxy" | "nsfw"
+>): Promise<number> {
   const state = loadState();
   if (state.feeds.some((f) => f.url === url)) {
     // Mirror SQLite UNIQUE constraint behaviour.
@@ -155,6 +169,7 @@ export async function addFeed({
     last_fetched: null,
     error: null,
     use_proxy: use_proxy ?? 0,
+    nsfw: nsfw ?? 0,
   };
   state.feeds.push(feed);
   state.nextFeedId = id + 1;
@@ -181,7 +196,7 @@ export async function updateFeedLastFetched(feedId: number): Promise<void> {
 
 export async function updateFeed(
   feedId: number,
-  fields: Pick<Feed, "title" | "url" | "use_proxy">
+  fields: Pick<Feed, "title" | "url" | "use_proxy" | "nsfw">
 ): Promise<void> {
   const state = loadState();
   const feed = state.feeds.find((f) => f.id === feedId);
@@ -189,6 +204,7 @@ export async function updateFeed(
     feed.title = fields.title;
     feed.url = fields.url;
     feed.use_proxy = fields.use_proxy ?? 0;
+    feed.nsfw = fields.nsfw ?? 0;
     saveState(state);
   }
 }

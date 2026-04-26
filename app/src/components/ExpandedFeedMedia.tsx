@@ -39,6 +39,7 @@ type Props = {
   content?: string | null;
   imageAlignment?: "flex-start" | "center";
   testID?: string;
+  blur?: boolean;
 };
 
 /**
@@ -52,6 +53,7 @@ export function ExpandedFeedMedia({
   content,
   imageAlignment = "flex-start",
   testID,
+  blur = false,
 }: Props) {
   const { colors } = useTheme();
   const galleryScrollRef = useRef<ScrollView | null>(null);
@@ -307,6 +309,7 @@ export function ExpandedFeedMedia({
                 source={{ uri: galleryImageUrls[activeGalleryIndex] }}
                 style={styles.galleryImage}
                 resizeMode="contain"
+                blurRadius={blur ? 14 : 0}
                 testID={
                   testID ? `${testID}-image-${activeGalleryIndex}` : undefined
                 }
@@ -365,6 +368,7 @@ export function ExpandedFeedMedia({
                 source={{ uri: galleryImageUrl }}
                 style={styles.galleryImage}
                 resizeMode="contain"
+                blurRadius={blur ? 14 : 0}
                 testID={testID ? `${testID}-image-${index}` : undefined}
               />
             </View>
@@ -393,6 +397,7 @@ export function ExpandedFeedMedia({
         imageUrl={imageUrl}
         alignment={imageAlignment}
         testID={testID}
+        blur={blur}
       />
     );
   }

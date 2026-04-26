@@ -23,14 +23,17 @@ type Props = {
   item: FeedPostCardItem;
   feedTitle: string;
   layout: "compact" | "card";
+  nsfw?: boolean;
   saved: boolean;
   expanded?: boolean;
   showExpand?: boolean;
   showRawXml?: boolean;
   cardWidth?: number;
+  cardMediaRevealed?: boolean;
   cardMediaTestID?: string;
   expandedMediaTestID?: string;
   onOpenItem: () => void;
+  onRevealCardMedia?: () => void;
   onToggleExpand?: () => void;
   onToggleRead: () => void;
   onToggleSave: () => void;
@@ -43,14 +46,17 @@ export function FeedPostCard({
   item,
   feedTitle,
   layout,
+  nsfw = false,
   saved,
   expanded = false,
   showExpand = false,
   showRawXml = false,
   cardWidth,
+  cardMediaRevealed = false,
   cardMediaTestID,
   expandedMediaTestID,
   onOpenItem,
+  onRevealCardMedia,
   onToggleExpand,
   onToggleRead,
   onToggleSave,
@@ -79,6 +85,7 @@ export function FeedPostCard({
       ),
     [contentLinks]
   );
+  const isCardMediaBlurred = layout === "card" && nsfw && !cardMediaRevealed;
 
   if (layout === "card") {
     return (
@@ -94,13 +101,32 @@ export function FeedPostCard({
         ]}
       >
         {item.image_url || item.url || item.content ? (
-          <ExpandedFeedMedia
-            imageUrl={item.image_url}
-            imageAlignment="center"
-            itemUrl={item.url}
-            content={item.content}
-            testID={cardMediaTestID}
-          />
+          <View style={styles.cardMediaWrap}>
+            <ExpandedFeedMedia
+              imageUrl={item.image_url}
+              imageAlignment="center"
+              itemUrl={item.url}
+              content={item.content}
+              testID={cardMediaTestID}
+              blur={isCardMediaBlurred}
+            />
+            {isCardMediaBlurred ? (
+              <TouchableOpacity
+                style={[
+                  styles.mediaBlurOverlay,
+                  { backgroundColor: `${colors.paper}cc` },
+                ]}
+                onPress={() => onRevealCardMedia?.()}
+                activeOpacity={0.9}
+                accessibilityLabel="Reveal NSFW media"
+              >
+                <Feather name="eye" size={16} color={colors.ink} />
+                <Text style={[styles.mediaBlurText, { color: colors.ink }]}>
+                  Reveal image
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         ) : null}
         <View style={styles.cardLayoutContent}>
           <FeedPostMeta
@@ -188,6 +214,7 @@ export function FeedPostCard({
         {item.image_url ? (
           <Image
             source={{ uri: item.image_url }}
+            blurRadius={nsfw ? 12 : 0}
             style={styles.cardImage}
             resizeMode="cover"
           />
@@ -465,6 +492,24 @@ const styles = StyleSheet.create({
   },
   cardLayoutContent: {
     gap: spacing.sm,
+  },
+  cardMediaWrap: {
+    position: "relative",
+  },
+  mediaBlurOverlay: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    bottom: 0,
+    left: 0,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+  },
+  mediaBlurText: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
   },
   cardRow: {
     flexDirection: "row",
