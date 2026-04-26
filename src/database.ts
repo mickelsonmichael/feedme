@@ -79,6 +79,13 @@ async function initializeSchema(
   } catch {
     // Column already exists — ignore
   }
+
+  // Migration: add raw_xml column to items if it doesn't exist yet
+  try {
+    await database.execAsync("ALTER TABLE items ADD COLUMN raw_xml TEXT");
+  } catch {
+    // Column already exists — ignore
+  }
 }
 
 // ── Feeds ──────────────────────────────────────────────────────────────────
@@ -173,8 +180,8 @@ export async function upsertItems(
   const database = await getDatabase();
   for (const item of items) {
     await database.runAsync(
-      `INSERT INTO items (feed_id, title, url, content, image_url, published_at)
-       VALUES (?, ?, ?, ?, ?, ?)
+      `INSERT INTO items (feed_id, title, url, content, image_url, raw_xml, published_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT (feed_id, url) DO NOTHING`,
       [
         feedId,
@@ -182,6 +189,7 @@ export async function upsertItems(
         item.url ?? null,
         item.content ?? null,
         item.imageUrl ?? null,
+        item.rawXml ?? null,
         item.publishedAt ?? null,
       ]
     );
