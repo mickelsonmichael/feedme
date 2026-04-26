@@ -8,7 +8,6 @@ import {
   StyleSheet,
   ActivityIndicator,
   Linking,
-  Share,
   Image,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -29,17 +28,11 @@ import { MetaText } from "../components/ui";
 import { Feather } from "@expo/vector-icons";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { ExpandedFeedImage } from "../components/ExpandedFeedImage";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItems">;
 
-// Pseudo-stable mock vote count derived from the item id so it doesn't
-// flicker between renders. Real vote support is mocked until backed by data.
-function mockVotes(id: number): number {
-  return ((id * 2654435761) >>> 0) % 900;
-}
-
 const CARD_IMAGE_WIDTH = 100;
-const EXPAND_IMAGE_HEIGHT = 200;
 
 export default function FeedItemsScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
@@ -48,7 +41,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
-  const [hiddenIds, setHiddenIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
 
   React.useLayoutEffect(() => {
@@ -121,35 +113,18 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     }
   };
 
-  const hideItem = (id: number) => {
-    setHiddenIds((prev) => {
-      const next = new Set(prev);
-      next.add(id);
-      return next;
-    });
-  };
-
   const handleToggleExpand = async (item: FeedItem) => {
     const isExpanding = !expandedIds.has(item.id);
     setExpandedIds((prev) => toggleExpandedId(prev, item.id));
     if (isExpanding && !item.read) {
-      await markItemRead(item.id);
-      setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
-      );
-    }
-  };
-
-  const handleShare = async (item: FeedItem) => {
-    if (!item.url) return;
-    try {
-      await Share.share({
-        message: item.url,
-        url: item.url,
-        title: item.title,
-      });
-    } catch {
-      // Ignore share errors
+      try {
+        await markItemRead(item.id);
+        setItems((prev) =>
+          prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
+        );
+      } catch {
+        Alert.alert("Error", "Could not update read status.");
+      }
     }
   };
 
@@ -167,10 +142,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     });
   };
 
-  const visibleItems = useMemo(
-    () => items.filter((i) => !hiddenIds.has(i.id)),
-    [items, hiddenIds]
-  );
+  const visibleItems = useMemo(() => items, [items]);
 
   if (loading) {
     return (
@@ -309,52 +281,17 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                           color={expanded ? colors.accent : colors.inkSoft}
                         />
                       </TouchableOpacity>
-                      <Text
-                        style={[styles.actionMeta, { color: colors.inkSoft }]}
-                      >
-                        ↑ {mockVotes(item.id)}
-                      </Text>
-                      <Text
-                        style={[styles.actionMeta, { color: colors.inkSoft }]}
-                      >
-                        💬 0
-                      </Text>
-                      <View style={styles.spacer} />
                       <TouchableOpacity
                         onPress={() => toggleSave(item)}
                         activeOpacity={0.6}
                         hitSlop={8}
                         accessibilityLabel={saved ? "Unsave post" : "Save post"}
                       >
-                        {/* Feather only has one bookmark icon; saved state is
-                          distinguished by accent color vs. soft ink. */}
                         <Feather
                           name="bookmark"
                           size={18}
                           color={saved ? colors.accent : colors.inkSoft}
                         />
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => hideItem(item.id)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                      >
-                        <Text
-                          style={[styles.actionIcon, { color: colors.inkSoft }]}
-                        >
-                          ⊘
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleShare(item)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                      >
-                        <Text
-                          style={[styles.actionIcon, { color: colors.inkSoft }]}
-                        >
-                          ↗
-                        </Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -370,10 +307,9 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                     ]}
                   >
                     {item.image_url ? (
-                      <Image
-                        source={{ uri: item.image_url }}
-                        style={styles.expandImage}
-                        resizeMode="contain"
+                      <ExpandedFeedImage
+                        imageUrl={item.image_url}
+                        testID={`expanded-image-${item.id}`}
                       />
                     ) : null}
                     {item.content ? (
@@ -478,14 +414,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderStyle: "dashed",
   },
-  actionMeta: {
-    fontSize: fontSize.meta,
-    fontFamily: fonts.sans,
-  },
-  actionIcon: {
-    fontSize: 18,
-    paddingHorizontal: spacing.xs,
-  },
   separator: { height: spacing.sm },
   emptyTitle: {
     fontSize: fontSize.h2,
@@ -508,11 +436,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     borderTopWidth: 1,
     borderStyle: "dashed",
-  },
-  expandImage: {
-    width: "100%",
-    height: EXPAND_IMAGE_HEIGHT,
-    borderRadius: radii.sm,
   },
   expandContent: {
     fontSize: fontSize.body,
