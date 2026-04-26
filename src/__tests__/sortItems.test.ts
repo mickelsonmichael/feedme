@@ -70,17 +70,25 @@ describe("sortNewest", () => {
 });
 
 describe("sortStacked", () => {
+  // Helper: a fixed "now" so tests are deterministic. Use a large value so all
+  // ages are positive.
+  const NOW = 1_000_000_000_000; // ms
+  const HOUR = 60 * 60 * 1000;
+  const DAY = 24 * HOUR;
+  const MONTH = 30 * DAY;
+  const now = () => NOW;
+
   it("returns all items without duplicates", () => {
     // Arrange
     const items = [
-      makeItem(1, 1, 100),
-      makeItem(2, 2, 200),
-      makeItem(3, 1, 300),
-      makeItem(4, 2, 400),
+      makeItem(1, 1, NOW - HOUR),
+      makeItem(2, 2, NOW - 2 * HOUR),
+      makeItem(3, 1, NOW - 3 * HOUR),
+      makeItem(4, 2, NOW - 4 * HOUR),
     ];
 
     // Act
-    const result = sortStacked(items);
+    const result = sortStacked(items, now);
 
     // Assert
     expect(result).toHaveLength(4);
@@ -89,96 +97,166 @@ describe("sortStacked", () => {
 
   it("returns empty array for empty input", () => {
     // Arrange & Act
-    const result = sortStacked([]);
+    const result = sortStacked([], now);
 
     // Assert
     expect(result).toEqual([]);
   });
 
   it("returns single-feed items in newest-first order", () => {
-    // Arrange
+    // Arrange — single feed, three items at varying ages
     const items = [
-      makeItem(1, 1, 100),
-      makeItem(2, 1, 300),
-      makeItem(3, 1, 200),
+      makeItem(1, 1, NOW - 3 * HOUR),
+      makeItem(2, 1, NOW - 1 * HOUR),
+      makeItem(3, 1, NOW - 2 * HOUR),
     ];
 
     // Act
-    const result = sortStacked(items);
+    const result = sortStacked(items, now);
 
-    // Assert
+    // Assert — within a single feed all items share the same avg_interval, so
+    // the score reduces to age and items come out newest-first.
     expect(result.map((i) => i.id)).toEqual([2, 3, 1]);
   });
 
-  it("interleaves items from multiple feeds using the provided random function", () => {
-    // Arrange — always pick index 0 (first available feed)
-    const alwaysFirst = () => 0;
+  it("gives an infrequent feed top representation when its newest item is fresh relative to its cadence", () => {
+    // Arrange — a monthly feed whose newest item is fresher (relative to its
+    // own cadence) than the hourly feed's freshest is to its cadence. The
+    // score formula is `age * avg_interval`, so the monthly newest (age 1min,
+    // interval 1 month) scores far below an hourly item from 5 hours ago
+    // (age 5h, interval 1h = 5h²) yet above the very freshest hourly item.
     const items = [
-      makeItem(1, 1, 300), // feed 1 newest
-      makeItem(2, 1, 100), // feed 1 oldest
-      makeItem(3, 2, 400), // feed 2 newest
-      makeItem(4, 2, 200), // feed 2 oldest
+      // Hourly feed (id 1): items 5h, 6h, 7h, 8h, 9h ago
+      makeItem(1, 1, NOW - 5 * HOUR),
+      makeItem(2, 1, NOW - 6 * HOUR),
+      makeItem(3, 1, NOW - 7 * HOUR),
+      makeItem(4, 1, NOW - 8 * HOUR),
+      makeItem(5, 1, NOW - 9 * HOUR),
+      // Monthly feed (id 2): newest is 1 minute old
+      makeItem(10, 2, NOW - 60 * 1000),
+      makeItem(11, 2, NOW - 1 * MONTH),
+      makeItem(12, 2, NOW - 2 * MONTH),
     ];
 
     // Act
-    // With alwaysFirst: call 1 picks feed[0]=feed1 → item1; call 2 picks feed[0]=feed1 → item2,
-    // feed1 exhausted; call 3 only feed2 left → append items 3,4
-    const result = sortStacked(items, alwaysFirst);
+    const result = sortStacked(items, now);
 
-    // Assert
-    expect(result.map((i) => i.id)).toEqual([1, 2, 3, 4]);
+    // Assert — monthly newest (id 10) must appear in the top half of results,
+    // proving infrequent feeds aren't drowned out, while older monthly items
+    // (11, 12) are not surfaced near the top.
+    const top4Ids = result.slice(0, 4).map((i) => i.id);
+    expect(top4Ids).toContain(10);
+    expect(top4Ids).not.toContain(11);
+    expect(top4Ids).not.toContain(12);
   });
 
-  it("items within each feed are consumed in newest-first order", () => {
-    // Arrange — deterministic: alternate between feeds
-    let call = 0;
-    const alternate = () => (call++ % 2 === 0 ? 0 : 0.99);
+  it("pushes very old items from stale (infrequent) feeds to the bottom", () => {
+    // Arrange — an active hourly feed and a stale monthly feed whose newest
+    // item is many months old.
     const items = [
-      makeItem(1, 1, 300), // feed 1 newest
-      makeItem(2, 1, 100), // feed 1 oldest
-      makeItem(3, 2, 400), // feed 2 newest
-      makeItem(4, 2, 200), // feed 2 oldest
+      // Hourly feed: items at 1h, 2h, 3h, 4h, 5h ago
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 1, NOW - 2 * HOUR),
+      makeItem(3, 1, NOW - 3 * HOUR),
+      makeItem(4, 1, NOW - 4 * HOUR),
+      makeItem(5, 1, NOW - 5 * HOUR),
+      // Stale monthly feed: items at 6, 7, 8 months ago (very old)
+      makeItem(10, 2, NOW - 6 * MONTH),
+      makeItem(11, 2, NOW - 7 * MONTH),
+      makeItem(12, 2, NOW - 8 * MONTH),
     ];
 
     // Act
-    const result = sortStacked(items, alternate);
+    const result = sortStacked(items, now);
 
-    // Assert — feeds alternate; each feed's items appear newest-first
-    // call 0 → 0 % 2 === 0 → idx 0 → feed1[0] = item1
-    // call 1 → 1 % 2 !== 0 → idx 1 → feed2[0] = item3
-    // call 2 → 2 % 2 === 0 → idx 0 → feed1[0] = item2, feed1 exhausted
-    // only feed2 left → append item4
-    expect(result.map((i) => i.id)).toEqual([1, 3, 2, 4]);
+    // Assert — every fresh hourly item should rank ahead of every stale
+    // monthly item. The old monthly items must occupy the bottom slots.
+    const hourlyIds = [1, 2, 3, 4, 5];
+    const monthlyIds = [10, 11, 12];
+    expect(
+      result
+        .slice(0, 5)
+        .map((i) => i.id)
+        .sort((a, b) => a - b)
+    ).toEqual(hourlyIds);
+    expect(
+      result
+        .slice(5)
+        .map((i) => i.id)
+        .sort((a, b) => a - b)
+    ).toEqual(monthlyIds);
   });
 
-  it("appends all remaining items from the last feed in newest-first order", () => {
-    // Arrange — pick the second feed first, then only the first remains
-    let call = 0;
-    const pickSecondFirst = () => (call++ === 0 ? 0.99 : 0);
+  it("shows more items from a high-cadence feed than from a low-cadence feed near the top", () => {
+    // Arrange — both feeds have several items, but the hourly feed has a much
+    // smaller average interval than the daily feed.
     const items = [
-      makeItem(1, 1, 300),
-      makeItem(2, 1, 100),
-      makeItem(3, 2, 400), // single item in feed 2
+      // Hourly feed (avg interval ≈ 1h): items at 1..6 hours ago
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 1, NOW - 2 * HOUR),
+      makeItem(3, 1, NOW - 3 * HOUR),
+      makeItem(4, 1, NOW - 4 * HOUR),
+      makeItem(5, 1, NOW - 5 * HOUR),
+      makeItem(6, 1, NOW - 6 * HOUR),
+      // Daily feed (avg interval ≈ 1d): items at 1..3 days ago
+      makeItem(10, 2, NOW - 1 * DAY),
+      makeItem(11, 2, NOW - 2 * DAY),
+      makeItem(12, 2, NOW - 3 * DAY),
     ];
 
     // Act
-    const result = sortStacked(items, pickSecondFirst);
+    const result = sortStacked(items, now);
+
+    // Assert — among the top 4 results we expect more hourly items than daily
+    // items, because the hourly feed's score grows much more slowly with age.
+    const top4 = result.slice(0, 4);
+    const hourlyCount = top4.filter((i) => i.feed_id === 1).length;
+    const dailyCount = top4.filter((i) => i.feed_id === 2).length;
+    expect(hourlyCount).toBeGreaterThan(dailyCount);
+  });
+
+  it("treats items with null published_at as the bottom of the list", () => {
+    // Arrange
+    const items = [
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 1, null),
+      makeItem(3, 2, NOW - 2 * HOUR),
+    ];
+
+    // Act
+    const result = sortStacked(items, now);
+
+    // Assert — the null-published item must be last.
+    expect(result[result.length - 1].id).toBe(2);
+  });
+
+  it("is deterministic: identical inputs produce identical outputs", () => {
+    // Arrange
+    const items = [
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 2, NOW - 2 * HOUR),
+      makeItem(3, 1, NOW - 3 * HOUR),
+      makeItem(4, 2, NOW - 4 * HOUR),
+    ];
+
+    // Act
+    const a = sortStacked(items, now);
+    const b = sortStacked(items, now);
 
     // Assert
-    expect(result).toHaveLength(3);
-    expect(result[0].id).toBe(3); // feed 2 item taken first
-    // Remaining feed 1 items appended in newest-first order
-    expect(result[1].id).toBe(1);
-    expect(result[2].id).toBe(2);
+    expect(a.map((i) => i.id)).toEqual(b.map((i) => i.id));
   });
 
   it("does not mutate the original array", () => {
     // Arrange
-    const items = [makeItem(1, 1, 200), makeItem(2, 2, 100)];
+    const items = [
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 2, NOW - 2 * HOUR),
+    ];
     const snapshot = JSON.stringify(items);
 
     // Act
-    sortStacked(items);
+    sortStacked(items, now);
 
     // Assert
     expect(JSON.stringify(items)).toBe(snapshot);
@@ -186,6 +264,10 @@ describe("sortStacked", () => {
 });
 
 describe("applySortMode", () => {
+  const NOW = 1_000_000_000_000;
+  const HOUR = 60 * 60 * 1000;
+  const now = () => NOW;
+
   it("delegates to sortNewest when mode is 'newest'", () => {
     // Arrange
     const items = [makeItem(1, 1, 100), makeItem(2, 1, 300)];
@@ -200,29 +282,39 @@ describe("applySortMode", () => {
 
   it("delegates to sortStacked when mode is 'stacked'", () => {
     // Arrange
-    const items = [makeItem(1, 1, 100), makeItem(2, 2, 200)];
+    const items = [
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 2, NOW - 2 * HOUR),
+    ];
 
     // Act
-    const result = applySortMode(items, "stacked");
+    const result = applySortMode(items, "stacked", now);
 
     // Assert
     expect(result).toHaveLength(2);
   });
 
-  it("passes the custom random function through to sortStacked", () => {
-    // Arrange — predictable random always picks idx 0
-    const alwaysFirst = () => 0;
+  it("passes the custom now function through to sortStacked", () => {
+    // Arrange — with this `now`, item 3 is the newest from feed 2 and item 1
+    // from feed 1. Both feeds have small intervals, so the two newest items
+    // come first, then the older two follow in newest-first order.
     const items = [
-      makeItem(1, 1, 300),
-      makeItem(2, 1, 100),
-      makeItem(3, 2, 400),
-      makeItem(4, 2, 200),
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 1, NOW - 3 * HOUR),
+      makeItem(3, 2, NOW - 1 * HOUR),
+      makeItem(4, 2, NOW - 4 * HOUR),
     ];
 
     // Act
-    const result = applySortMode(items, "stacked", alwaysFirst);
+    const result = applySortMode(items, "stacked", now);
 
-    // Assert — same deterministic order as the sortStacked "alwaysFirst" test
-    expect(result.map((i) => i.id)).toEqual([1, 2, 3, 4]);
+    // Assert — items 1 and 3 (both 1h old) lead, then 2 (3h), then 4 (4h).
+    const top2 = result
+      .slice(0, 2)
+      .map((i) => i.id)
+      .sort((a, b) => a - b);
+    expect(top2).toEqual([1, 3]);
+    expect(result[2].id).toBe(2);
+    expect(result[3].id).toBe(4);
   });
 });
