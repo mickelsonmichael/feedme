@@ -11,6 +11,7 @@ jest.mock("./feedParser", () => ({
 jest.mock("./database", () => ({
   upsertItems: jest.fn(),
   updateFeedLastFetched: jest.fn(),
+  setFeedError: jest.fn(),
 }));
 
 const mockFetchFeed = fetchFeed as jest.MockedFunction<typeof fetchFeed>;
@@ -21,6 +22,9 @@ const mockUpdateFeedLastFetched =
   database.updateFeedLastFetched as jest.MockedFunction<
     typeof database.updateFeedLastFetched
   >;
+const mockSetFeedError = database.setFeedError as jest.MockedFunction<
+  typeof database.setFeedError
+>;
 
 const makeFeed = (id: number): Feed => ({
   id,
@@ -43,6 +47,7 @@ beforeEach(() => {
   mockFetchFeed.mockResolvedValue([parsedItem]);
   mockUpsertItems.mockResolvedValue(undefined);
   mockUpdateFeedLastFetched.mockResolvedValue(undefined);
+  mockSetFeedError.mockResolvedValue(undefined);
 });
 
 describe("refreshFeeds", () => {
@@ -68,14 +73,23 @@ describe("refreshFeeds", () => {
     // Assert
     expect(errors).toBe(0);
     expect(mockFetchFeed).toHaveBeenCalledTimes(2);
-    expect(mockFetchFeed).toHaveBeenCalledWith("https://example.com/feed1", false);
-    expect(mockFetchFeed).toHaveBeenCalledWith("https://example.com/feed2", false);
+    expect(mockFetchFeed).toHaveBeenCalledWith(
+      "https://example.com/feed1",
+      false
+    );
+    expect(mockFetchFeed).toHaveBeenCalledWith(
+      "https://example.com/feed2",
+      false
+    );
     expect(mockUpsertItems).toHaveBeenCalledTimes(2);
     expect(mockUpsertItems).toHaveBeenCalledWith(1, [parsedItem]);
     expect(mockUpsertItems).toHaveBeenCalledWith(2, [parsedItem]);
     expect(mockUpdateFeedLastFetched).toHaveBeenCalledTimes(2);
     expect(mockUpdateFeedLastFetched).toHaveBeenCalledWith(1);
     expect(mockUpdateFeedLastFetched).toHaveBeenCalledWith(2);
+    expect(mockSetFeedError).toHaveBeenCalledTimes(2);
+    expect(mockSetFeedError).toHaveBeenCalledWith(1, null);
+    expect(mockSetFeedError).toHaveBeenCalledWith(2, null);
   });
 
   it("counts individual feed failures without throwing", async () => {
@@ -92,6 +106,9 @@ describe("refreshFeeds", () => {
     // Assert
     expect(errors).toBe(1);
     expect(mockUpsertItems).toHaveBeenCalledTimes(2); // feeds 1 and 3
+    expect(mockSetFeedError).toHaveBeenCalledWith(1, null);
+    expect(mockSetFeedError).toHaveBeenCalledWith(2, "Network error");
+    expect(mockSetFeedError).toHaveBeenCalledWith(3, null);
   });
 
   it("returns the total error count when all feeds fail", async () => {
@@ -105,5 +122,7 @@ describe("refreshFeeds", () => {
     // Assert
     expect(errors).toBe(2);
     expect(mockUpsertItems).not.toHaveBeenCalled();
+    expect(mockSetFeedError).toHaveBeenCalledWith(1, "Offline");
+    expect(mockSetFeedError).toHaveBeenCalledWith(2, "Offline");
   });
 });
