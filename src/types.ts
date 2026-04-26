@@ -14,6 +14,7 @@ export type FeedItem = {
   url: string | null;
   content: string | null;
   image_url: string | null;
+  raw_xml: string | null;
   published_at: number | null;
   read: number;
 };
@@ -36,6 +37,7 @@ export type ParsedFeedItem = {
   url: string | null;
   content: string | null;
   imageUrl?: string | null;
+  rawXml?: string | null;
   publishedAt: number | null;
 };
 

@@ -159,6 +159,9 @@ describe("parseFeed – return type", () => {
       expect(item.imageUrl === null || typeof item.imageUrl === "string").toBe(
         true
       );
+      expect(item.rawXml === null || typeof item.rawXml === "string").toBe(
+        true
+      );
     });
   });
 });
@@ -236,5 +239,38 @@ describe("extractImageUrl", () => {
     expect(extractImageUrl(block, htmlContent)).toBe(
       "https://example.com/inline.png"
     );
+  });
+});
+
+describe("parseFeed – rawXml field", () => {
+  it("includes the full <item> block as rawXml for RSS items", () => {
+    // Arrange & Act
+    const items = parseFeed(RSS_FEED);
+
+    // Assert
+    expect(items[0].rawXml).toContain("<item>");
+    expect(items[0].rawXml).toContain("</item>");
+    expect(items[0].rawXml).toContain("First Post");
+  });
+
+  it("includes the full <entry> block as rawXml for Atom entries", () => {
+    // Arrange & Act
+    const items = parseFeed(ATOM_FEED);
+
+    // Assert
+    expect(items[0].rawXml).toContain("<entry>");
+    expect(items[0].rawXml).toContain("</entry>");
+    expect(items[0].rawXml).toContain("Atom Entry One");
+  });
+
+  it("sets rawXml to a non-empty string for every parsed item", () => {
+    // Arrange & Act
+    const items = parseFeed(RSS_FEED);
+
+    // Assert
+    items.forEach((item) => {
+      expect(typeof item.rawXml).toBe("string");
+      expect((item.rawXml as string).length).toBeGreaterThan(0);
+    });
   });
 });

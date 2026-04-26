@@ -50,6 +50,7 @@ function parseRss(xml: string): ParsedFeedItem[] {
   let match;
   while ((match = itemRegex.exec(xml)) !== null) {
     const block = match[1];
+    const rawXml = match[0];
     const title = extractCData(block, "title") ?? "Untitled";
     const link = extractTagText(block, "link") ?? extractTagText(block, "guid");
     const description = extractCData(block, "description");
@@ -59,6 +60,7 @@ function parseRss(xml: string): ParsedFeedItem[] {
       url: link ?? null,
       content: description ?? null,
       imageUrl: extractImageUrl(block, description) ?? null,
+      rawXml,
       publishedAt: pubDate ? new Date(pubDate).getTime() : null,
     });
   }
@@ -73,6 +75,7 @@ function parseAtom(xml: string): ParsedFeedItem[] {
   let match;
   while ((match = entryRegex.exec(xml)) !== null) {
     const block = match[1];
+    const rawXml = match[0];
     const title = extractCData(block, "title") ?? "Untitled";
     const link = extractAtomLink(block);
     const content =
@@ -84,6 +87,7 @@ function parseAtom(xml: string): ParsedFeedItem[] {
       url: link ?? null,
       content: content ?? null,
       imageUrl: extractImageUrl(block, content) ?? null,
+      rawXml,
       publishedAt: published ? new Date(published).getTime() : null,
     });
   }

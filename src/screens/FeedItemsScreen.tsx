@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Linking,
   Image,
+  Modal,
+  ScrollView,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -42,6 +44,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [rawXmlItem, setRawXmlItem] = useState<FeedItem | null>(null);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: feed.title });
@@ -293,6 +296,18 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                           color={saved ? colors.accent : colors.inkSoft}
                         />
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => setRawXmlItem(item)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel="View raw XML"
+                      >
+                        <Feather
+                          name="terminal"
+                          size={18}
+                          color={colors.inkSoft}
+                        />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
@@ -327,6 +342,59 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           ItemSeparatorComponent={() => <View style={styles.separator} />}
         />
       )}
+      <Modal
+        visible={rawXmlItem !== null}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setRawXmlItem(null)}
+      >
+        <View
+          style={[
+            styles.rawModalOverlay,
+            { backgroundColor: "rgba(0,0,0,0.5)" },
+          ]}
+        >
+          <View
+            style={[
+              styles.rawModalSheet,
+              {
+                backgroundColor: colors.paperWarm,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <View
+              style={[
+                styles.rawModalHeader,
+                { borderBottomColor: colors.inkFaint },
+              ]}
+            >
+              <Feather name="terminal" size={16} color={colors.inkSoft} />
+              <Text style={[styles.rawModalTitle, { color: colors.ink }]}>
+                Raw XML
+              </Text>
+              <TouchableOpacity
+                onPress={() => setRawXmlItem(null)}
+                hitSlop={8}
+                accessibilityLabel="Close raw XML"
+              >
+                <Feather name="x" size={18} color={colors.inkSoft} />
+              </TouchableOpacity>
+            </View>
+            <ScrollView
+              style={styles.rawModalScroll}
+              contentContainerStyle={styles.rawModalContent}
+            >
+              <Text
+                style={[styles.rawModalText, { color: colors.ink }]}
+                selectable
+              >
+                {rawXmlItem?.raw_xml ?? "(no raw XML available)"}
+              </Text>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -449,5 +517,42 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     lineHeight: 20,
     fontFamily: fonts.body,
+  },
+  rawModalOverlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+  },
+  rawModalSheet: {
+    maxHeight: "70%",
+    borderTopWidth: 1,
+    borderTopLeftRadius: radii.md,
+    borderTopRightRadius: radii.md,
+    overflow: "hidden",
+  },
+  rawModalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
+  },
+  rawModalTitle: {
+    flex: 1,
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+  },
+  rawModalScroll: {
+    flex: 1,
+  },
+  rawModalContent: {
+    padding: spacing.md,
+  },
+  rawModalText: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.mono,
+    lineHeight: 18,
   },
 });
