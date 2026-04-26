@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Image,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -20,6 +21,7 @@ import { Feed, RootStackParamList, TabParamList } from "../types";
 import { DashedDivider } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { getFeedIconUrl } from "../feedIcon";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feeds">,
@@ -40,6 +42,7 @@ function fuzzyMatch(query: string, text: string): boolean {
 export default function FeedsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [failedIconUris, setFailedIconUris] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
@@ -167,49 +170,66 @@ export default function FeedsScreen({ navigation }: Props) {
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
           ItemSeparatorComponent={() => <DashedDivider />}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.row}
-              onPress={() =>
-                navigation.navigate("FeedDetail", { feedId: item.id })
-              }
-              activeOpacity={0.7}
-            >
-              <View style={styles.rowBody}>
-                <Text style={[styles.feedTitle, { color: colors.ink }]}>
-                  {item.title}
-                </Text>
-                <Text
-                  style={[styles.feedUrl, { color: colors.inkSoft }]}
-                  numberOfLines={1}
-                >
-                  {item.url}
-                </Text>
-              </View>
-              {item.error ? (
-                <View
-                  style={[
-                    styles.badge,
-                    {
-                      backgroundColor: colors.danger,
-                      borderColor: colors.danger,
-                    },
-                  ]}
-                >
-                  <Text style={[styles.badgeText, { color: colors.paper }]}>
-                    Error
+          renderItem={({ item }) => {
+            const iconUri = getFeedIconUrl(item.url);
+            const showIcon = Boolean(iconUri && !failedIconUris.has(iconUri));
+
+            return (
+              <TouchableOpacity
+                style={styles.row}
+                onPress={() =>
+                  navigation.navigate("FeedDetail", { feedId: item.id })
+                }
+                activeOpacity={0.7}
+              >
+                {showIcon ? (
+                  <Image
+                    source={{ uri: iconUri ?? undefined }}
+                    style={styles.feedIcon}
+                    onError={() => {
+                      if (!iconUri) {
+                        return;
+                      }
+                      setFailedIconUris((prev) => new Set(prev).add(iconUri));
+                    }}
+                  />
+                ) : null}
+                <View style={styles.rowBody}>
+                  <Text style={[styles.feedTitle, { color: colors.ink }]}>
+                    {item.title}
+                  </Text>
+                  <Text
+                    style={[styles.feedUrl, { color: colors.inkSoft }]}
+                    numberOfLines={1}
+                  >
+                    {item.url}
                   </Text>
                 </View>
-              ) : null}
-              <TouchableOpacity
-                onPress={() => handleDeleteFeed(item)}
-                hitSlop={8}
-                accessibilityLabel={`Delete ${item.title}`}
-              >
-                <Feather name="trash-2" size={18} color={colors.danger} />
+                {item.error ? (
+                  <View
+                    style={[
+                      styles.badge,
+                      {
+                        backgroundColor: colors.danger,
+                        borderColor: colors.danger,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.badgeText, { color: colors.paper }]}>
+                      Error
+                    </Text>
+                  </View>
+                ) : null}
+                <TouchableOpacity
+                  onPress={() => handleDeleteFeed(item)}
+                  hitSlop={8}
+                  accessibilityLabel={`Delete ${item.title}`}
+                >
+                  <Feather name="trash-2" size={18} color={colors.danger} />
+                </TouchableOpacity>
               </TouchableOpacity>
-            </TouchableOpacity>
-          )}
+            );
+          }}
         />
       )}
     </View>
@@ -261,6 +281,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     gap: spacing.md,
+  },
+  feedIcon: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
   },
   rowBody: { flex: 1, gap: 2 },
   feedTitle: {

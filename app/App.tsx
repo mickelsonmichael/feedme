@@ -6,6 +6,7 @@ import {
   Platform,
   TouchableOpacity,
   ScrollView,
+  Image,
   useWindowDimensions,
 } from "react-native";
 import { NavigationContainer } from "@react-navigation/native";
@@ -30,6 +31,7 @@ import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { AppHeader } from "./src/components/AppHeader";
 import { getFeeds } from "./src/database";
+import { getFeedIconUrl } from "./src/feedIcon";
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
@@ -77,6 +79,9 @@ const SETTINGS_NAV = TAB_CONFIG.find(
 function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = React.useState<Feed[]>([]);
+  const [failedIconUris, setFailedIconUris] = React.useState<Set<string>>(
+    new Set()
+  );
   const currentRoute = state.routes[state.index]?.name;
   const feedRoute = state.routes.find((route) => route.name === "Feed");
   const selectedFeedId =
@@ -179,6 +184,8 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
           {feeds.map((feed) => {
             const focused =
               currentRoute === "Feed" && selectedFeedId === feed.id;
+            const iconUri = getFeedIconUrl(feed.url);
+            const showIcon = Boolean(iconUri && !failedIconUris.has(iconUri));
             return (
               <TouchableOpacity
                 key={feed.id}
@@ -194,16 +201,30 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
                 }
                 activeOpacity={0.7}
               >
-                <Text
-                  style={[
-                    styles.feedItemLabel,
-                    { color: focused ? colors.ink : colors.inkSoft },
-                    focused && { fontWeight: "600" },
-                  ]}
-                  numberOfLines={1}
-                >
-                  {feed.title}
-                </Text>
+                <View style={styles.feedItemRow}>
+                  {showIcon ? (
+                    <Image
+                      source={{ uri: iconUri ?? undefined }}
+                      style={styles.feedItemIcon}
+                      onError={() => {
+                        if (!iconUri) {
+                          return;
+                        }
+                        setFailedIconUris((prev) => new Set(prev).add(iconUri));
+                      }}
+                    />
+                  ) : null}
+                  <Text
+                    style={[
+                      styles.feedItemLabel,
+                      { color: focused ? colors.ink : colors.inkSoft },
+                      focused && { fontWeight: "600" },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {feed.title}
+                  </Text>
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -432,7 +453,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     borderRadius: 4,
   },
+  feedItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  feedItemIcon: {
+    width: 14,
+    height: 14,
+    borderRadius: 3,
+  },
   feedItemLabel: {
+    flex: 1,
     fontFamily: fonts.sans,
     fontSize: fontSize.body,
   },
