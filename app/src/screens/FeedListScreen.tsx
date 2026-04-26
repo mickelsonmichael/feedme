@@ -55,6 +55,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [sort, setSort] = useState<SortMode>("stacked");
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<number>>(
+    new Set()
+  );
   const selectedFeedId = route.params?.selectedFeedId;
 
   const loadData = useCallback(async () => {
@@ -91,11 +94,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
 
   const handleRefreshAll = async () => {
+    setRetainedUnreadIds(new Set());
     setRefreshing(true);
     await loadData();
   };
 
   const handleOpenItem = async (item: FeedItemWithFeed) => {
+    if (filter === "unread" && !item.read) {
+      setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+    }
+
     navigation.navigate("FeedItemView", {
       item: {
         itemId: item.id,
@@ -133,6 +141,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
     const isExpanding = !expandedIds.has(item.id);
     setExpandedIds((prev) => toggleExpandedId(prev, item.id));
     if (isExpanding && !item.read) {
+      if (filter === "unread") {
+        setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+      }
+
       try {
         await markItemRead(item.id);
         setItems((prev) =>
@@ -164,6 +176,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
     }
   }, [selectedFeedId, sort]);
 
+  useEffect(() => {
+    setRetainedUnreadIds(new Set());
+  }, [filter]);
+
   const scopedItems = useMemo(() => {
     if (selectedFeedId === undefined) return items;
     return items.filter((item) => item.feed_id === selectedFeedId);
@@ -174,10 +190,17 @@ export default function FeedListScreen({ navigation, route }: Props) {
     [scopedItems, sort]
   );
 
-  const visibleItems = useMemo(
-    () => applyFilter(sortedItems, filter, savedIds),
-    [sortedItems, filter, savedIds]
-  );
+  const visibleItems = useMemo(() => {
+    const filtered = applyFilter(sortedItems, filter, savedIds);
+    if (filter !== "unread" || retainedUnreadIds.size === 0) {
+      return filtered;
+    }
+
+    const filteredIds = new Set(filtered.map((item) => item.id));
+    return sortedItems.filter(
+      (item) => filteredIds.has(item.id) || retainedUnreadIds.has(item.id)
+    );
+  }, [sortedItems, filter, savedIds, retainedUnreadIds]);
 
   if (loading) {
     return (

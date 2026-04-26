@@ -1,5 +1,5 @@
 import React from "react";
-import { Text } from "react-native";
+import { FlatList, Text, TouchableOpacity } from "react-native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -319,6 +319,110 @@ describe("FeedListScreen", () => {
         read: 0,
       },
     });
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("keeps an unread item visible until manual refresh when unread filter is active", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock)
+      .mockResolvedValueOnce([
+        {
+          id: 201,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Unread post",
+          url: "https://alpha.example/unread",
+          content: "body",
+          image_url: null,
+          published_at: Date.now(),
+          read: 0,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 201,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Unread post",
+          url: "https://alpha.example/unread",
+          content: "body",
+          image_url: null,
+          published_at: Date.now(),
+          read: 1,
+        },
+      ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-unread",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <FeedListScreen navigation={navigation} route={route} />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const unreadFilter = tree!.root
+      .findAllByType(TouchableOpacity)
+      .find((node: renderer.ReactTestInstance) => {
+        const labels = node.findAllByType(Text);
+        return labels.some((label) => label.props.children === "Unread");
+      });
+    expect(unreadFilter).toBeTruthy();
+
+    await act(async () => {
+      await unreadFilter!.props.onPress();
+    });
+
+    const expandButton = tree!.root.findByProps({
+      accessibilityLabel: "Expand post",
+    });
+
+    await act(async () => {
+      await expandButton.props.onPress();
+    });
+
+    // Assert - item remains visible while still on unread filter
+    const textBeforeRefresh = tree!.root
+      .findAllByType(Text)
+      .map((node: renderer.ReactTestInstance) => node.props.children);
+    expect(textBeforeRefresh).toContain("Unread post");
+
+    const list = tree!.root.findByType(FlatList);
+    await act(async () => {
+      await list.props.onRefresh();
+    });
+
+    // Assert - manual refresh removes it from unread list
+    const textAfterRefresh = tree!.root
+      .findAllByType(Text)
+      .map((node: renderer.ReactTestInstance) => node.props.children);
+    expect(textAfterRefresh).not.toContain("Unread post");
 
     await act(async () => {
       tree!.unmount();
