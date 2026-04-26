@@ -295,6 +295,20 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                         { borderTopColor: colors.inkFaint },
                       ]}
                     >
+                      <TouchableOpacity
+                        onPress={() => handleToggleExpand(item)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel={
+                          expanded ? "Collapse post" : "Expand post"
+                        }
+                      >
+                        <Feather
+                          name={expanded ? "chevron-up" : "chevron-down"}
+                          size={18}
+                          color={expanded ? colors.accent : colors.inkSoft}
+                        />
+                      </TouchableOpacity>
                       <Text
                         style={[styles.actionMeta, { color: colors.inkSoft }]}
                       >
@@ -341,20 +355,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                         >
                           ↗
                         </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() => handleToggleExpand(item)}
-                        activeOpacity={0.6}
-                        hitSlop={8}
-                        accessibilityLabel={
-                          expanded ? "Collapse post" : "Expand post"
-                        }
-                      >
-                        <Feather
-                          name={expanded ? "chevron-up" : "chevron-down"}
-                          size={18}
-                          color={expanded ? colors.accent : colors.inkSoft}
-                        />
                       </TouchableOpacity>
                     </View>
                   </View>
