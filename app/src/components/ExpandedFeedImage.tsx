@@ -17,10 +17,15 @@ const PLACEHOLDER_HEIGHT = 200;
 
 type Props = {
   imageUrl: string;
+  alignment?: "flex-start" | "center";
   testID?: string;
 };
 
-export function ExpandedFeedImage({ imageUrl, testID }: Props) {
+export function ExpandedFeedImage({
+  imageUrl,
+  alignment = "flex-start",
+  testID,
+}: Props) {
   const { colors } = useTheme();
   const [contentWidth, setContentWidth] = useState<number | null>(null);
   const [sourceSize, setSourceSize] = useState<{
@@ -99,6 +104,9 @@ export function ExpandedFeedImage({ imageUrl, testID }: Props) {
           source={{ uri: imageUrl }}
           style={[
             styles.image,
+            alignment === "center"
+              ? styles.centeredImage
+              : styles.leftAlignedImage,
             constrainedSize ??
               (didMetadataLookupFail && fallbackBoxSize !== null
                 ? {
@@ -120,8 +128,13 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   image: {
-    alignSelf: "center",
     borderRadius: radii.sm,
+  },
+  leftAlignedImage: {
+    alignSelf: "flex-start",
+  },
+  centeredImage: {
+    alignSelf: "center",
   },
   pendingImage: {
     width: 1,

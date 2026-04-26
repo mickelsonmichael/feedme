@@ -339,6 +339,9 @@ describe("FeedItemsScreen – View Raw", () => {
       await expandButton.props.onPress();
     });
 
+    const openOriginalLinkButton = tree!.root.findByProps({
+      accessibilityLabel: "Open original link",
+    });
     const openLinkButton = tree!.root.findByProps({
       accessibilityLabel: "Open Link",
     });
@@ -348,11 +351,13 @@ describe("FeedItemsScreen – View Raw", () => {
 
     // Act
     await act(async () => {
+      await openOriginalLinkButton.props.onPress();
       await openLinkButton.props.onPress();
       await openCommentsButton.props.onPress();
     });
 
     // Assert
+    expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/item");
     expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/direct");
     expect(Linking.openURL).toHaveBeenCalledWith(
       "https://example.com/comments"

@@ -108,6 +108,16 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     );
   }, []);
 
+  const handleOpenOriginalLink = useCallback((url: string | null) => {
+    if (!url) {
+      return;
+    }
+
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Error", "Cannot open this URL.")
+    );
+  }, []);
+
   const toggleSave = async (item: FeedItem) => {
     const alreadySaved = savedIds.has(item.id);
     try {
@@ -388,8 +398,33 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                         {contentText}
                       </Text>
                     ) : null}
-                    {contentLinks.length ? (
+                    {item.url || contentLinks.length ? (
                       <View style={styles.contentLinkRow}>
+                        {item.url ? (
+                          <TouchableOpacity
+                            style={[
+                              styles.contentLinkBtn,
+                              { borderColor: colors.border },
+                            ]}
+                            onPress={() => handleOpenOriginalLink(item.url)}
+                            activeOpacity={0.7}
+                            accessibilityLabel="Open original link"
+                          >
+                            <Feather
+                              name="external-link"
+                              size={14}
+                              color={colors.inkSoft}
+                            />
+                            <Text
+                              style={[
+                                styles.contentLinkText,
+                                { color: colors.ink },
+                              ]}
+                            >
+                              Open Link
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
                         {contentLinks.map((link) => (
                           <TouchableOpacity
                             key={`${item.id}:${link.label}:${link.url}`}

@@ -16,6 +16,10 @@ import {
 } from "../database";
 import { refreshFeeds } from "../feedRefresher";
 
+const mockExpandedFeedMedia = jest.fn(
+  (_props: { imageAlignment?: string; testID?: string }) => undefined
+);
+
 jest.mock("../database", () => ({
   getFeeds: jest.fn(),
   getAllItems: jest.fn(),
@@ -84,8 +88,15 @@ jest.mock("@react-navigation/native", () => ({
 jest.mock("../components/ExpandedFeedMedia", () => {
   const React = require("react");
   const { View } = require("react-native");
+
   return {
-    ExpandedFeedMedia: () => React.createElement(View, null),
+    ExpandedFeedMedia: (props: {
+      imageAlignment?: string;
+      testID?: string;
+    }) => {
+      mockExpandedFeedMedia(props);
+      return React.createElement(View, { testID: props.testID });
+    },
   };
 });
 
@@ -332,6 +343,71 @@ describe("FeedListScreen", () => {
         read: 0,
       },
     });
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("opens the original post from the main feed row action", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 102,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Open original",
+        url: "https://alpha.example/original",
+        content: "body",
+        image_url: null,
+        published_at: 1_700_000_000_000,
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-open-original",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <FeedListScreen navigation={navigation} route={route} />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const openOriginalLinkButton = tree!.root.findByProps({
+      accessibilityLabel: "Open original link",
+    });
+
+    await act(async () => {
+      await openOriginalLinkButton.props.onPress();
+    });
+
+    // Assert
+    expect(Linking.openURL).toHaveBeenCalledWith(
+      "https://alpha.example/original"
+    );
 
     await act(async () => {
       tree!.unmount();
@@ -654,6 +730,15 @@ describe("FeedListScreen", () => {
     expect(
       tree!.root.findByProps({ accessibilityLabel: "Open Link" })
     ).toBeTruthy();
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Open original link" })
+    ).toBeTruthy();
+    expect(
+      mockExpandedFeedMedia.mock.calls.some(
+        ([props]) =>
+          props.testID === "card-media-401" && props.imageAlignment === "center"
+      )
+    ).toBe(true);
 
     const list = tree!.root.findByType(FlatList);
     expect(list.props.contentContainerStyle).toEqual(

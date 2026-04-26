@@ -206,6 +206,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
     );
   }, []);
 
+  const handleOpenOriginalLink = useCallback((url: string | null) => {
+    if (!url) {
+      return;
+    }
+
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Error", "Cannot open this URL.")
+    );
+  }, []);
+
   const formatDate = (ts: number | null): string => {
     if (!ts) return "";
     const diff = Date.now() - ts;
@@ -391,6 +401,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   {item.image_url || item.url ? (
                     <ExpandedFeedMedia
                       imageUrl={item.image_url}
+                      imageAlignment="center"
                       itemUrl={item.url}
                       testID={`card-media-${item.id}`}
                     />
@@ -507,6 +518,19 @@ export default function FeedListScreen({ navigation, route }: Props) {
                           color={saved ? colors.accent : colors.inkSoft}
                         />
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleOpenOriginalLink(item.url)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel="Open original link"
+                        disabled={!item.url}
+                      >
+                        <Feather
+                          name="external-link"
+                          size={18}
+                          color={item.url ? colors.inkSoft : colors.inkFaint}
+                        />
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
@@ -621,6 +645,19 @@ export default function FeedListScreen({ navigation, route }: Props) {
                           name="bookmark"
                           size={18}
                           color={saved ? colors.accent : colors.inkSoft}
+                        />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleOpenOriginalLink(item.url)}
+                        activeOpacity={0.6}
+                        hitSlop={8}
+                        accessibilityLabel="Open original link"
+                        disabled={!item.url}
+                      >
+                        <Feather
+                          name="external-link"
+                          size={18}
+                          color={item.url ? colors.inkSoft : colors.inkFaint}
                         />
                       </TouchableOpacity>
                     </View>

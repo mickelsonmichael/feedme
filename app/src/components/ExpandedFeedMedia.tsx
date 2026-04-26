@@ -11,6 +11,7 @@ import { ExpandedFeedImage } from "./ExpandedFeedImage";
 type Props = {
   itemUrl?: string | null;
   imageUrl?: string | null;
+  imageAlignment?: "flex-start" | "center";
   testID?: string;
 };
 
@@ -19,7 +20,12 @@ type Props = {
  * For YouTube entries, this embeds the playable video.
  * For all other entries, it falls back to the expanded image.
  */
-export function ExpandedFeedMedia({ itemUrl, imageUrl, testID }: Props) {
+export function ExpandedFeedMedia({
+  itemUrl,
+  imageUrl,
+  imageAlignment = "flex-start",
+  testID,
+}: Props) {
   const youtubeVideoId = useMemo(
     () =>
       extractYouTubeVideoId(itemUrl) ??
@@ -68,7 +74,13 @@ export function ExpandedFeedMedia({ itemUrl, imageUrl, testID }: Props) {
   }
 
   if (imageUrl) {
-    return <ExpandedFeedImage imageUrl={imageUrl} testID={testID} />;
+    return (
+      <ExpandedFeedImage
+        imageUrl={imageUrl}
+        alignment={imageAlignment}
+        testID={testID}
+      />
+    );
   }
 
   return null;

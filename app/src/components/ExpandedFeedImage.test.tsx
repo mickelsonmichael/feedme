@@ -269,4 +269,49 @@ describe("ExpandedFeedImage", () => {
     expect(imageStyle.width).toBe(300);
     expect(imageStyle.height).toBe(300);
   });
+
+  it("centers the image when card mode requests centered alignment", async () => {
+    // Arrange
+    jest.spyOn(Image, "getSize").mockImplementation((uri, success) => {
+      success?.(1200, 600);
+    });
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedImage
+          imageUrl="https://example.com/card.jpg"
+          alignment="center"
+          testID="expanded-image"
+        />
+      );
+    });
+
+    const wrapper = tree!.root.findByProps({
+      testID: "expanded-image-wrapper",
+    });
+
+    await act(async () => {
+      wrapper.props.onLayout({
+        nativeEvent: {
+          layout: {
+            width: 360,
+            height: 0,
+            x: 0,
+            y: 0,
+          },
+        },
+      });
+    });
+
+    const image = tree!.root.findByType(Image);
+    const style = StyleSheet.flatten(image.props.style);
+
+    // Assert
+    expect(style.alignSelf).toBe("center");
+    expect(style.width).toBe(360);
+    expect(style.height).toBe(180);
+  });
 });
