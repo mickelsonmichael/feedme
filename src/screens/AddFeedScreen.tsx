@@ -22,10 +22,15 @@ import {
   extractYouTubeRssFeedUrl,
   getYouTubeChannelUrl,
 } from "../youtubeUtils";
+import { fetchWithProxyFallback } from "../proxyFetch";
 
 type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
 
 type FeedSource = "url" | "reddit" | "youtube";
+
+const PROXY_ALERT_TITLE = "Using Feed Proxy";
+const PROXY_ALERT_MESSAGE =
+  "This request was blocked in the browser, so Feedme used your configured feed proxy.";
 
 export default function AddFeedScreen({ navigation }: Props) {
   const { colors } = useTheme();
@@ -74,7 +79,10 @@ export default function AddFeedScreen({ navigation }: Props) {
     if (!trimmed) return;
     setLoading(true);
     try {
-      const response = await fetch(trimmed);
+      const { response, usedProxy } = await fetchWithProxyFallback(trimmed);
+      if (usedProxy) {
+        Alert.alert(PROXY_ALERT_TITLE, PROXY_ALERT_MESSAGE);
+      }
       const text = await response.text();
       const detected = extractFeedTitle(text);
       setTitle(detected);
@@ -98,7 +106,10 @@ export default function AddFeedScreen({ navigation }: Props) {
       const feedTitle = title.trim() || `Reddit - r/${cleanedSubreddit}`;
       setLoading(true);
       try {
-        const response = await fetch(redditUrl);
+        const { response, usedProxy } = await fetchWithProxyFallback(redditUrl);
+        if (usedProxy) {
+          Alert.alert(PROXY_ALERT_TITLE, PROXY_ALERT_MESSAGE);
+        }
         if (!response.ok) {
           if (response.status === 404) {
             setFeedError(
@@ -138,7 +149,11 @@ export default function AddFeedScreen({ navigation }: Props) {
       const feedTitle = title.trim() || `YouTube - ${channelLabel}`;
       setLoading(true);
       try {
-        const response = await fetch(channelUrl);
+        const { response, usedProxy } =
+          await fetchWithProxyFallback(channelUrl);
+        if (usedProxy) {
+          Alert.alert(PROXY_ALERT_TITLE, PROXY_ALERT_MESSAGE);
+        }
         if (!response.ok) {
           if (response.status === 404) {
             setFeedError(

@@ -22,12 +22,16 @@ import {
   setFeedError,
   upsertItems,
 } from "../database";
-import { fetchFeed } from "../feedParser";
+import { fetchFeedWithMeta } from "../feedParser";
 import { Feed, RootStackParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedDetail">;
+
+const PROXY_ALERT_TITLE = "Using Feed Proxy";
+const PROXY_ALERT_MESSAGE =
+  "This request was blocked in the browser, so Feedme used your configured feed proxy.";
 
 function formatDate(ts: number | null): string {
   if (!ts) return "never";
@@ -106,10 +110,13 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
 
       // Refetch feed after save
       try {
-        const fetched = await fetchFeed(trimmedUrl);
-        await upsertItems(feedId, fetched);
+        const { items, usedProxy } = await fetchFeedWithMeta(trimmedUrl);
+        await upsertItems(feedId, items);
         await updateFeedLastFetched(feedId);
         await setFeedError(feedId, null);
+        if (usedProxy) {
+          Alert.alert(PROXY_ALERT_TITLE, PROXY_ALERT_MESSAGE);
+        }
       } catch (fetchErr) {
         await setFeedError(feedId, (fetchErr as Error).message);
       }

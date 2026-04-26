@@ -1,18 +1,34 @@
 import { ParsedFeedItem } from "./types";
+import { fetchWithProxyFallback } from "./proxyFetch";
+
+export type FetchFeedResult = {
+  items: ParsedFeedItem[];
+  usedProxy: boolean;
+};
 
 /**
  * Fetches and parses an RSS/Atom feed URL.
  * Returns an array of { title, url, content, publishedAt } items.
  */
 export async function fetchFeed(feedUrl: string): Promise<ParsedFeedItem[]> {
-  const response = await fetch(feedUrl);
+  const { items } = await fetchFeedWithMeta(feedUrl);
+  return items;
+}
+
+export async function fetchFeedWithMeta(
+  feedUrl: string
+): Promise<FetchFeedResult> {
+  const { response, usedProxy } = await fetchWithProxyFallback(feedUrl);
   if (!response.ok) {
     throw new Error(
       `Failed to fetch feed: ${response.status} ${response.statusText}`
     );
   }
   const text = await response.text();
-  return parseFeed(text);
+  return {
+    items: parseFeed(text),
+    usedProxy,
+  };
 }
 
 /**
