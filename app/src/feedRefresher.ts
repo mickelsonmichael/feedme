@@ -12,7 +12,7 @@ import { upsertItems, updateFeedLastFetched } from "./database";
 export async function refreshFeeds(feeds: Feed[]): Promise<number> {
   const results = await Promise.allSettled(
     feeds.map(async (feed) => {
-      const fetched = await fetchFeed(feed.url);
+      const fetched = await fetchFeed(feed.url, feed.use_proxy === 1);
       await upsertItems(feed.id, fetched);
       await updateFeedLastFetched(feed.id);
     })

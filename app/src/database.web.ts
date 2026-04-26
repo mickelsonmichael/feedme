@@ -139,7 +139,8 @@ export async function addFeed({
   title,
   url,
   description,
-}: Pick<Feed, "title" | "url" | "description">): Promise<number> {
+  use_proxy,
+}: Pick<Feed, "title" | "url" | "description" | "use_proxy">): Promise<number> {
   const state = loadState();
   if (state.feeds.some((f) => f.url === url)) {
     // Mirror SQLite UNIQUE constraint behaviour.
@@ -153,6 +154,7 @@ export async function addFeed({
     description: description ?? null,
     last_fetched: null,
     error: null,
+    use_proxy: use_proxy ?? 0,
   };
   state.feeds.push(feed);
   state.nextFeedId = id + 1;
@@ -179,13 +181,14 @@ export async function updateFeedLastFetched(feedId: number): Promise<void> {
 
 export async function updateFeed(
   feedId: number,
-  fields: Pick<Feed, "title" | "url">
+  fields: Pick<Feed, "title" | "url" | "use_proxy">
 ): Promise<void> {
   const state = loadState();
   const feed = state.feeds.find((f) => f.id === feedId);
   if (feed) {
     feed.title = fields.title;
     feed.url = fields.url;
+    feed.use_proxy = fields.use_proxy ?? 0;
     saveState(state);
   }
 }

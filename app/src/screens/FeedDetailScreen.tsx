@@ -10,6 +10,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Switch,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -54,9 +55,13 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
 
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
+  const [useProxy, setUseProxy] = useState(false);
 
   const hasChanges =
-    feed !== null && (title.trim() !== feed.title || url.trim() !== feed.url);
+    feed !== null &&
+    (title.trim() !== feed.title ||
+      url.trim() !== feed.url ||
+      useProxy !== (feed.use_proxy === 1));
 
   const loadFeed = useCallback(async () => {
     try {
@@ -66,6 +71,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
       if (found) {
         setTitle(found.title);
         setUrl(found.url);
+        setUseProxy(found.use_proxy === 1);
       }
     } finally {
       setLoading(false);
@@ -106,11 +112,18 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
 
     setSaving(true);
     try {
-      await updateFeed(feedId, { title: trimmedTitle, url: trimmedUrl });
+      await updateFeed(feedId, {
+        title: trimmedTitle,
+        url: trimmedUrl,
+        use_proxy: useProxy ? 1 : 0,
+      });
 
       // Refetch feed after save
       try {
-        const { items, usedProxy } = await fetchFeedWithMeta(trimmedUrl);
+        const { items, usedProxy } = await fetchFeedWithMeta(
+          trimmedUrl,
+          useProxy
+        );
         await upsertItems(feedId, items);
         await updateFeedLastFetched(feedId);
         await setFeedError(feedId, null);
@@ -294,6 +307,23 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         <Text style={[styles.lastFetch, { color: colors.inkSoft }]}>
           Last fetch: {formatDate(feed.last_fetched)}
         </Text>
+
+        <View style={styles.proxyRow}>
+          <View style={styles.proxyLabelGroup}>
+            <Text style={[styles.label, { color: colors.inkSoft }]}>
+              use proxy
+            </Text>
+            <Text style={[styles.proxyHint, { color: colors.inkFaint }]}>
+              Route requests through the configured proxy server
+            </Text>
+          </View>
+          <Switch
+            value={useProxy}
+            onValueChange={setUseProxy}
+            trackColor={{ false: colors.border, true: colors.accent }}
+            thumbColor={colors.paper}
+          />
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -357,6 +387,21 @@ const styles = StyleSheet.create({
     fontSize: fontSize.meta,
     fontFamily: fonts.sans,
     marginTop: spacing.xl,
+  },
+  proxyRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: spacing.xl,
+  },
+  proxyLabelGroup: {
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  proxyHint: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+    marginTop: spacing.xs,
   },
   emptyTitle: {
     fontSize: fontSize.h2,

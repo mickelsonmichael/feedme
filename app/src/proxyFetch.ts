@@ -125,8 +125,17 @@ export function isLikelyCorsBlockedError(error: unknown): boolean {
 
 export async function fetchWithProxyFallback(
   targetUrl: string,
-  init?: RequestInit
+  init?: RequestInit,
+  forceProxy?: boolean
 ): Promise<ProxyFetchResult> {
+  if (forceProxy) {
+    const proxied = await fetchViaProxy(targetUrl, init);
+    if (proxied) {
+      return proxied;
+    }
+    // Proxy not configured — fall through to direct fetch
+  }
+
   try {
     const response = await fetch(targetUrl, init);
     return { response, usedProxy: false };

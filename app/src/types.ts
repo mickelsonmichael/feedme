@@ -5,6 +5,7 @@ export type Feed = {
   description: string | null;
   last_fetched: number | null;
   error: string | null;
+  use_proxy?: number;
 };
 
 export type FeedItem = {

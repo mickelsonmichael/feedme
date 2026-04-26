@@ -68,8 +68,8 @@ describe("refreshFeeds", () => {
     // Assert
     expect(errors).toBe(0);
     expect(mockFetchFeed).toHaveBeenCalledTimes(2);
-    expect(mockFetchFeed).toHaveBeenCalledWith("https://example.com/feed1");
-    expect(mockFetchFeed).toHaveBeenCalledWith("https://example.com/feed2");
+    expect(mockFetchFeed).toHaveBeenCalledWith("https://example.com/feed1", false);
+    expect(mockFetchFeed).toHaveBeenCalledWith("https://example.com/feed2", false);
     expect(mockUpsertItems).toHaveBeenCalledTimes(2);
     expect(mockUpsertItems).toHaveBeenCalledWith(1, [parsedItem]);
     expect(mockUpsertItems).toHaveBeenCalledWith(2, [parsedItem]);

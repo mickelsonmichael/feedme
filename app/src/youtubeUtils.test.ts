@@ -1,7 +1,4 @@
-import {
-  extractYouTubeRssFeedUrl,
-  getYouTubeChannelUrl,
-} from "./youtubeUtils";
+import { extractYouTubeRssFeedUrl, getYouTubeChannelUrl } from "./youtubeUtils";
 
 describe("getYouTubeChannelUrl", () => {
   it("prepends @ and domain for a plain channel handle", () => {

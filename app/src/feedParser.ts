@@ -10,15 +10,23 @@ export type FetchFeedResult = {
  * Fetches and parses an RSS/Atom feed URL.
  * Returns an array of { title, url, content, publishedAt } items.
  */
-export async function fetchFeed(feedUrl: string): Promise<ParsedFeedItem[]> {
-  const { items } = await fetchFeedWithMeta(feedUrl);
+export async function fetchFeed(
+  feedUrl: string,
+  forceProxy?: boolean
+): Promise<ParsedFeedItem[]> {
+  const { items } = await fetchFeedWithMeta(feedUrl, forceProxy);
   return items;
 }
 
 export async function fetchFeedWithMeta(
-  feedUrl: string
+  feedUrl: string,
+  forceProxy?: boolean
 ): Promise<FetchFeedResult> {
-  const { response, usedProxy } = await fetchWithProxyFallback(feedUrl);
+  const { response, usedProxy } = await fetchWithProxyFallback(
+    feedUrl,
+    undefined,
+    forceProxy
+  );
   if (!response.ok) {
     throw new Error(
       `Failed to fetch feed: ${response.status} ${response.statusText}`

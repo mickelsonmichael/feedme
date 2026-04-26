@@ -37,7 +37,8 @@ async function initializeSchema(
       url TEXT NOT NULL UNIQUE,
       description TEXT,
       last_fetched INTEGER,
-      error TEXT
+      error TEXT,
+      use_proxy INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS items (
@@ -86,6 +87,15 @@ async function initializeSchema(
   } catch {
     // Column already exists — ignore
   }
+
+  // Migration: add use_proxy column to feeds if it doesn't exist yet
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN use_proxy INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
 }
 
 // ── Feeds ──────────────────────────────────────────────────────────────────
@@ -99,11 +109,12 @@ export async function addFeed({
   title,
   url,
   description,
-}: Pick<Feed, "title" | "url" | "description">): Promise<number> {
+  use_proxy,
+}: Pick<Feed, "title" | "url" | "description" | "use_proxy">): Promise<number> {
   const database = await getDatabase();
   const result = await database.runAsync(
-    "INSERT INTO feeds (title, url, description) VALUES (?, ?, ?)",
-    [title, url, description ?? null]
+    "INSERT INTO feeds (title, url, description, use_proxy) VALUES (?, ?, ?, ?)",
+    [title, url, description ?? null, use_proxy ?? 0]
   );
   return result.lastInsertRowId;
 }
@@ -123,14 +134,13 @@ export async function updateFeedLastFetched(feedId: number): Promise<void> {
 
 export async function updateFeed(
   feedId: number,
-  fields: Pick<Feed, "title" | "url">
+  fields: Pick<Feed, "title" | "url" | "use_proxy">
 ): Promise<void> {
   const database = await getDatabase();
-  await database.runAsync("UPDATE feeds SET title = ?, url = ? WHERE id = ?", [
-    fields.title,
-    fields.url,
-    feedId,
-  ]);
+  await database.runAsync(
+    "UPDATE feeds SET title = ?, url = ?, use_proxy = ? WHERE id = ?",
+    [fields.title, fields.url, fields.use_proxy ?? 0, feedId]
+  );
 }
 
 export async function setFeedError(

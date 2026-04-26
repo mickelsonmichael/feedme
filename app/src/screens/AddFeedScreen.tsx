@@ -42,6 +42,7 @@ export default function AddFeedScreen({ navigation }: Props) {
   const [titleManuallyEdited, setTitleManuallyEdited] = useState(false);
   const [loading, setLoading] = useState(false);
   const [feedError, setFeedError] = useState<string | null>(null);
+  const [useProxy, setUseProxy] = useState(false);
 
   const handleSourceChange = (newSource: FeedSource) => {
     setSource(newSource);
@@ -51,6 +52,7 @@ export default function AddFeedScreen({ navigation }: Props) {
     setTitle("");
     setTitleManuallyEdited(false);
     setFeedError(null);
+    setUseProxy(false);
   };
 
   const handleSubredditChange = (value: string) => {
@@ -82,6 +84,7 @@ export default function AddFeedScreen({ navigation }: Props) {
       const { response, usedProxy } = await fetchWithProxyFallback(trimmed);
       if (usedProxy) {
         Alert.alert(PROXY_ALERT_TITLE, PROXY_ALERT_MESSAGE);
+        setUseProxy(true);
       }
       const text = await response.text();
       const detected = extractFeedTitle(text);
@@ -122,7 +125,12 @@ export default function AddFeedScreen({ navigation }: Props) {
           }
           return;
         }
-        await addFeed({ title: feedTitle, url: redditUrl, description: null });
+        await addFeed({
+          title: feedTitle,
+          url: redditUrl,
+          description: null,
+          use_proxy: usedProxy ? 1 : 0,
+        });
         navigation.goBack();
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
@@ -174,7 +182,12 @@ export default function AddFeedScreen({ navigation }: Props) {
           );
           return;
         }
-        await addFeed({ title: feedTitle, url: feedUrl, description: null });
+        await addFeed({
+          title: feedTitle,
+          url: feedUrl,
+          description: null,
+          use_proxy: usedProxy ? 1 : 0,
+        });
         navigation.goBack();
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
@@ -211,7 +224,12 @@ export default function AddFeedScreen({ navigation }: Props) {
 
     setLoading(true);
     try {
-      await addFeed({ title: feedTitle, url: trimmedUrl, description: null });
+      await addFeed({
+        title: feedTitle,
+        url: trimmedUrl,
+        description: null,
+        use_proxy: useProxy ? 1 : 0,
+      });
       navigation.goBack();
     } catch (err) {
       if ((err as Error).message?.includes("UNIQUE")) {
