@@ -245,7 +245,7 @@ describe("extractImageUrl", () => {
     expect(extractImageUrl("<item><title>Hi</title></item>")).toBeUndefined();
   });
 
-  it("prefers media:content over media:thumbnail", () => {
+  it("prefers media:thumbnail over media:content", () => {
     // Arrange
     const block = `
       <media:content url="https://example.com/big.jpg" medium="image"/>
@@ -253,7 +253,20 @@ describe("extractImageUrl", () => {
     `;
 
     // Act & Assert
-    expect(extractImageUrl(block)).toBe("https://example.com/big.jpg");
+    expect(extractImageUrl(block)).toBe("https://example.com/small.jpg");
+  });
+
+  it("ignores non-image media:content and uses media:thumbnail", () => {
+    // Arrange
+    const block = `
+      <media:thumbnail url="https://i4.ytimg.com/vi/_4DUW_RsbFw/hqdefault.jpg" width="480" height="360"/>
+      <media:content url="https://www.youtube.com/v/_4DUW_RsbFw?version=3" type="application/x-shockwave-flash" width="640" height="390"/>
+    `;
+
+    // Act & Assert
+    expect(extractImageUrl(block)).toBe(
+      "https://i4.ytimg.com/vi/_4DUW_RsbFw/hqdefault.jpg"
+    );
   });
 
   it("falls back to <img> in html content when no dedicated image tag exists", () => {

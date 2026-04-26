@@ -44,11 +44,11 @@ jest.mock("@expo/vector-icons", () => {
   };
 });
 
-jest.mock("../components/ExpandedFeedImage", () => {
+jest.mock("../components/ExpandedFeedMedia", () => {
   const React = require("react");
   const { View } = require("react-native");
   return {
-    ExpandedFeedImage: () => React.createElement(View, null),
+    ExpandedFeedMedia: () => React.createElement(View, null),
   };
 });
 

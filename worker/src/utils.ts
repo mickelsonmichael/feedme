@@ -15,8 +15,7 @@ export function isRequestAllowed(request: Request): boolean {
 		return true;
 	}
 
-	const origin = sanitizeUrl(request.headers.get('origin') ?? '');
-	const referer = sanitizeUrl(request.headers.get('referer') ?? '');
+	const [origin, referer] = getOriginAndReferrer(request);
 
 	return ALLOWED_ORIGINS.some((allowed_origin) => origin.startsWith(allowed_origin) || referer.startsWith(allowed_origin));
 }

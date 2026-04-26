@@ -74,6 +74,14 @@ jest.mock("@react-navigation/native", () => ({
   },
 }));
 
+jest.mock("../components/ExpandedFeedMedia", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  return {
+    ExpandedFeedMedia: () => React.createElement(View, null),
+  };
+});
+
 type FeedScreenProps = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
   NativeStackScreenProps<RootStackParamList>

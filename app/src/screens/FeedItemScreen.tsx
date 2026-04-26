@@ -18,7 +18,7 @@ import {
   savePost,
   unsavePost,
 } from "../database";
-import { ExpandedFeedImage } from "../components/ExpandedFeedImage";
+import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedItem, RootStackParamList } from "../types";
@@ -183,8 +183,8 @@ export default function FeedItemScreen({ route, navigation }: Props) {
             {item.title}
           </Text>
 
-          {item.imageUrl ? (
-            <ExpandedFeedImage imageUrl={item.imageUrl} />
+          {item.imageUrl || item.url ? (
+            <ExpandedFeedMedia imageUrl={item.imageUrl} itemUrl={item.url} />
           ) : null}
 
           <Text style={[styles.article, { color: colors.ink }]}>

@@ -164,29 +164,62 @@ function decodeXmlEntities(value: string): string {
 
 // ── Image extraction patterns ──────────────────────────────────────────────
 
-const MEDIA_CONTENT_RE = /<media:content[^>]+url=["']([^"']+)["'][^>]*\/?>/i;
 const MEDIA_THUMBNAIL_RE =
   /<media:thumbnail[^>]+url=["']([^"']+)["'][^>]*\/?>/i;
+const MEDIA_CONTENT_TAG_RE = /<media:content\b[^>]*\/?>/gi;
 const ENCLOSURE_URL_FIRST_RE =
   /<enclosure[^>]+url=["']([^"']+)["'][^>]+type=["']image\/[^"']+["'][^>]*\/?>/i;
 const ENCLOSURE_TYPE_FIRST_RE =
   /<enclosure[^>]+type=["']image\/[^"']+["'][^>]+url=["']([^"']+)["'][^>]*\/?>/i;
 const IMG_SRC_RE = /<img[^>]+src=["']([^"']+)["'][^>]*\/?>/i;
 
+const IMAGE_URL_RE = /\.(?:avif|bmp|gif|jpe?g|png|svg|webp)(?:[?#]|$)/i;
+
+function extractAttribute(tag: string, attribute: string): string | undefined {
+  const match = tag.match(
+    new RegExp(`${escapeRegex(attribute)}=["']([^"']+)["']`, "i")
+  );
+  if (!match) return undefined;
+  return decodeXmlEntities(match[1]);
+}
+
+function extractMediaContentImageUrl(block: string): string | undefined {
+  const tags = block.match(MEDIA_CONTENT_TAG_RE);
+  if (!tags) return undefined;
+
+  for (const tag of tags) {
+    const url = extractAttribute(tag, "url");
+    if (!url) continue;
+
+    const type = extractAttribute(tag, "type")?.toLowerCase();
+    const medium = extractAttribute(tag, "medium")?.toLowerCase();
+    const isImageType = Boolean(type?.startsWith("image/"));
+    const isImageMedium = medium === "image";
+    const isImageUrl = IMAGE_URL_RE.test(url);
+
+    if (isImageType || isImageMedium || isImageUrl) {
+      return url;
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * Extracts a thumbnail/image URL from a feed item block.
- * Checks (in order): media:content, media:thumbnail, enclosure (image types),
+ * Checks (in order): media:thumbnail, media:content (image-only),
+ * enclosure (image types),
  * then falls back to the first <img src="..."> found in the HTML content.
  */
 export function extractImageUrl(
   block: string,
   htmlContent?: string | null
 ): string | undefined {
-  const mediaContent = block.match(MEDIA_CONTENT_RE);
-  if (mediaContent) return decodeXmlEntities(mediaContent[1]);
-
   const mediaThumbnail = block.match(MEDIA_THUMBNAIL_RE);
   if (mediaThumbnail) return decodeXmlEntities(mediaThumbnail[1]);
+
+  const mediaContentImageUrl = extractMediaContentImageUrl(block);
+  if (mediaContentImageUrl) return mediaContentImageUrl;
 
   // <enclosure> with an image MIME type (url may appear before or after type)
   const enclosure1 = block.match(ENCLOSURE_URL_FIRST_RE);

@@ -55,3 +55,78 @@ export function extractYouTubeRssFeedUrl(html: string): string | null {
   const hrefMatch = tagMatch[0].match(/href="([^"]+)"/i);
   return hrefMatch ? hrefMatch[1] : null;
 }
+
+const YOUTUBE_VIDEO_ID_RE = /^[A-Za-z0-9_-]{11}$/;
+
+function isYouTubeHost(hostname: string): boolean {
+  const host = hostname.toLowerCase();
+  return (
+    host === "youtube.com" ||
+    host.endsWith(".youtube.com") ||
+    host === "youtu.be" ||
+    host.endsWith(".youtu.be") ||
+    host === "youtube-nocookie.com" ||
+    host.endsWith(".youtube-nocookie.com")
+  );
+}
+
+function normalizeVideoId(videoId: string | null | undefined): string | null {
+  if (!videoId) return null;
+  const trimmed = videoId.trim();
+  return YOUTUBE_VIDEO_ID_RE.test(trimmed) ? trimmed : null;
+}
+
+/**
+ * Extracts a YouTube video ID from common YouTube URL variants.
+ * Examples:
+ *   - https://www.youtube.com/watch?v=dQw4w9WgXcQ
+ *   - https://youtu.be/dQw4w9WgXcQ
+ *   - https://www.youtube.com/shorts/dQw4w9WgXcQ
+ *   - https://www.youtube.com/embed/dQw4w9WgXcQ
+ */
+export function extractYouTubeVideoId(
+  rawUrl: string | null | undefined
+): string | null {
+  if (!rawUrl) return null;
+
+  try {
+    const url = new URL(rawUrl);
+    if (!isYouTubeHost(url.hostname)) return null;
+
+    if (url.hostname.toLowerCase().includes("youtu.be")) {
+      return normalizeVideoId(url.pathname.slice(1).split("/")[0]);
+    }
+
+    if (url.pathname === "/watch") {
+      return normalizeVideoId(url.searchParams.get("v"));
+    }
+
+    const pathMatch = url.pathname.match(
+      /^\/(?:embed|shorts|live|v)\/([A-Za-z0-9_-]{11})(?:\/|$)/i
+    );
+    if (pathMatch) {
+      return normalizeVideoId(pathMatch[1]);
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extracts a YouTube video ID from standard YouTube thumbnail URLs.
+ * Example: https://i4.ytimg.com/vi/_4DUW_RsbFw/hqdefault.jpg
+ */
+export function extractYouTubeVideoIdFromThumbnailUrl(
+  rawUrl: string | null | undefined
+): string | null {
+  if (!rawUrl) return null;
+  const match = rawUrl.match(/\/vi(?:_webp)?\/([A-Za-z0-9_-]{11})\//i);
+  if (!match) return null;
+  return normalizeVideoId(match[1]);
+}
+
+export function getYouTubeEmbedUrl(videoId: string): string {
+  return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0`;
+}

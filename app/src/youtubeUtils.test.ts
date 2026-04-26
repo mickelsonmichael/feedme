@@ -1,4 +1,10 @@
-import { extractYouTubeRssFeedUrl, getYouTubeChannelUrl } from "./youtubeUtils";
+import {
+  extractYouTubeRssFeedUrl,
+  extractYouTubeVideoId,
+  extractYouTubeVideoIdFromThumbnailUrl,
+  getYouTubeChannelUrl,
+  getYouTubeEmbedUrl,
+} from "./youtubeUtils";
 
 describe("getYouTubeChannelUrl", () => {
   it("prepends @ and domain for a plain channel handle", () => {
@@ -150,6 +156,78 @@ describe("extractYouTubeRssFeedUrl", () => {
     // Assert
     expect(result).toBe(
       "https://www.youtube.com/feeds/videos.xml?channel_id=UCgv4dPk_qZNAbUW9WkuLPSA"
+    );
+  });
+});
+
+describe("extractYouTubeVideoId", () => {
+  it("extracts a video id from a watch URL", () => {
+    // Arrange & Act
+    const result = extractYouTubeVideoId(
+      "https://www.youtube.com/watch?v=_4DUW_RsbFw"
+    );
+
+    // Assert
+    expect(result).toBe("_4DUW_RsbFw");
+  });
+
+  it("extracts a video id from a youtu.be short URL", () => {
+    // Arrange & Act
+    const result = extractYouTubeVideoId("https://youtu.be/_4DUW_RsbFw");
+
+    // Assert
+    expect(result).toBe("_4DUW_RsbFw");
+  });
+
+  it("extracts a video id from a shorts URL", () => {
+    // Arrange & Act
+    const result = extractYouTubeVideoId(
+      "https://www.youtube.com/shorts/_4DUW_RsbFw"
+    );
+
+    // Assert
+    expect(result).toBe("_4DUW_RsbFw");
+  });
+
+  it("returns null for non-YouTube URLs", () => {
+    // Arrange & Act
+    const result = extractYouTubeVideoId("https://example.com/watch?v=123");
+
+    // Assert
+    expect(result).toBeNull();
+  });
+});
+
+describe("extractYouTubeVideoIdFromThumbnailUrl", () => {
+  it("extracts a video id from a ytimg thumbnail URL", () => {
+    // Arrange & Act
+    const result = extractYouTubeVideoIdFromThumbnailUrl(
+      "https://i4.ytimg.com/vi/_4DUW_RsbFw/hqdefault.jpg"
+    );
+
+    // Assert
+    expect(result).toBe("_4DUW_RsbFw");
+  });
+
+  it("returns null for non-YouTube thumbnail URLs", () => {
+    // Arrange & Act
+    const result = extractYouTubeVideoIdFromThumbnailUrl(
+      "https://example.com/thumb.jpg"
+    );
+
+    // Assert
+    expect(result).toBeNull();
+  });
+});
+
+describe("getYouTubeEmbedUrl", () => {
+  it("builds a privacy-enhanced embed URL", () => {
+    // Arrange & Act
+    const result = getYouTubeEmbedUrl("_4DUW_RsbFw");
+
+    // Assert
+    expect(result).toBe(
+      "https://www.youtube-nocookie.com/embed/_4DUW_RsbFw?rel=0"
     );
   });
 });

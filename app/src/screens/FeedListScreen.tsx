@@ -36,7 +36,7 @@ import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
-import { ExpandedFeedImage } from "../components/ExpandedFeedImage";
+import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -398,10 +398,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
                       },
                     ]}
                   >
-                    {item.image_url ? (
-                      <ExpandedFeedImage
+                    {item.image_url || item.url ? (
+                      <ExpandedFeedMedia
                         imageUrl={item.image_url}
-                        testID={`expanded-image-${item.id}`}
+                        itemUrl={item.url}
+                        testID={`expanded-media-${item.id}`}
                       />
                     ) : null}
                     {item.content ? (

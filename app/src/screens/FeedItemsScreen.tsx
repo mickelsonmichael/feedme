@@ -29,7 +29,7 @@ import { MetaText } from "../components/ui";
 import { Feather } from "@expo/vector-icons";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
-import { ExpandedFeedImage } from "../components/ExpandedFeedImage";
+import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItems">;
 
@@ -324,10 +324,11 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                       },
                     ]}
                   >
-                    {item.image_url ? (
-                      <ExpandedFeedImage
+                    {item.image_url || item.url ? (
+                      <ExpandedFeedMedia
                         imageUrl={item.image_url}
-                        testID={`expanded-image-${item.id}`}
+                        itemUrl={item.url}
+                        testID={`expanded-media-${item.id}`}
                       />
                     ) : null}
                     {item.content ? (
