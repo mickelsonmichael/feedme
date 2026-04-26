@@ -30,6 +30,7 @@ import { Feed, TabParamList } from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { AppHeader } from "./src/components/AppHeader";
+import { HeaderContentProvider } from "./src/context/HeaderContentContext";
 import { getFeeds } from "./src/database";
 import { getFeedIconUrl } from "./src/feedIcon";
 
@@ -375,7 +376,9 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <ThemeProvider>
-        <AppContent />
+        <HeaderContentProvider>
+          <AppContent />
+        </HeaderContentProvider>
       </ThemeProvider>
     </SafeAreaProvider>
   );

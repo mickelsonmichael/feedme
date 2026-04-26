@@ -6,10 +6,13 @@ import { View, Text, StyleSheet, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fonts, fontSize, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { useHeaderContent } from "../context/HeaderContentContext";
 
 export function AppHeader() {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const { headerContent } = useHeaderContent();
+  const showHeaderContent = Platform.OS === "web" && Boolean(headerContent);
 
   // On web, the browser handles safe areas and insets.top is 0; use a fixed
   // top padding instead so the header doesn't sit flush against the viewport.
@@ -21,6 +24,7 @@ export function AppHeader() {
       style={[
         styles.header,
         {
+          alignItems: showHeaderContent ? "center" : "baseline",
           borderBottomColor: colors.border,
           backgroundColor: colors.paper,
           paddingTop,
@@ -28,6 +32,11 @@ export function AppHeader() {
       ]}
     >
       <Text style={[styles.title, { color: colors.ink }]}>FeedMe</Text>
+      {showHeaderContent ? (
+        <View testID="app-header-content" style={styles.headerContent}>
+          {headerContent}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -35,11 +44,16 @@ export function AppHeader() {
 const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
-    alignItems: "baseline",
     paddingHorizontal: spacing.lg,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
     gap: spacing.sm,
+  },
+  headerContent: {
+    width: "100%",
+    maxWidth: 440,
+    marginLeft: "auto",
+    flexShrink: 1,
   },
   title: {
     fontFamily: fonts.sans,

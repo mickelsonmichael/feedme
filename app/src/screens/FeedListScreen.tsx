@@ -4,6 +4,7 @@ import {
   Text,
   FlatList,
   TouchableOpacity,
+  TextInput,
   Alert,
   StyleSheet,
   ActivityIndicator,
@@ -11,8 +12,9 @@ import {
   Image,
   Linking,
   useWindowDimensions,
+  Platform,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
+import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -38,6 +40,7 @@ import { toggleExpandedId } from "../expandItemIds";
 import { MetaText, Pill } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { useHeaderContent } from "../context/HeaderContentContext";
 import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
 import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
@@ -54,7 +57,10 @@ const CARD_LAYOUT_WIDTH = 760;
 
 export default function FeedListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
+  const { setHeaderContent, clearHeaderContent } = useHeaderContent();
   const { width: viewportWidth } = useWindowDimensions();
+  const isWeb = Platform.OS === "web";
+  const isFocused = useIsFocused();
   const [feedLayout, setFeedLayout] = useState<FeedLayoutMode>(
     () => loadConfig().feedLayout ?? "compact"
   );
@@ -64,6 +70,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterMode>("all");
   const [sort, setSort] = useState<SortMode>("stacked");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<number>>(
@@ -236,18 +244,107 @@ export default function FeedListScreen({ navigation, route }: Props) {
     }
   }, [selectedFeedId, sort]);
 
+  const normalizedSearch = searchQuery.trim().toLowerCase();
+  const hasSearch = normalizedSearch.length > 0;
+  const isSearchVisible = mobileSearchOpen || hasSearch;
+
   useEffect(() => {
     setRetainedUnreadIds(new Set());
   }, [filter]);
 
+  const feedDetailsById = useMemo(
+    () => new Map(feeds.map((feed) => [feed.id, feed])),
+    [feeds]
+  );
+
+  const searchField = useMemo(
+    () => (
+      <View
+        style={[
+          styles.searchRow,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.paperWarm,
+          },
+        ]}
+      >
+        <Feather name="search" size={16} color={colors.inkSoft} />
+        <TextInput
+          style={[styles.searchInput, { color: colors.ink }]}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search feeds and post content"
+          placeholderTextColor={colors.inkSoft}
+          autoCorrect={false}
+          autoCapitalize="none"
+          accessibilityLabel="Search feeds and posts"
+        />
+        {!isWeb ? (
+          <TouchableOpacity
+            onPress={() => {
+              setSearchQuery("");
+              setMobileSearchOpen(false);
+            }}
+            accessibilityLabel="Close search"
+            activeOpacity={0.7}
+          >
+            <Feather name="x" size={16} color={colors.inkSoft} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    ),
+    [colors, isWeb, searchQuery]
+  );
+
+  useEffect(() => {
+    if (!isWeb || !isFocused) {
+      clearHeaderContent();
+      return;
+    }
+
+    setHeaderContent(searchField);
+
+    return () => {
+      clearHeaderContent();
+    };
+  }, [clearHeaderContent, isFocused, isWeb, searchField, setHeaderContent]);
+
   const scopedItems = useMemo(() => {
+    if (hasSearch) {
+      return items;
+    }
+
     if (selectedFeedId === undefined) return items;
     return items.filter((item) => item.feed_id === selectedFeedId);
-  }, [items, selectedFeedId]);
+  }, [items, selectedFeedId, hasSearch]);
+
+  const searchedItems = useMemo(() => {
+    if (!hasSearch) {
+      return scopedItems;
+    }
+
+    return scopedItems.filter((item) => {
+      const sourceFeed = feedDetailsById.get(item.feed_id);
+      const haystack = [
+        item.feed_title,
+        sourceFeed?.title,
+        sourceFeed?.description,
+        sourceFeed?.url,
+        item.title,
+        item.content,
+        item.url,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .join("\n")
+        .toLowerCase();
+
+      return haystack.includes(normalizedSearch);
+    });
+  }, [scopedItems, hasSearch, feedDetailsById, normalizedSearch]);
 
   const sortedItems = useMemo(
-    () => applySortMode(scopedItems, sort),
-    [scopedItems, sort]
+    () => applySortMode(searchedItems, sort),
+    [searchedItems, sort]
   );
 
   const visibleItems = useMemo(() => {
@@ -278,6 +375,36 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
+      {!isWeb ? (
+        <View
+          style={[styles.searchWrap, { borderBottomColor: colors.inkFaint }]}
+        >
+          {isSearchVisible ? (
+            searchField
+          ) : (
+            <TouchableOpacity
+              style={[
+                styles.searchOpenBtn,
+                {
+                  borderColor: colors.border,
+                  backgroundColor: colors.paperWarm,
+                },
+              ]}
+              onPress={() => setMobileSearchOpen(true)}
+              accessibilityLabel="Open search"
+              activeOpacity={0.8}
+            >
+              <Feather name="search" size={16} color={colors.inkSoft} />
+              <Text
+                style={[styles.searchOpenBtnText, { color: colors.inkSoft }]}
+              >
+                Search all feeds
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
+
       {/* Filter + sort pills row */}
       <View style={[styles.filterRow, { borderBottomColor: colors.inkFaint }]}>
         <ScrollView
@@ -351,18 +478,22 @@ export default function FeedListScreen({ navigation, route }: Props) {
       ) : visibleItems.length === 0 ? (
         <View style={styles.center}>
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-            {filter === "unread"
-              ? "All caught up!"
-              : filter === "starred"
-                ? "No saved items."
-                : "No items yet."}
+            {hasSearch
+              ? "No matches found."
+              : filter === "unread"
+                ? "All caught up!"
+                : filter === "starred"
+                  ? "No saved items."
+                  : "No items yet."}
           </Text>
           <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            {filter === "unread"
-              ? "You have no unread items."
-              : filter === "starred"
-                ? "Bookmark items to see them here."
-                : "Pull down to refresh your feeds."}
+            {hasSearch
+              ? "Try a different word, feed name, or topic."
+              : filter === "unread"
+                ? "You have no unread items."
+                : filter === "starred"
+                  ? "Bookmark items to see them here."
+                  : "Pull down to refresh your feeds."}
           </Text>
         </View>
       ) : (
@@ -747,6 +878,42 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderStyle: "dashed",
+  },
+  searchWrap: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
+  },
+  searchRow: {
+    width: "100%",
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+    padding: 0,
+  },
+  searchOpenBtn: {
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  searchOpenBtnText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+    fontWeight: "600",
   },
   filterPills: {
     paddingHorizontal: spacing.lg,

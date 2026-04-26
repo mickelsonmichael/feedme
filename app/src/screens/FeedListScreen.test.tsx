@@ -1,5 +1,11 @@
 import React from "react";
-import { FlatList, Linking, Text, TouchableOpacity } from "react-native";
+import {
+  FlatList,
+  Linking,
+  Text,
+  TextInput,
+  TouchableOpacity,
+} from "react-native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -7,6 +13,7 @@ import renderer, { act } from "react-test-renderer";
 import FeedListScreen from "../screens/FeedListScreen";
 import { RootStackParamList, TabParamList } from "../types";
 import { loadConfig } from "../storage";
+import { HeaderContentProvider } from "../context/HeaderContentContext";
 import {
   getFeeds,
   getAllItems,
@@ -83,6 +90,7 @@ jest.mock("@react-navigation/native", () => ({
       callback();
     }, [callback]);
   },
+  useIsFocused: () => true,
 }));
 
 jest.mock("../components/ExpandedFeedMedia", () => {
@@ -104,6 +112,14 @@ type FeedScreenProps = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
   NativeStackScreenProps<RootStackParamList>
 >;
+
+function renderFeedListScreen(props: FeedScreenProps) {
+  return renderer.create(
+    <HeaderContentProvider>
+      <FeedListScreen {...props} />
+    </HeaderContentProvider>
+  );
+}
 
 describe("FeedListScreen", () => {
   beforeEach(() => {
@@ -159,9 +175,7 @@ describe("FeedListScreen", () => {
 
     // Act
     await act(async () => {
-      tree = renderer.create(
-        <FeedListScreen navigation={navigation} route={route} />
-      );
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -253,9 +267,7 @@ describe("FeedListScreen", () => {
 
     // Act
     await act(async () => {
-      tree = renderer.create(
-        <FeedListScreen navigation={navigation} route={route} />
-      );
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -315,9 +327,7 @@ describe("FeedListScreen", () => {
 
     // Act
     await act(async () => {
-      tree = renderer.create(
-        <FeedListScreen navigation={navigation} route={route} />
-      );
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -389,9 +399,7 @@ describe("FeedListScreen", () => {
 
     // Act
     await act(async () => {
-      tree = renderer.create(
-        <FeedListScreen navigation={navigation} route={route} />
-      );
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -469,9 +477,7 @@ describe("FeedListScreen", () => {
 
     // Act
     await act(async () => {
-      tree = renderer.create(
-        <FeedListScreen navigation={navigation} route={route} />
-      );
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -560,9 +566,7 @@ describe("FeedListScreen", () => {
 
     // Act
     await act(async () => {
-      tree = renderer.create(
-        <FeedListScreen navigation={navigation} route={route} />
-      );
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -627,9 +631,7 @@ describe("FeedListScreen", () => {
 
     // Act
     await act(async () => {
-      tree = renderer.create(
-        <FeedListScreen navigation={navigation} route={route} />
-      );
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -715,9 +717,7 @@ describe("FeedListScreen", () => {
 
     // Act
     await act(async () => {
-      tree = renderer.create(
-        <FeedListScreen navigation={navigation} route={route} />
-      );
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
     });
@@ -746,6 +746,98 @@ describe("FeedListScreen", () => {
         expect.objectContaining({ alignItems: "center" }),
       ])
     );
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("searches across all feeds and post content", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: "General tech",
+        last_fetched: Date.now(),
+        error: null,
+      },
+      {
+        id: 2,
+        title: "Beta",
+        url: "https://beta.example/rss.xml",
+        description: "Coffee",
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 501,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Local update",
+        url: "https://alpha.example/local",
+        content: "A local roundup",
+        image_url: null,
+        published_at: Date.now(),
+        read: 0,
+      },
+      {
+        id: 502,
+        feed_id: 2,
+        feed_title: "Beta",
+        title: "Brew notes",
+        url: "https://beta.example/brew",
+        content: "Cast iron kettle tips",
+        image_url: null,
+        published_at: Date.now() - 1000,
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-search",
+      name: "Feed",
+      params: { selectedFeedId: 1, selectedFeedTitle: "Alpha" },
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await tree!.root
+        .findByProps({ accessibilityLabel: "Open search" })
+        .props.onPress();
+    });
+
+    const searchInput = tree!.root.findByProps({
+      accessibilityLabel: "Search feeds and posts",
+    }) as renderer.ReactTestInstance;
+
+    await act(async () => {
+      await searchInput.props.onChangeText("cast iron");
+    });
+
+    const visibleText = tree!.root
+      .findAllByType(Text)
+      .map((node: renderer.ReactTestInstance) => node.props.children);
+
+    // Assert
+    expect(visibleText).toContain("Brew notes");
+    expect(visibleText).not.toContain("Local update");
+    expect(tree!.root.findAllByType(TextInput)).toHaveLength(1);
 
     await act(async () => {
       tree!.unmount();
