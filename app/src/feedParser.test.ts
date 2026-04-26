@@ -76,10 +76,21 @@ const REDDIT_ATOM_FEED_WITH_THUMBNAIL = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/">
   <title>Reddit Pics</title>
   <entry>
-    <title>Reddit Entry</title>
+    <title>Reddit Entry &amp;#x1F4F8;</title>
     <content type="html">&lt;table&gt;&lt;tr&gt;&lt;td&gt;&lt;a href=&quot;https://www.reddit.com/r/pics/comments/abc123/sample/&quot;&gt;&lt;img src=&quot;https://preview.redd.it/hojmv7hcahxg1.jpeg?width=640&amp;amp;crop=smart&amp;amp;auto=webp&amp;amp;s=ae2800&quot; /&gt;&lt;/a&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</content>
     <media:thumbnail url="https://preview.redd.it/hojmv7hcahxg1.jpeg?width=640&amp;crop=smart&amp;auto=webp&amp;s=ae2800" />
     <link href="https://www.reddit.com/r/pics/comments/abc123/sample/" />
+    <updated>2026-04-26T06:25:04+00:00</updated>
+  </entry>
+</feed>`;
+
+const REDDIT_ATOM_FEED_WITH_ENCODED_CONTENT = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Reddit Encoded Feed</title>
+  <entry>
+    <title>Grand Canyon &amp;#x1F3DE; &amp;amp; More</title>
+    <content type="html">&lt;table&gt;&lt;tr&gt;&lt;td&gt;&amp;#32; submitted by &amp;#32; &lt;a href=&quot;https://www.reddit.com/user/wafwot10&quot;&gt;/u/wafwot10&lt;/a&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;</content>
+    <link href="https://www.reddit.com/r/EarthPorn/comments/1sw5nrw/grand_canyon_of_the_yellowstone_and_the_lower/" />
     <updated>2026-04-26T06:25:04+00:00</updated>
   </entry>
 </feed>`;
@@ -236,6 +247,33 @@ describe("parseFeed – image extraction (Atom/Reddit)", () => {
 
     // Assert
     expect(item.imageUrl).toBe(expectedImage);
+  });
+
+  it("decodes nested entities in Reddit Atom title", () => {
+    // Act
+    const [item] = parseFeed(REDDIT_ATOM_FEED_WITH_THUMBNAIL);
+
+    // Assert
+    expect(item.title).toBe("Reddit Entry 📸");
+  });
+
+  it("decodes nested entities in Reddit Atom content", () => {
+    // Act
+    const [item] = parseFeed(REDDIT_ATOM_FEED_WITH_ENCODED_CONTENT);
+
+    // Assert
+    expect(item.content).toContain(" submitted by ");
+    expect(item.content).toContain("/u/wafwot10");
+    expect(item.content).not.toContain("&amp;#32;");
+    expect(item.content).not.toContain("&#32;");
+  });
+
+  it("decodes mixed named and numeric entities in Atom title", () => {
+    // Act
+    const [item] = parseFeed(REDDIT_ATOM_FEED_WITH_ENCODED_CONTENT);
+
+    // Assert
+    expect(item.title).toBe("Grand Canyon 🏞 & More");
   });
 });
 

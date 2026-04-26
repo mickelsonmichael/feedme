@@ -22,6 +22,7 @@ import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedItem, RootStackParamList } from "../types";
+import { parseContentAndLinks } from "../utils/contentActions";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
 
@@ -32,6 +33,10 @@ export default function FeedItemScreen({ route, navigation }: Props) {
   const [saved, setSaved] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
+  const { text: contentText, links: contentLinks } = React.useMemo(
+    () => parseContentAndLinks(item.content),
+    [item.content]
+  );
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: item.feedTitle || "post" });
@@ -67,6 +72,12 @@ export default function FeedItemScreen({ route, navigation }: Props) {
   const handleOpenExternal = () => {
     if (!item.url) return;
     Linking.openURL(item.url).catch(() =>
+      Alert.alert("Error", "Cannot open this URL.")
+    );
+  };
+
+  const handleOpenContentLink = (url: string) => {
+    Linking.openURL(url).catch(() =>
       Alert.alert("Error", "Cannot open this URL.")
     );
   };
@@ -188,8 +199,34 @@ export default function FeedItemScreen({ route, navigation }: Props) {
           ) : null}
 
           <Text style={[styles.article, { color: colors.ink }]}>
-            {item.content ? stripHtml(item.content) : "No content available."}
+            {contentText || "No content available."}
           </Text>
+
+          {contentLinks.length ? (
+            <View style={styles.contentLinkRow}>
+              {contentLinks.map((link) => (
+                <TouchableOpacity
+                  key={`${link.label}:${link.url}`}
+                  style={[
+                    styles.contentLinkBtn,
+                    { borderColor: colors.border },
+                  ]}
+                  onPress={() => handleOpenContentLink(link.url)}
+                  activeOpacity={0.7}
+                  accessibilityLabel={`Open ${link.label}`}
+                >
+                  <Feather
+                    name={link.label === "Comments" ? "message-circle" : "link"}
+                    size={14}
+                    color={colors.inkSoft}
+                  />
+                  <Text style={[styles.contentLinkText, { color: colors.ink }]}>
+                    {link.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
     </View>
@@ -204,13 +241,6 @@ function formatDate(ts: number | null): string {
     hour: "numeric",
     minute: "2-digit",
   });
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 const styles = StyleSheet.create({
@@ -272,5 +302,25 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyLg,
     lineHeight: 24,
     fontFamily: fonts.sans,
+  },
+  contentLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+  },
+  contentLinkBtn: {
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  contentLinkText: {
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+    fontSize: fontSize.meta,
   },
 });

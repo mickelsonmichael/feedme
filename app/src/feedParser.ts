@@ -131,7 +131,10 @@ function extractTagText(xml: string, tag: string): string | undefined {
   );
   const m = xml.match(re);
   if (!m) return undefined;
-  return m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim() || undefined;
+  const rawText =
+    m[1].replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").trim() || undefined;
+  if (!rawText) return undefined;
+  return decodeXmlEntities(rawText);
 }
 
 function extractCData(xml: string, tag: string): string | undefined {
@@ -143,7 +146,9 @@ function extractCData(xml: string, tag: string): string | undefined {
   if (!m) return undefined;
   const inner = m[1];
   const cdata = inner.match(/<!\[CDATA\[([\s\S]*?)\]\]>/);
-  return (cdata ? cdata[1] : inner).trim() || undefined;
+  const rawText = (cdata ? cdata[1] : inner).trim() || undefined;
+  if (!rawText) return undefined;
+  return decodeXmlEntities(rawText);
 }
 
 function extractAtomLink(block: string): string | undefined {
@@ -154,12 +159,41 @@ function extractAtomLink(block: string): string | undefined {
 }
 
 function decodeXmlEntities(value: string): string {
-  return value
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&");
+  const decodeCodePoint = (rawCodePoint: string, radix: 10 | 16): string => {
+    const parsed = Number.parseInt(rawCodePoint, radix);
+    if (Number.isNaN(parsed)) return "";
+
+    try {
+      return String.fromCodePoint(parsed);
+    } catch {
+      return "";
+    }
+  };
+
+  const decodeOnePass = (input: string): string =>
+    input
+      .replace(/&#(\d+);/g, (match, codePoint) => {
+        const decoded = decodeCodePoint(codePoint, 10);
+        return decoded || match;
+      })
+      .replace(/&#x([0-9a-f]+);/gi, (match, codePoint) => {
+        const decoded = decodeCodePoint(codePoint, 16);
+        return decoded || match;
+      })
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&amp;/g, "&");
+
+  let decoded = value;
+  for (let i = 0; i < 5; i += 1) {
+    const next = decodeOnePass(decoded);
+    if (next === decoded) return decoded;
+    decoded = next;
+  }
+
+  return decoded;
 }
 
 // ── Image extraction patterns ──────────────────────────────────────────────

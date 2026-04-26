@@ -10,6 +10,7 @@ import {
   Image,
   Modal,
   ScrollView,
+  Linking,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -30,6 +31,7 @@ import { Feather } from "@expo/vector-icons";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
+import { parseContentAndLinks } from "../utils/contentActions";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItems">;
 
@@ -98,6 +100,12 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       },
     });
   };
+
+  const handleOpenContentLink = useCallback((url: string) => {
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Error", "Cannot open this URL.")
+    );
+  }, []);
 
   const toggleSave = async (item: FeedItem) => {
     const alreadySaved = savedIds.has(item.id);
@@ -205,6 +213,8 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           renderItem={({ item }) => {
             const saved = savedIds.has(item.id);
             const expanded = expandedIds.has(item.id);
+            const { text: contentText, links: contentLinks } =
+              parseContentAndLinks(item.content);
             return (
               <View
                 style={[
@@ -263,7 +273,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                           style={[styles.summary, { color: colors.inkSoft }]}
                           numberOfLines={2}
                         >
-                          {stripHtml(item.content)}
+                          {contentText}
                         </Text>
                       ) : null}
                     </TouchableOpacity>
@@ -335,8 +345,42 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
                       <Text
                         style={[styles.expandContent, { color: colors.ink }]}
                       >
-                        {stripHtml(item.content)}
+                        {contentText}
                       </Text>
+                    ) : null}
+                    {contentLinks.length ? (
+                      <View style={styles.contentLinkRow}>
+                        {contentLinks.map((link) => (
+                          <TouchableOpacity
+                            key={`${item.id}:${link.label}:${link.url}`}
+                            style={[
+                              styles.contentLinkBtn,
+                              { borderColor: colors.border },
+                            ]}
+                            onPress={() => handleOpenContentLink(link.url)}
+                            activeOpacity={0.7}
+                            accessibilityLabel={`Open ${link.label}`}
+                          >
+                            <Feather
+                              name={
+                                link.label === "Comments"
+                                  ? "message-circle"
+                                  : "link"
+                              }
+                              size={14}
+                              color={colors.inkSoft}
+                            />
+                            <Text
+                              style={[
+                                styles.contentLinkText,
+                                { color: colors.ink },
+                              ]}
+                            >
+                              {link.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     ) : null}
                   </View>
                 ) : null}
@@ -401,13 +445,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       </Modal>
     </View>
   );
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 const styles = StyleSheet.create({
@@ -521,6 +558,26 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     lineHeight: 20,
     fontFamily: fonts.body,
+  },
+  contentLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+  },
+  contentLinkBtn: {
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  contentLinkText: {
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+    fontSize: fontSize.meta,
   },
   rawModalOverlay: {
     flex: 1,

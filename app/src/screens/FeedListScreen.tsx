@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
+  Linking,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
@@ -37,6 +38,7 @@ import { useTheme } from "../context/ThemeContext";
 import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
 import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
+import { parseContentAndLinks } from "../utils/contentActions";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -155,6 +157,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
       }
     }
   };
+
+  const handleOpenContentLink = useCallback((url: string) => {
+    Linking.openURL(url).catch(() =>
+      Alert.alert("Error", "Cannot open this URL.")
+    );
+  }, []);
 
   const formatDate = (ts: number | null): string => {
     if (!ts) return "";
@@ -315,6 +323,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
           renderItem={({ item }) => {
             const saved = savedIds.has(item.id);
             const expanded = expandedIds.has(item.id);
+            const { text: contentText, links: contentLinks } =
+              parseContentAndLinks(item.content);
             return (
               <View
                 style={[
@@ -373,7 +383,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                           style={[styles.summary, { color: colors.inkSoft }]}
                           numberOfLines={2}
                         >
-                          {stripHtml(item.content)}
+                          {contentText}
                         </Text>
                       ) : null}
                     </TouchableOpacity>
@@ -433,8 +443,42 @@ export default function FeedListScreen({ navigation, route }: Props) {
                       <Text
                         style={[styles.expandContent, { color: colors.ink }]}
                       >
-                        {stripHtml(item.content)}
+                        {contentText}
                       </Text>
+                    ) : null}
+                    {contentLinks.length ? (
+                      <View style={styles.contentLinkRow}>
+                        {contentLinks.map((link) => (
+                          <TouchableOpacity
+                            key={`${item.id}:${link.label}:${link.url}`}
+                            style={[
+                              styles.contentLinkBtn,
+                              { borderColor: colors.border },
+                            ]}
+                            onPress={() => handleOpenContentLink(link.url)}
+                            activeOpacity={0.7}
+                            accessibilityLabel={`Open ${link.label}`}
+                          >
+                            <Feather
+                              name={
+                                link.label === "Comments"
+                                  ? "message-circle"
+                                  : "link"
+                              }
+                              size={14}
+                              color={colors.inkSoft}
+                            />
+                            <Text
+                              style={[
+                                styles.contentLinkText,
+                                { color: colors.ink },
+                              ]}
+                            >
+                              {link.label}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
                     ) : null}
                   </View>
                 ) : null}
@@ -446,13 +490,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
       )}
     </View>
   );
-}
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<[^>]+>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
 }
 
 const styles = StyleSheet.create({
@@ -551,6 +588,26 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     lineHeight: 20,
     fontFamily: fonts.body,
+  },
+  contentLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    flexWrap: "wrap",
+  },
+  contentLinkBtn: {
+    borderWidth: 1,
+    borderRadius: radii.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  contentLinkText: {
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+    fontSize: fontSize.meta,
   },
   separator: { height: spacing.sm },
   emptyTitle: {

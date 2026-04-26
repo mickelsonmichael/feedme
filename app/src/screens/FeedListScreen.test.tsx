@@ -1,5 +1,5 @@
 import React from "react";
-import { FlatList, Text, TouchableOpacity } from "react-native";
+import { FlatList, Linking, Text, TouchableOpacity } from "react-native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -88,7 +88,12 @@ type FeedScreenProps = CompositeScreenProps<
 >;
 
 describe("FeedListScreen", () => {
+  beforeEach(() => {
+    jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+  });
+
   afterEach(() => {
+    jest.clearAllMocks();
     jest.useRealTimers();
   });
 
@@ -423,6 +428,93 @@ describe("FeedListScreen", () => {
       .findAllByType(Text)
       .map((node: renderer.ReactTestInstance) => node.props.children);
     expect(textAfterRefresh).not.toContain("Unread post");
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("removes reddit action placeholders in preview and opens expanded action links", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 301,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Photo post",
+        url: "https://alpha.example/photo",
+        content:
+          '&lt;table&gt;&lt;tr&gt;&lt;td&gt;&amp;#32; submitted by &amp;#32; /u/SingingSkyPhoto &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://example.com/comments"&gt;[comments]&lt;/a&gt;&lt;/td&gt;&lt;/tr&gt;&lt;/table&gt;',
+        image_url: null,
+        published_at: Date.now(),
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-reddit",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <FeedListScreen navigation={navigation} route={route} />
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert preview text is cleaned
+    const previewText = tree!.root
+      .findAllByType(Text)
+      .map((node: renderer.ReactTestInstance) => String(node.props.children))
+      .join(" ");
+    expect(previewText).toContain("submitted by /u/SingingSkyPhoto");
+    expect(previewText).not.toContain("[link]");
+    expect(previewText).not.toContain("[comments]");
+
+    const expandButton = tree!.root.findByProps({
+      accessibilityLabel: "Expand post",
+    });
+    await act(async () => {
+      await expandButton.props.onPress();
+    });
+
+    const openLinkButton = tree!.root.findByProps({
+      accessibilityLabel: "Open Link",
+    });
+    const openCommentsButton = tree!.root.findByProps({
+      accessibilityLabel: "Open Comments",
+    });
+
+    await act(async () => {
+      await openLinkButton.props.onPress();
+      await openCommentsButton.props.onPress();
+    });
+
+    // Assert expanded action chips open links
+    expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/direct");
+    expect(Linking.openURL).toHaveBeenCalledWith(
+      "https://example.com/comments"
+    );
 
     await act(async () => {
       tree!.unmount();

@@ -7,6 +7,8 @@ This repository contains two projects:
 
 These instructions apply across both projects unless a nested `AGENTS.md` provides additional rules.
 
+Before running tests or scripts from package.json, you must change your directory into either `app/` or `worker/`, depending on which you're working on.
+
 ## Commits
 
 Use Conventional Commits.

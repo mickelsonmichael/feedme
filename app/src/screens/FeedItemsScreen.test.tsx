@@ -1,5 +1,5 @@
 import React from "react";
-import { Text } from "react-native";
+import { Linking, Text } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedItemsScreen from "../screens/FeedItemsScreen";
@@ -97,7 +97,8 @@ const mockItem = {
   feed_id: 1,
   title: "Test Item Title",
   url: "https://example.com/item",
-  content: "<p>Item content</p>",
+  content:
+    '&lt;p&gt;Item content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://example.com/comments"&gt;[comments]&lt;/a&gt;',
   image_url: null,
   raw_xml:
     "<item><title>Test Item Title</title><link>https://example.com/item</link></item>",
@@ -128,6 +129,7 @@ describe("FeedItemsScreen – View Raw", () => {
     (markItemRead as jest.Mock).mockResolvedValue(undefined);
     (savePost as jest.Mock).mockResolvedValue(undefined);
     (unsavePost as jest.Mock).mockResolvedValue(undefined);
+    jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -271,13 +273,87 @@ describe("FeedItemsScreen – View Raw", () => {
         itemId: 10,
         title: "Test Item Title",
         url: "https://example.com/item",
-        content: "<p>Item content</p>",
+        content:
+          '&lt;p&gt;Item content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://example.com/comments"&gt;[comments]&lt;/a&gt;',
         imageUrl: null,
         publishedAt: mockItem.published_at,
         feedTitle: "Test Feed",
         read: 0,
       },
     });
+
+    await act(async () => {
+      tree!.unmount();
+      jest.runOnlyPendingTimers();
+    });
+  });
+
+  it("removes reddit action placeholders from preview text", async () => {
+    // Arrange
+    jest.useFakeTimers();
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<FeedItemsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert
+    const allText = tree!.root
+      .findAllByType(Text)
+      .map((node: renderer.ReactTestInstance) => String(node.props.children));
+    const joined = allText.join(" ");
+    expect(joined).toContain("Item content");
+    expect(joined).not.toContain("[link]");
+    expect(joined).not.toContain("[comments]");
+
+    await act(async () => {
+      tree!.unmount();
+      jest.runOnlyPendingTimers();
+    });
+  });
+
+  it("shows expanded content action buttons and opens their links", async () => {
+    // Arrange
+    jest.useFakeTimers();
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedItemsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const expandButton = tree!.root.findByProps({
+      accessibilityLabel: "Expand post",
+    });
+
+    await act(async () => {
+      await expandButton.props.onPress();
+    });
+
+    const openLinkButton = tree!.root.findByProps({
+      accessibilityLabel: "Open Link",
+    });
+    const openCommentsButton = tree!.root.findByProps({
+      accessibilityLabel: "Open Comments",
+    });
+
+    // Act
+    await act(async () => {
+      await openLinkButton.props.onPress();
+      await openCommentsButton.props.onPress();
+    });
+
+    // Assert
+    expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/direct");
+    expect(Linking.openURL).toHaveBeenCalledWith(
+      "https://example.com/comments"
+    );
 
     await act(async () => {
       tree!.unmount();
