@@ -2,8 +2,9 @@
 
 STOP. Your knowledge of Cloudflare Workers APIs and limits may be outdated. Always retrieve current documentation before any Workers, KV, R2, D1, Durable Objects, Queues, Vectorize, AI, or Agents SDK task.
 
-This is a web server separate from the main application. YOU DO NOT NEED TO FOLLOW THE RULES OF THE MAIN APPLICATION WHILE WORKING IN THIS DIRECTORY.
-It has its own package.json and scripts, so you cannot use the same scripts as the main application.
+This is a web server project separate from the React Native app.
+It has its own `package.json` and scripts, so do not run app scripts from this directory.
+Use this file together with the shared repository rules in the root `AGENTS.md`.
 
 ## Docs
 
