@@ -75,8 +75,7 @@ export function sortStacked(
   for (const feedItems of byFeed.values()) {
     // Sort newest-first within each feed (items without a timestamp go last).
     feedItems.sort(
-      (a, b) =>
-        (b.published_at ?? -Infinity) - (a.published_at ?? -Infinity)
+      (a, b) => (b.published_at ?? -Infinity) - (a.published_at ?? -Infinity)
     );
     feedItems.forEach((item, i) => rankById.set(item.id, i));
   }
