@@ -11,78 +11,43 @@ export function sortNewest(items: FeedItemWithFeed[]): FeedItemWithFeed[] {
   );
 }
 
-/** Default interval used when a feed has fewer than two timestamped items. */
-const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
-
 /**
- * Minimum interval used to prevent feeds with bursts of identically-timestamped
- * items from collapsing to a zero score (which would cause them to dominate
- * the top of the list).
+ * Items older than this horizon start accumulating a staleness penalty in the
+ * stacked sort, causing them to sink below fresher items even when they hold a
+ * low within-feed rank (e.g. a feed that hasn't posted in months).
  */
-const MIN_INTERVAL_MS = 60 * 1000; // 1 minute
+const STALENESS_HORIZON_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 /**
- * Compute the average interval (in ms) between consecutive items for each feed
- * in the input. Feeds with fewer than two timestamped items use
- * {@link DEFAULT_INTERVAL_MS}. The computed interval is clamped to at least
- * {@link MIN_INTERVAL_MS}.
- */
-function computeAverageIntervals(
-  items: FeedItemWithFeed[]
-): Map<number, number> {
-  const timestampsByFeed = new Map<number, number[]>();
-  for (const item of items) {
-    if (item.published_at == null) continue;
-    let list = timestampsByFeed.get(item.feed_id);
-    if (!list) {
-      list = [];
-      timestampsByFeed.set(item.feed_id, list);
-    }
-    list.push(item.published_at);
-  }
-
-  const intervalByFeed = new Map<number, number>();
-  for (const [feedId, ts] of timestampsByFeed) {
-    if (ts.length < 2) {
-      intervalByFeed.set(feedId, DEFAULT_INTERVAL_MS);
-      continue;
-    }
-    let min = ts[0];
-    let max = ts[0];
-    for (let i = 1; i < ts.length; i++) {
-      if (ts[i] < min) min = ts[i];
-      if (ts[i] > max) max = ts[i];
-    }
-    const interval = (max - min) / (ts.length - 1);
-    intervalByFeed.set(feedId, Math.max(interval, MIN_INTERVAL_MS));
-  }
-  return intervalByFeed;
-}
-
-/**
- * Sort items using the "stacked" algorithm, which scores every item by how
- * old it is relative to its feed's typical posting cadence so that newer items
- * surface to the top while still giving infrequent feeds representation —
- * without resurrecting very old items from stale feeds.
+ * Sort items using the "stacked" algorithm, which interleaves feeds equitably
+ * so that no single high-volume feed can bury the newest content from quieter
+ * feeds.
  *
- * Score formula (lower is higher in the resulting list):
+ * Score formula (lower score → higher in the list):
  *
- *     score = age² / avg_interval_of_feed
+ *     score = feed_rank + staleness_penalty
  *
- * Where `age = now - published_at` and `avg_interval_of_feed` is the mean time
- * between posts in that feed (computed from the items present). Intuitions:
+ * Where:
+ * - `feed_rank` is the 0-based position of the item within its own feed when
+ *   that feed's items are sorted newest-first (0 = newest from this feed,
+ *   1 = second-newest, …).
+ * - `staleness_penalty = max(0, (age - HORIZON) / HORIZON)²` — zero for items
+ *   younger than {@link STALENESS_HORIZON_MS}, then growing quadratically for
+ *   older items.
  *
- * - Newest item from any feed has `age ≈ 0`, so every feed gets a top spot —
- *   infrequent feeds are not drowned out by chatty ones.
- * - For an hourly feed, `avg_interval` is small (1h), so an item only a few
- *   hours old still scores low and many of its items remain near the top.
- * - For a monthly feed, `avg_interval` is large (~720h), so a fresh post
- *   scores near zero, but as soon as a post is months old its `age²` term
- *   dominates and the item gets pushed far down — matching "don't show very
- *   old posts from infrequent feeds".
- * - Items with no `published_at` get `Infinity` and sink to the bottom.
+ * Intuitions:
+ * - Every feed's newest item gets `feed_rank = 0`. Ties are broken by
+ *   `published_at` (most recent first), so the overall top of the list shows
+ *   one item from each feed in chronological order — chatty feeds can no longer
+ *   bury a quiet feed's freshest post.
+ * - Within each "rank round" (rank 0, rank 1, …) items from different feeds
+ *   are interleaved purely by recency, giving a natural round-robin feel.
+ * - A feed that hasn't posted in months has `feed_rank = 0` for its newest
+ *   item, but the staleness penalty inflates its score above the penalty-free
+ *   scores of active feeds, pushing stale content toward the bottom.
+ * - Items with no `published_at` receive `Infinity` and sink to the very end.
  *
- * Ties are broken by `published_at` (newer first).
+ * Ties are broken by `published_at` (newer first); nulls are always last.
  *
  * @param items - The items to sort.
  * @param now - Optional clock function (defaults to Date.now) to allow
@@ -93,20 +58,46 @@ export function sortStacked(
   now: () => number = Date.now
 ): FeedItemWithFeed[] {
   const currentTime = now();
-  const intervalByFeed = computeAverageIntervals(items);
 
+  // Step 1: assign each item its within-feed rank (0 = newest from that feed).
+  const rankById = new Map<number, number>();
+  const byFeed = new Map<number, FeedItemWithFeed[]>();
+
+  for (const item of items) {
+    let list = byFeed.get(item.feed_id);
+    if (!list) {
+      list = [];
+      byFeed.set(item.feed_id, list);
+    }
+    list.push(item);
+  }
+
+  for (const feedItems of byFeed.values()) {
+    // Sort newest-first within each feed (items without a timestamp go last).
+    feedItems.sort(
+      (a, b) =>
+        (b.published_at ?? -Infinity) - (a.published_at ?? -Infinity)
+    );
+    feedItems.forEach((item, i) => rankById.set(item.id, i));
+  }
+
+  // Step 2: compute a composite score for every item.
   const scored = items.map((item) => {
-    const interval = intervalByFeed.get(item.feed_id) ?? DEFAULT_INTERVAL_MS;
     if (item.published_at == null) {
       return { item, score: Infinity };
     }
+
+    const rank = rankById.get(item.id) ?? 0;
     const age = Math.max(0, currentTime - item.published_at);
-    return { item, score: (age * age) / interval };
+    const overHorizon = Math.max(0, age - STALENESS_HORIZON_MS);
+    const penalty = (overHorizon / STALENESS_HORIZON_MS) ** 2;
+
+    return { item, score: rank + penalty };
   });
 
+  // Step 3: sort by score ascending; break ties by recency (newer first).
   scored.sort((a, b) => {
     if (a.score !== b.score) return a.score - b.score;
-    // Tie-break: newer published_at first; nulls last.
     return (
       (b.item.published_at ?? -Infinity) - (a.item.published_at ?? -Infinity)
     );

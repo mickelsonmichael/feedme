@@ -120,12 +120,11 @@ describe("sortStacked", () => {
     expect(result.map((i) => i.id)).toEqual([2, 3, 1]);
   });
 
-  it("gives an infrequent feed top representation when its newest item is fresh relative to its cadence", () => {
-    // Arrange — a monthly feed whose newest item is fresher (relative to its
-    // own cadence) than the hourly feed's freshest is to its cadence. With
-    // the `age² / avg_interval` formula the monthly newest (age 1min,
-    // interval 1 month) scores ≈ 0, while older monthly items get crushed by
-    // the squared-age term and rank well below recent hourly items.
+  it("places the infrequent feed's newest item at the very top when it is the most recent item overall", () => {
+    // Arrange — a monthly feed whose newest item is only 1 minute old, while
+    // the hourly feed's most recent item is 5 hours old. Both items have
+    // feed_rank = 0, so they compete purely on recency — the 1-minute-old
+    // monthly item must win.
     const items = [
       // Hourly feed (id 1): items 5h, 6h, 7h, 8h, 9h ago
       makeItem(1, 1, NOW - 5 * HOUR),
@@ -142,13 +141,9 @@ describe("sortStacked", () => {
     // Act
     const result = sortStacked(items, now);
 
-    // Assert — monthly newest (id 10) must appear in the top half of results,
-    // proving infrequent feeds aren't drowned out, while older monthly items
-    // (11, 12) are not surfaced near the top.
-    const top4Ids = result.slice(0, 4).map((i) => i.id);
-    expect(top4Ids).toContain(10);
-    expect(top4Ids).not.toContain(11);
-    expect(top4Ids).not.toContain(12);
+    // Assert — monthly newest (id 10) is the freshest item overall and must
+    // be first, proving the infrequent feed is not drowned out.
+    expect(result[0].id).toBe(10);
   });
 
   it("pushes very old items from stale (infrequent) feeds to the bottom", () => {
@@ -188,9 +183,10 @@ describe("sortStacked", () => {
     ).toEqual(monthlyIds);
   });
 
-  it("shows more items from a high-cadence feed than from a low-cadence feed near the top", () => {
-    // Arrange — both feeds have several items, but the hourly feed has a much
-    // smaller average interval than the daily feed.
+  it("interleaves feeds equitably: top N results contain one item from each of the N feeds", () => {
+    // Arrange — two feeds with multiple recent items each. With rank-based
+    // scoring every feed's rank-0 item competes on equal footing, so the top
+    // two slots must each hold one item from a different feed.
     const items = [
       // Hourly feed (avg interval ≈ 1h): items at 1..6 hours ago
       makeItem(1, 1, NOW - 1 * HOUR),
@@ -208,12 +204,27 @@ describe("sortStacked", () => {
     // Act
     const result = sortStacked(items, now);
 
-    // Assert — among the top 4 results we expect more hourly items than daily
-    // items, because the hourly feed's score grows much more slowly with age.
-    const top4 = result.slice(0, 4);
-    const hourlyCount = top4.filter((i) => i.feed_id === 1).length;
-    const dailyCount = top4.filter((i) => i.feed_id === 2).length;
-    expect(hourlyCount).toBeGreaterThan(dailyCount);
+    // Assert — the top 2 results (one per feed) must come from different feeds.
+    const top2FeedIds = result.slice(0, 2).map((i) => i.feed_id);
+    expect(new Set(top2FeedIds).size).toBe(2);
+  });
+
+  it("does not let a burst of items from one feed push another feed's newest item out of top N", () => {
+    // Arrange — feed 1 has 10 very recent items; feed 2 has only 1 item from
+    // an hour ago. Feed 2's item must still appear in the top 2 (one per feed).
+    const items = [
+      ...Array.from({ length: 10 }, (_, i) =>
+        makeItem(i + 1, 1, NOW - (i + 1) * 60 * 1000)
+      ),
+      makeItem(100, 2, NOW - 1 * HOUR),
+    ];
+
+    // Act
+    const result = sortStacked(items, now);
+
+    // Assert — feed 2's item must be within the top 2 positions.
+    const top2Ids = result.slice(0, 2).map((i) => i.id);
+    expect(top2Ids).toContain(100);
   });
 
   it("treats items with null published_at as the bottom of the list", () => {
