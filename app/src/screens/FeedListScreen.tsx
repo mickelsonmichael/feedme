@@ -46,7 +46,7 @@ import { FilterMode, applyFilter } from "../filterItems";
 import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { parseContentAndLinks } from "../utils/contentActions";
 import { FeedPostCard } from "../components/FeedPostCard";
-import { loadConfig } from "../storage";
+import { loadConfig, saveConfig } from "../storage";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -228,6 +228,17 @@ export default function FeedListScreen({ navigation, route }: Props) {
       Alert.alert("Error", "Cannot open this URL.")
     );
   }, []);
+
+  const handleLayoutToggle = useCallback(() => {
+    const nextLayout: FeedLayoutMode =
+      feedLayout === "compact" ? "card" : "compact";
+    setFeedLayout(nextLayout);
+    try {
+      saveConfig({ feedLayout: nextLayout });
+    } catch (e) {
+      console.warn("[feedme] Failed to persist feed layout:", e);
+    }
+  }, [feedLayout]);
 
   const formatDate = (ts: number | null): string => {
     if (!ts) return "";
@@ -466,6 +477,20 @@ export default function FeedListScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           ) : null}
         </ScrollView>
+        {!isWeb ? (
+          <TouchableOpacity
+            style={styles.layoutToggleBtn}
+            onPress={handleLayoutToggle}
+            accessibilityLabel="Toggle feed layout"
+            activeOpacity={0.7}
+          >
+            <Feather
+              name={feedLayout === "card" ? "grid" : "list"}
+              size={18}
+              color={colors.inkSoft}
+            />
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       {feeds.length === 0 ? (
@@ -595,6 +620,8 @@ const styles = StyleSheet.create({
     padding: spacing.xl,
   },
   filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderStyle: "dashed",
@@ -640,6 +667,10 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     flexDirection: "row",
     alignItems: "center",
+  },
+  layoutToggleBtn: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
   },
   pillDivider: {
     width: 1,

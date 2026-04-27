@@ -13,7 +13,7 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedListScreen from "../screens/FeedListScreen";
 import { RootStackParamList, TabParamList } from "../types";
-import { loadConfig } from "../storage";
+import { loadConfig, saveConfig } from "../storage";
 import { HeaderContentProvider } from "../context/HeaderContentContext";
 import {
   getFeeds,
@@ -45,6 +45,7 @@ jest.mock("../feedRefresher", () => ({
 
 jest.mock("../storage", () => ({
   loadConfig: jest.fn(() => ({})),
+  saveConfig: jest.fn(),
 }));
 
 jest.mock("../context/ThemeContext", () => ({
@@ -927,6 +928,75 @@ describe("FeedListScreen", () => {
     expect(visibleText).toContain("Brew notes");
     expect(visibleText).not.toContain("Local update");
     expect(tree!.root.findAllByType(TextInput)).toHaveLength(1);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("toggles feed layout between compact and card and persists the selection", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 701,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Toggle test post",
+        url: "https://alpha.example/toggle",
+        content: "body",
+        image_url: null,
+        published_at: Date.now(),
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-layout-toggle",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const toggleButton = tree!.root.findByProps({
+      accessibilityLabel: "Toggle feed layout",
+    });
+    expect(toggleButton).toBeTruthy();
+
+    await act(async () => {
+      await toggleButton.props.onPress();
+    });
+
+    // Assert: layout persisted as card
+    expect(saveConfig).toHaveBeenCalledWith({ feedLayout: "card" });
+
+    // Toggle back to compact
+    await act(async () => {
+      await toggleButton.props.onPress();
+    });
+
+    expect(saveConfig).toHaveBeenCalledWith({ feedLayout: "compact" });
 
     await act(async () => {
       tree!.unmount();
