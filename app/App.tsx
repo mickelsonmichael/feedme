@@ -80,6 +80,11 @@ const SETTINGS_NAV = TAB_CONFIG.find(
   ({ name }) => name === "Settings"
 ) as (typeof TAB_CONFIG)[number];
 
+const HIDDEN_TAB_OPTIONS = {
+  tabBarButton: () => null,
+  tabBarItemStyle: { display: "none" as const },
+};
+
 function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = React.useState<Feed[]>([]);
@@ -333,37 +338,27 @@ function Tabs() {
       <Tab.Screen
         name="AddFeed"
         component={AddFeedScreen}
-        options={{
-          tabBarButton: () => null,
-        }}
+        options={HIDDEN_TAB_OPTIONS}
       />
       <Tab.Screen
         name="FeedItems"
         component={FeedItemsScreen}
-        options={{
-          tabBarButton: () => null,
-        }}
+        options={HIDDEN_TAB_OPTIONS}
       />
       <Tab.Screen
         name="FeedItemView"
         component={FeedItemScreen}
-        options={{
-          tabBarButton: () => null,
-        }}
+        options={HIDDEN_TAB_OPTIONS}
       />
       <Tab.Screen
         name="FeedDetail"
         component={FeedDetailScreen}
-        options={{
-          tabBarButton: () => null,
-        }}
+        options={HIDDEN_TAB_OPTIONS}
       />
       <Tab.Screen
         name="ImportExport"
         component={ImportExportScreen}
-        options={{
-          tabBarButton: () => null,
-        }}
+        options={HIDDEN_TAB_OPTIONS}
       />
     </Tab.Navigator>
   );
