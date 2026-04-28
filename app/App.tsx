@@ -16,7 +16,10 @@ import {
 } from "@react-navigation/bottom-tabs";
 import { Feather } from "@expo/vector-icons";
 import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import FeedListScreen from "./src/screens/FeedListScreen";
 import AddFeedScreen from "./src/screens/AddFeedScreen";
 import FeedItemsScreen from "./src/screens/FeedItemsScreen";
@@ -63,7 +66,7 @@ function FeatherTabIcon({
   return (
     <Feather
       name={icon}
-      size={20}
+      size={24}
       color={focused ? colors.ink : colors.inkSoft}
     />
   );
@@ -239,6 +242,7 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
 function Tabs() {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const useSidebar = isWeb && width >= WEB_BREAKPOINT;
 
@@ -252,9 +256,14 @@ function Tabs() {
           backgroundColor: colors.paper,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 62,
-          paddingBottom: 6,
+          height: 62 + insets.bottom,
+          paddingBottom: insets.bottom + 6,
           paddingTop: 6,
+        },
+        tabBarItemStyle: {
+          flex: 1,
+          alignItems: "center",
+          justifyContent: "center",
         },
         tabBarLabelStyle: styles.tabLabel,
       }}
