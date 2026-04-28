@@ -37,6 +37,11 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
+      - name: Set app version from release tag
+        run: node scripts/set-app-version.js
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+
       - name: Generate native Android project
         run: npx expo prebuild --platform android --no-install
 
