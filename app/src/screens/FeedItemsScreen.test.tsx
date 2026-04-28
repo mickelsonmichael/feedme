@@ -1,5 +1,5 @@
 import React from "react";
-import { Linking, Text } from "react-native";
+import { Text } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedItemsScreen from "../screens/FeedItemsScreen";
@@ -15,6 +15,7 @@ import {
   getSavedItemIds,
 } from "../database";
 import { fetchFeed } from "../feedParser";
+import { openUrlWithPreference } from "../linkOpening";
 
 jest.mock("../database", () => ({
   getItemsForFeed: jest.fn(),
@@ -83,6 +84,10 @@ jest.mock("../components/ExpandedFeedMedia", () => {
   };
 });
 
+jest.mock("../linkOpening", () => ({
+  openUrlWithPreference: jest.fn(),
+}));
+
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItems">;
 
 const mockFeed = {
@@ -132,7 +137,7 @@ describe("FeedItemsScreen – View Raw", () => {
     (markItemUnread as jest.Mock).mockResolvedValue(undefined);
     (savePost as jest.Mock).mockResolvedValue(undefined);
     (unsavePost as jest.Mock).mockResolvedValue(undefined);
-    jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+    (openUrlWithPreference as jest.Mock).mockClear();
   });
 
   afterEach(() => {
@@ -357,9 +362,13 @@ describe("FeedItemsScreen – View Raw", () => {
     });
 
     // Assert
-    expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/item");
-    expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://www.reddit.com/r/castiron/comments/1sw5l42/post/"
+    expect(openUrlWithPreference).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://example.com/item" })
+    );
+    expect(openUrlWithPreference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://www.reddit.com/r/castiron/comments/1sw5l42/post/",
+      })
     );
 
     await act(async () => {

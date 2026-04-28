@@ -10,7 +10,6 @@ import {
   ActivityIndicator,
   ScrollView,
   Image,
-  Linking,
   useWindowDimensions,
   Platform,
 } from "react-native";
@@ -47,6 +46,7 @@ import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { parseContentAndLinks } from "../utils/contentActions";
 import { FeedPostCard } from "../components/FeedPostCard";
 import { loadConfig, saveConfig } from "../storage";
+import { openUrlWithPreference } from "../linkOpening";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -213,21 +213,23 @@ export default function FeedListScreen({ navigation, route }: Props) {
     }
   };
 
-  const handleOpenContentLink = useCallback((url: string) => {
-    Linking.openURL(url).catch(() =>
-      Alert.alert("Error", "Cannot open this URL.")
-    );
-  }, []);
+  const handleOpenContentLink = useCallback(
+    (url: string) => {
+      openUrlWithPreference({ url, navigation });
+    },
+    [navigation]
+  );
 
-  const handleOpenOriginalLink = useCallback((url: string | null) => {
-    if (!url) {
-      return;
-    }
+  const handleOpenOriginalLink = useCallback(
+    (url: string | null) => {
+      if (!url) {
+        return;
+      }
 
-    Linking.openURL(url).catch(() =>
-      Alert.alert("Error", "Cannot open this URL.")
-    );
-  }, []);
+      openUrlWithPreference({ url, navigation });
+    },
+    [navigation]
+  );
 
   const handleLayoutToggle = useCallback(() => {
     const nextLayout: FeedLayoutMode =

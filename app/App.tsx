@@ -29,6 +29,7 @@ import FeedsScreen from "./src/screens/FeedsScreen";
 import FeedDetailScreen from "./src/screens/FeedDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
+import InAppBrowserScreen from "./src/screens/InAppBrowserScreen";
 import { Feed, TabParamList } from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
@@ -370,6 +371,11 @@ function Tabs() {
       <Tab.Screen
         name="ImportExport"
         component={ImportExportScreen}
+        options={HIDDEN_TAB_OPTIONS}
+      />
+      <Tab.Screen
+        name="InAppBrowser"
+        component={InAppBrowserScreen}
         options={HIDDEN_TAB_OPTIONS}
       />
     </Tab.Navigator>

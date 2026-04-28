@@ -9,7 +9,6 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
-  Linking,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -31,6 +30,7 @@ import { Feather } from "@expo/vector-icons";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedPostCard } from "../components/FeedPostCard";
+import { openUrlWithPreference } from "../linkOpening";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItems">;
 
@@ -99,21 +99,23 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     });
   };
 
-  const handleOpenContentLink = useCallback((url: string) => {
-    Linking.openURL(url).catch(() =>
-      Alert.alert("Error", "Cannot open this URL.")
-    );
-  }, []);
+  const handleOpenContentLink = useCallback(
+    (url: string) => {
+      openUrlWithPreference({ url, navigation });
+    },
+    [navigation]
+  );
 
-  const handleOpenOriginalLink = useCallback((url: string | null) => {
-    if (!url) {
-      return;
-    }
+  const handleOpenOriginalLink = useCallback(
+    (url: string | null) => {
+      if (!url) {
+        return;
+      }
 
-    Linking.openURL(url).catch(() =>
-      Alert.alert("Error", "Cannot open this URL.")
-    );
-  }, []);
+      openUrlWithPreference({ url, navigation });
+    },
+    [navigation]
+  );
 
   const toggleSave = async (item: FeedItem) => {
     const alreadySaved = savedIds.has(item.id);

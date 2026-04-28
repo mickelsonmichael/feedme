@@ -2,7 +2,6 @@ import React from "react";
 import {
   FlatList,
   Image,
-  Linking,
   Text,
   TextInput,
   TouchableOpacity,
@@ -23,6 +22,7 @@ import {
   getSavedItemIds,
 } from "../database";
 import { refreshFeeds } from "../feedRefresher";
+import { openUrlWithPreference } from "../linkOpening";
 
 const mockExpandedFeedMedia = jest.fn(
   (_props: { imageAlignment?: string; testID?: string; blur?: boolean }) =>
@@ -112,6 +112,10 @@ jest.mock("../components/ExpandedFeedMedia", () => {
   };
 });
 
+jest.mock("../linkOpening", () => ({
+  openUrlWithPreference: jest.fn(),
+}));
+
 type FeedScreenProps = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
   NativeStackScreenProps<RootStackParamList>
@@ -127,8 +131,8 @@ function renderFeedListScreen(props: FeedScreenProps) {
 
 describe("FeedListScreen", () => {
   beforeEach(() => {
-    jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
     (loadConfig as jest.Mock).mockReturnValue({});
+    (openUrlWithPreference as jest.Mock).mockClear();
   });
 
   afterEach(() => {
@@ -419,8 +423,8 @@ describe("FeedListScreen", () => {
     });
 
     // Assert
-    expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://alpha.example/original"
+    expect(openUrlWithPreference).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://alpha.example/original" })
     );
 
     await act(async () => {
@@ -670,8 +674,10 @@ describe("FeedListScreen", () => {
     });
 
     // Assert expanded action chips open links
-    expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://www.reddit.com/r/castiron/comments/1sw5l42/post/"
+    expect(openUrlWithPreference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://www.reddit.com/r/castiron/comments/1sw5l42/post/",
+      })
     );
 
     await act(async () => {

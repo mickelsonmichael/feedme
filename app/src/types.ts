@@ -62,6 +62,7 @@ export type RootStackParamList = {
   };
   FeedDetail: { feedId: number };
   ImportExport: undefined;
+  InAppBrowser: { url: string; title?: string };
 };
 
 export type TabParamList = {
@@ -91,6 +92,7 @@ export type TabParamList = {
   };
   FeedDetail: { feedId: number };
   ImportExport: undefined;
+  InAppBrowser: { url: string; title?: string };
 };
 
 export const THEME_MODES = ["light", "dark", "system"] as const;
@@ -98,3 +100,6 @@ export type ThemeMode = (typeof THEME_MODES)[number];
 
 export const FEED_LAYOUT_MODES = ["compact", "card"] as const;
 export type FeedLayoutMode = (typeof FEED_LAYOUT_MODES)[number];
+
+export const LINK_OPEN_MODES = ["embedded", "external"] as const;
+export type LinkOpenMode = (typeof LINK_OPEN_MODES)[number];

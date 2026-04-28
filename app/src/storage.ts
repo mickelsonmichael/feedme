@@ -1,8 +1,10 @@
 import { Platform } from "react-native";
 import {
   FEED_LAYOUT_MODES,
+  LINK_OPEN_MODES,
   THEME_MODES,
   type FeedLayoutMode,
+  type LinkOpenMode,
   type ThemeMode,
 } from "./types";
 
@@ -11,6 +13,7 @@ const STORAGE_KEY = "feedme_config";
 export type WebConfig = {
   themeMode?: ThemeMode;
   feedLayout?: FeedLayoutMode;
+  linkOpenMode?: LinkOpenMode;
 };
 
 let cachedConfig: WebConfig | null = null;
@@ -36,6 +39,14 @@ function validateConfig(raw: unknown): WebConfig {
       FEED_LAYOUT_MODES.includes(feedLayout as FeedLayoutMode)
     ) {
       config.feedLayout = feedLayout as FeedLayoutMode;
+    }
+
+    const linkOpenMode = (raw as Record<string, unknown>).linkOpenMode;
+    if (
+      typeof linkOpenMode === "string" &&
+      LINK_OPEN_MODES.includes(linkOpenMode as LinkOpenMode)
+    ) {
+      config.linkOpenMode = linkOpenMode as LinkOpenMode;
     }
   }
   return config;
@@ -66,8 +77,8 @@ export function loadConfig(): WebConfig {
 }
 
 export function saveConfig(patch: Partial<WebConfig>): void {
-  if (!isWebStorageAvailable()) return;
   const updated = { ...(cachedConfig ?? loadConfig()), ...patch };
   cachedConfig = updated;
+  if (!isWebStorageAvailable()) return;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
 }

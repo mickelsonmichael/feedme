@@ -1,5 +1,5 @@
 import React from "react";
-import { Text, TouchableOpacity } from "react-native";
+import { Platform, Text, TouchableOpacity } from "react-native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -64,9 +64,22 @@ function buildProps(): Props {
 }
 
 describe("SettingsScreen", () => {
+  const originalPlatformOs = Platform.OS;
+
+  beforeEach(() => {
+    Object.defineProperty(Platform, "OS", {
+      configurable: true,
+      value: "ios",
+    });
+  });
+
   afterEach(() => {
     jest.clearAllMocks();
     (loadConfig as jest.Mock).mockReturnValue({});
+    Object.defineProperty(Platform, "OS", {
+      configurable: true,
+      value: originalPlatformOs,
+    });
   });
 
   it("persists card layout when selected", async () => {
@@ -94,5 +107,39 @@ describe("SettingsScreen", () => {
 
     // Assert
     expect(saveConfig).toHaveBeenCalledWith({ feedLayout: "card" });
+  });
+
+  it("defaults to embedded and persists external link mode on mobile", async () => {
+    // Arrange
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<SettingsScreen {...props} />);
+    });
+
+    const embeddedLabel = tree!.root
+      .findAllByType(Text)
+      .find(
+        (node: renderer.ReactTestInstance) => node.props.children === "Embedded"
+      );
+    expect(embeddedLabel).toBeTruthy();
+
+    const externalButton = tree!.root
+      .findAllByType(TouchableOpacity)
+      .find((node: renderer.ReactTestInstance) => {
+        const labels = node.findAllByType(Text);
+        return labels.some((label) => label.props.children === "External");
+      });
+
+    expect(externalButton).toBeTruthy();
+
+    await act(async () => {
+      await externalButton!.props.onPress();
+    });
+
+    // Assert
+    expect(saveConfig).toHaveBeenCalledWith({ linkOpenMode: "external" });
   });
 });

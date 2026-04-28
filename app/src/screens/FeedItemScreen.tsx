@@ -6,7 +6,6 @@ import {
   Alert,
   StyleSheet,
   ScrollView,
-  Linking,
   Platform,
   useWindowDimensions,
 } from "react-native";
@@ -24,6 +23,7 @@ import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedItem, RootStackParamList } from "../types";
 import { parseContentAndLinks } from "../utils/contentActions";
+import { openUrlWithPreference } from "../linkOpening";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
 
@@ -93,15 +93,15 @@ export default function FeedItemScreen({ route, navigation }: Props) {
 
   const handleOpenExternal = () => {
     if (!item.url) return;
-    Linking.openURL(item.url).catch(() =>
-      Alert.alert("Error", "Cannot open this URL.")
-    );
+    openUrlWithPreference({
+      url: item.url,
+      navigation,
+      title: item.title,
+    });
   };
 
   const handleOpenContentLink = (url: string) => {
-    Linking.openURL(url).catch(() =>
-      Alert.alert("Error", "Cannot open this URL.")
-    );
+    openUrlWithPreference({ url, navigation, title: item.title });
   };
 
   const handleToggleSave = async () => {
@@ -246,11 +246,11 @@ export default function FeedItemScreen({ route, navigation }: Props) {
               onPress={handleOpenExternal}
               activeOpacity={0.7}
               disabled={!item.url}
-              accessibilityLabel="Open External"
+              accessibilityLabel="Open Link"
             >
               <Feather name="external-link" size={16} color={colors.ink} />
               <Text style={[styles.actionText, { color: colors.ink }]}>
-                Open External
+                Open Link
               </Text>
             </TouchableOpacity>
 

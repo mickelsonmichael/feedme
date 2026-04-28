@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  Platform,
 } from "react-native";
 import Svg, { Line, Rect } from "react-native-svg";
 import { CompositeScreenProps } from "@react-navigation/native";
@@ -15,6 +16,7 @@ import {
   RootStackParamList,
   TabParamList,
   type FeedLayoutMode,
+  type LinkOpenMode,
 } from "../types";
 import { useTheme, type ThemeMode } from "../context/ThemeContext";
 import { loadConfig, saveConfig } from "../storage";
@@ -143,8 +145,12 @@ function CardLayoutIcon({ active }: { active: boolean }) {
 
 export default function SettingsScreen({ navigation }: Props) {
   const { colors, mode, setMode } = useTheme();
+  const isMobile = Platform.OS !== "web";
   const [feedLayout, setFeedLayout] = React.useState<FeedLayoutMode>(
     () => loadConfig().feedLayout ?? "compact"
+  );
+  const [linkOpenMode, setLinkOpenMode] = React.useState<LinkOpenMode>(
+    () => loadConfig().linkOpenMode ?? "embedded"
   );
 
   const handleLayoutChange = React.useCallback((nextLayout: FeedLayoutMode) => {
@@ -155,6 +161,18 @@ export default function SettingsScreen({ navigation }: Props) {
       console.warn("[feedme] Failed to persist feed layout:", e);
     }
   }, []);
+
+  const handleLinkOpenModeChange = React.useCallback(
+    (nextMode: LinkOpenMode) => {
+      setLinkOpenMode(nextMode);
+      try {
+        saveConfig({ linkOpenMode: nextMode });
+      } catch (e) {
+        console.warn("[feedme] Failed to persist link open mode:", e);
+      }
+    },
+    []
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
@@ -187,6 +205,20 @@ export default function SettingsScreen({ navigation }: Props) {
           ]}
           onChange={handleLayoutChange}
         />
+
+        {isMobile ? (
+          <>
+            <SectionHeading label="Links" />
+            <Segmented
+              value={linkOpenMode}
+              options={[
+                { value: "embedded", label: "Embedded" },
+                { value: "external", label: "External" },
+              ]}
+              onChange={handleLinkOpenModeChange}
+            />
+          </>
+        ) : null}
 
         <SectionHeading label="Import / export" />
         <Row

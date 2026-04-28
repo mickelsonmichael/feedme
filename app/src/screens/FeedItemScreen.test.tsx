@@ -1,5 +1,4 @@
 import React from "react";
-import { Linking } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedItemScreen from "../screens/FeedItemScreen";
@@ -11,6 +10,7 @@ import {
   savePost,
   unsavePost,
 } from "../database";
+import { openUrlWithPreference } from "../linkOpening";
 
 jest.mock("../database", () => ({
   getSavedItemIds: jest.fn(),
@@ -53,6 +53,10 @@ jest.mock("../components/ExpandedFeedMedia", () => {
     ExpandedFeedMedia: () => React.createElement(View, null),
   };
 });
+
+jest.mock("../linkOpening", () => ({
+  openUrlWithPreference: jest.fn(),
+}));
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
 
@@ -105,7 +109,7 @@ describe("FeedItemScreen", () => {
     (markItemUnread as jest.Mock).mockResolvedValue(undefined);
     (savePost as jest.Mock).mockResolvedValue(undefined);
     (unsavePost as jest.Mock).mockResolvedValue(undefined);
-    jest.spyOn(Linking, "openURL").mockResolvedValue(undefined);
+    (openUrlWithPreference as jest.Mock).mockClear();
   });
 
   afterEach(() => {
@@ -140,7 +144,7 @@ describe("FeedItemScreen", () => {
     expect(markItemRead).not.toHaveBeenCalled();
   });
 
-  it("opens the external url from the action button", async () => {
+  it("opens urls using the configured link mode from the action button", async () => {
     // Arrange
     const props = buildProps();
     let tree: renderer.ReactTestRenderer;
@@ -151,7 +155,7 @@ describe("FeedItemScreen", () => {
     });
 
     const openExternalButton = tree!.root.findByProps({
-      accessibilityLabel: "Open External",
+      accessibilityLabel: "Open Link",
     });
 
     // Act
@@ -160,7 +164,12 @@ describe("FeedItemScreen", () => {
     });
 
     // Assert
-    expect(Linking.openURL).toHaveBeenCalledWith("https://example.com/item");
+    expect(openUrlWithPreference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://example.com/item",
+        title: "Test title",
+      })
+    );
 
     await act(async () => {
       tree!.unmount();
@@ -235,9 +244,6 @@ describe("FeedItemScreen", () => {
       await Promise.resolve();
     });
 
-    expect(
-      tree!.root.findAllByProps({ accessibilityLabel: "Open Link" })
-    ).toHaveLength(0);
     const openCommentsButton = tree!.root.findByProps({
       accessibilityLabel: "Open Reddit comments",
     });
@@ -248,8 +254,10 @@ describe("FeedItemScreen", () => {
     });
 
     // Assert
-    expect(Linking.openURL).toHaveBeenCalledWith(
-      "https://www.reddit.com/r/EarthPorn/comments/1sw5nrw/grand_canyon_of_the_yellowstone_and_the_lower/"
+    expect(openUrlWithPreference).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://www.reddit.com/r/EarthPorn/comments/1sw5nrw/grand_canyon_of_the_yellowstone_and_the_lower/",
+      })
     );
 
     await act(async () => {
