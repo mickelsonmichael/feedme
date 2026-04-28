@@ -108,7 +108,7 @@ export function ExpandedFeedImage({
       ) : (
         <Image
           source={{ uri: resolvedImageUrl }}
-          blurRadius={blur ? 14 : 0}
+          blurRadius={blur ? 24 : 0}
           style={[
             styles.image,
             alignment === "center"

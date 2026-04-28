@@ -315,7 +315,7 @@ export function ExpandedFeedMedia({
                 source={{ uri: galleryImageUrls[activeGalleryIndex] }}
                 style={styles.galleryImage}
                 resizeMode="contain"
-                blurRadius={blur ? 14 : 0}
+                blurRadius={blur ? 24 : 0}
                 testID={
                   testID ? `${testID}-image-${activeGalleryIndex}` : undefined
                 }
@@ -374,7 +374,7 @@ export function ExpandedFeedMedia({
                 source={{ uri: galleryImageUrl }}
                 style={styles.galleryImage}
                 resizeMode="contain"
-                blurRadius={blur ? 14 : 0}
+                blurRadius={blur ? 24 : 0}
                 testID={testID ? `${testID}-image-${index}` : undefined}
               />
             </View>

@@ -218,7 +218,7 @@ export function FeedPostCard({
         {item.image_url ? (
           <Image
             source={{ uri: proxiedImageUrl(item.image_url, useProxy) }}
-            blurRadius={nsfw ? 12 : 0}
+            blurRadius={nsfw ? 24 : 0}
             style={styles.cardImage}
             resizeMode="cover"
           />

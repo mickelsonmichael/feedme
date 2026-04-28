@@ -833,7 +833,7 @@ describe("FeedListScreen", () => {
             : undefined;
         return (
           sourceUri === "https://alpha.example/sensitive.jpg" &&
-          thumb.props.blurRadius === 12
+          thumb.props.blurRadius === 24
         );
       })
     ).toBe(true);
