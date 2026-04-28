@@ -146,6 +146,10 @@ describe("ImportExportScreen web", () => {
 
     // Assert
     expect(addFeed).toHaveBeenCalledTimes(2);
+    expect(DocumentPicker.getDocumentAsync).toHaveBeenCalledWith({
+      type: [".opml", "text/x-opml", "application/xml", "text/xml", "*/*"],
+      copyToCacheDirectory: true,
+    });
     const status = tree!.root.findByProps({
       children: "Import complete. Added 1, skipped 1 duplicates.",
     });

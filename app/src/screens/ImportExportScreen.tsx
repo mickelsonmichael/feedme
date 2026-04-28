@@ -98,7 +98,8 @@ export default function ImportExportScreen({ navigation }: Props) {
 
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: ["text/xml", "text/x-opml", "application/xml", "*/*"],
+        // Put .opml first so web file pickers default to OPML files instead of generic XML.
+        type: [".opml", "text/x-opml", "application/xml", "text/xml", "*/*"],
         copyToCacheDirectory: true,
       });
       if (result.canceled) {
