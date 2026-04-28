@@ -144,7 +144,12 @@ export async function fetchRedditGalleryImageUrls(
 
   const { response } = await fetchWithProxyFallback(
     `https://www.reddit.com/comments/${postId}.json?raw_json=1`,
-    undefined,
+    {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; RSSReader/1.0)",
+        Accept: "application/json",
+      },
+    },
     forceProxy
   );
 
