@@ -6,11 +6,10 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedsScreen from "../screens/FeedsScreen";
 import { RootStackParamList, TabParamList } from "../types";
-import { getFeeds, deleteFeed } from "../database";
+import { getFeeds } from "../database";
 
 jest.mock("../database", () => ({
   getFeeds: jest.fn(),
-  deleteFeed: jest.fn(),
 }));
 
 jest.mock("../context/ThemeContext", () => ({
@@ -91,8 +90,6 @@ describe("FeedsScreen", () => {
         error: null,
       },
     ]);
-    (deleteFeed as jest.Mock).mockResolvedValue(undefined);
-
     const props = buildProps();
     let tree: renderer.ReactTestRenderer;
 
@@ -125,8 +122,6 @@ describe("FeedsScreen", () => {
         error: null,
       },
     ]);
-    (deleteFeed as jest.Mock).mockResolvedValue(undefined);
-
     const props = buildProps();
     let tree: renderer.ReactTestRenderer;
 
@@ -140,6 +135,83 @@ describe("FeedsScreen", () => {
     // Assert
     const images = tree!.root.findAllByType(Image);
     expect(images).toHaveLength(0);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("navigates to a selected feed when feed row is pressed", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 7,
+        title: "Tech News",
+        url: "https://example.com/rss.xml",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+    ]);
+
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<FeedsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const openButton = tree!.root.findByProps({
+      accessibilityLabel: "Open Tech News",
+    });
+
+    await act(async () => {
+      openButton.props.onPress();
+    });
+
+    // Assert
+    expect(props.navigation.navigate).toHaveBeenCalledWith("Feed", {
+      selectedFeedId: 7,
+      selectedFeedTitle: "Tech News",
+    });
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows quick links for all feeds and saved", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([]);
+
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<FeedsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const allFeedsLink = tree!.root.findByProps({
+      accessibilityLabel: "Go to all feeds",
+    });
+    const savedLink = tree!.root.findByProps({
+      accessibilityLabel: "Go to saved",
+    });
+
+    await act(async () => {
+      allFeedsLink.props.onPress();
+      savedLink.props.onPress();
+    });
+
+    // Assert
+    expect(props.navigation.navigate).toHaveBeenCalledWith("Feed", {});
+    expect(props.navigation.navigate).toHaveBeenCalledWith("Saved");
 
     await act(async () => {
       tree!.unmount();

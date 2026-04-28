@@ -9,7 +9,7 @@ import {
   Image,
   useWindowDimensions,
 } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
+import { CommonActions, NavigationContainer } from "@react-navigation/native";
 import {
   createBottomTabNavigator,
   BottomTabBarProps,
@@ -307,6 +307,18 @@ function Tabs() {
             <FeatherTabIcon icon="home" focused={focused} />
           ),
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (event) => {
+            event.preventDefault();
+            navigation.dispatch(
+              CommonActions.navigate({
+                name: "Feed",
+                params: {},
+                merge: false,
+              })
+            );
+          },
+        })}
       />
       <Tab.Screen
         name="Saved"

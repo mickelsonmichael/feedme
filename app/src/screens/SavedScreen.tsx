@@ -104,6 +104,12 @@ export default function SavedScreen({ navigation }: Props) {
   if (posts.length === 0) {
     return (
       <View style={[styles.container, { backgroundColor: colors.paper }]}>
+        <View style={[styles.scopeRow, { borderBottomColor: colors.inkFaint }]}>
+          <Feather name="bookmark" size={14} color={colors.inkSoft} />
+          <Text style={[styles.scopeText, { color: colors.ink }]}>
+            Viewing: Saved
+          </Text>
+        </View>
         <View style={styles.empty}>
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
             No saved posts yet.
@@ -118,6 +124,12 @@ export default function SavedScreen({ navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
+      <View style={[styles.scopeRow, { borderBottomColor: colors.inkFaint }]}>
+        <Feather name="bookmark" size={14} color={colors.inkSoft} />
+        <Text style={[styles.scopeText, { color: colors.ink }]}>
+          Viewing: Saved
+        </Text>
+      </View>
       <FlatList
         data={posts}
         keyExtractor={(p) => String(p.id)}
@@ -222,6 +234,20 @@ const styles = StyleSheet.create({
     textAlign: "center",
     maxWidth: 280,
     lineHeight: 20,
+  },
+  scopeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
+  },
+  scopeText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+    fontWeight: "600",
   },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   card: {

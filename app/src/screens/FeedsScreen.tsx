@@ -7,8 +7,6 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
-  Alert,
-  Platform,
   Image,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -16,7 +14,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { getFeeds, deleteFeed } from "../database";
+import { getFeeds } from "../database";
 import { Feed, RootStackParamList, TabParamList } from "../types";
 import { DashedDivider } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -54,36 +52,6 @@ export default function FeedsScreen({ navigation }: Props) {
       setLoading(false);
     }
   }, []);
-
-  const handleDeleteFeed = (feed: Feed) => {
-    const message = `Remove "${feed.title}"? All associated items will be deleted.`;
-
-    const doDelete = async () => {
-      try {
-        await deleteFeed(feed.id);
-        setFeeds((prev) => prev.filter((f) => f.id !== feed.id));
-      } catch (err) {
-        const errMsg = "Could not delete feed: " + (err as Error).message;
-        if (Platform.OS === "web") {
-          window.alert(errMsg);
-        } else {
-          Alert.alert("Error", errMsg);
-        }
-      }
-    };
-
-    if (Platform.OS === "web") {
-      if (window.confirm(message)) {
-        doDelete();
-      }
-      return;
-    }
-
-    Alert.alert("Remove Feed", message, [
-      { text: "Cancel", style: "cancel" },
-      { text: "Remove", style: "destructive", onPress: doDelete },
-    ]);
-  };
 
   useFocusEffect(
     useCallback(() => {
@@ -142,7 +110,9 @@ export default function FeedsScreen({ navigation }: Props) {
           accessibilityLabel="Add feed"
           activeOpacity={0.8}
         >
-          <Feather name="plus" size={18} color={colors.paper} />
+          <Text style={[styles.addBtnText, { color: colors.paper }]}>
+            Add Feed +
+          </Text>
         </TouchableOpacity>
       </View>
 
@@ -152,7 +122,7 @@ export default function FeedsScreen({ navigation }: Props) {
             No feeds yet.
           </Text>
           <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            Tap the plus button above to add your first feed.
+            Tap Add Feed + above to add your first feed.
           </Text>
         </View>
       ) : visibleFeeds.length === 0 ? (
@@ -169,65 +139,101 @@ export default function FeedsScreen({ navigation }: Props) {
           data={visibleFeeds}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
+          ListHeaderComponent={
+            <View
+              style={[
+                styles.quickLinksSection,
+                { borderBottomColor: colors.inkFaint },
+              ]}
+            >
+              <TouchableOpacity
+                style={styles.quickLinkRow}
+                onPress={() => navigation.navigate("Feed", {})}
+                accessibilityLabel="Go to all feeds"
+                activeOpacity={0.8}
+              >
+                <Feather name="home" size={16} color={colors.inkSoft} />
+                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+                  All Feeds
+                </Text>
+              </TouchableOpacity>
+              <DashedDivider />
+              <TouchableOpacity
+                style={styles.quickLinkRow}
+                onPress={() => navigation.navigate("Saved")}
+                accessibilityLabel="Go to saved"
+                activeOpacity={0.8}
+              >
+                <Feather name="bookmark" size={16} color={colors.inkSoft} />
+                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+                  Saved
+                </Text>
+              </TouchableOpacity>
+            </View>
+          }
           ItemSeparatorComponent={() => <DashedDivider />}
           renderItem={({ item }) => {
             const iconUri = getFeedIconUrl(item.url);
             const showIcon = Boolean(iconUri && !failedIconUris.has(iconUri));
 
             return (
-              <TouchableOpacity
-                style={styles.row}
-                onPress={() =>
-                  navigation.navigate("FeedDetail", { feedId: item.id })
-                }
-                activeOpacity={0.7}
-              >
-                {showIcon ? (
-                  <Image
-                    source={{ uri: iconUri ?? undefined }}
-                    style={styles.feedIcon}
-                    onError={() => {
-                      if (!iconUri) {
-                        return;
-                      }
-                      setFailedIconUris((prev) => new Set(prev).add(iconUri));
-                    }}
-                  />
-                ) : null}
-                <View style={styles.rowBody}>
-                  <Text style={[styles.feedTitle, { color: colors.ink }]}>
-                    {item.title}
-                  </Text>
-                  <Text
-                    style={[styles.feedUrl, { color: colors.inkSoft }]}
-                    numberOfLines={1}
-                  >
-                    {item.url}
-                  </Text>
-                </View>
-                {item.error ? (
-                  <View
-                    style={[
-                      styles.badge,
-                      {
-                        backgroundColor: colors.danger,
-                        borderColor: colors.danger,
-                      },
-                    ]}
-                  >
-                    <Text style={[styles.badgeText, { color: colors.paper }]}>
-                      Error
+              <View style={styles.row}>
+                <TouchableOpacity
+                  style={styles.rowMain}
+                  onPress={() =>
+                    navigation.navigate("Feed", {
+                      selectedFeedId: item.id,
+                      selectedFeedTitle: item.title,
+                    })
+                  }
+                  accessibilityLabel={`Open ${item.title}`}
+                  activeOpacity={0.7}
+                >
+                  {showIcon ? (
+                    <Image
+                      source={{ uri: iconUri ?? undefined }}
+                      style={styles.feedIcon}
+                      onError={() => {
+                        if (!iconUri) {
+                          return;
+                        }
+                        setFailedIconUris((prev) => new Set(prev).add(iconUri));
+                      }}
+                    />
+                  ) : null}
+                  <View style={styles.rowBody}>
+                    <Text style={[styles.feedTitle, { color: colors.ink }]}>
+                      {item.title}
                     </Text>
                   </View>
-                ) : null}
-                <TouchableOpacity
-                  onPress={() => handleDeleteFeed(item)}
-                  hitSlop={8}
-                  accessibilityLabel={`Delete ${item.title}`}
-                >
-                  <Feather name="trash-2" size={18} color={colors.danger} />
+                  {item.error ? (
+                    <View
+                      style={[
+                        styles.badge,
+                        {
+                          backgroundColor: colors.danger,
+                          borderColor: colors.danger,
+                        },
+                      ]}
+                    >
+                      <Text style={[styles.badgeText, { color: colors.paper }]}>
+                        Error
+                      </Text>
+                    </View>
+                  ) : null}
                 </TouchableOpacity>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.editBtn, { borderColor: colors.border }]}
+                  onPress={() =>
+                    navigation.navigate("FeedDetail", { feedId: item.id })
+                  }
+                  hitSlop={8}
+                  accessibilityLabel={`Edit ${item.title}`}
+                  activeOpacity={0.8}
+                >
+                  <Feather name="edit-2" size={16} color={colors.inkSoft} />
+                </TouchableOpacity>
+              </View>
             );
           }}
         />
@@ -246,7 +252,7 @@ const styles = StyleSheet.create({
   },
   topRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     margin: spacing.md,
     gap: spacing.sm,
   },
@@ -261,12 +267,36 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   addBtn: {
-    width: 44,
-    height: 44,
     borderRadius: radii.md,
     borderWidth: 1,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     alignItems: "center",
     justifyContent: "center",
+  },
+  addBtnText: {
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+  },
+  quickLinksSection: {
+    marginHorizontal: 0,
+    marginBottom: spacing.xs,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
+  },
+  quickLinkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  quickLinkText: {
+    flex: 1,
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
   },
   searchInput: {
     flex: 1,
@@ -278,23 +308,25 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
+    gap: spacing.sm,
+  },
+  rowMain: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+    gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
-    gap: spacing.md,
   },
   feedIcon: {
-    width: 18,
-    height: 18,
+    width: 16,
+    height: 16,
     borderRadius: 4,
   },
   rowBody: { flex: 1, gap: 2 },
   feedTitle: {
-    fontSize: fontSize.bodyLg,
+    fontSize: fontSize.body,
     fontWeight: "600",
-    fontFamily: fonts.heading,
-  },
-  feedUrl: {
-    fontSize: fontSize.meta,
     fontFamily: fonts.sans,
   },
   badge: {
@@ -307,6 +339,15 @@ const styles = StyleSheet.create({
     fontSize: fontSize.xs,
     fontFamily: fonts.sans,
     fontWeight: "600",
+  },
+  editBtn: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    width: 34,
+    height: 34,
+    marginRight: spacing.lg,
+    alignItems: "center",
+    justifyContent: "center",
   },
   emptyTitle: {
     fontSize: fontSize.h2,

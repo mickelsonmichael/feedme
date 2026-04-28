@@ -272,6 +272,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
     () => new Map(feeds.map((feed) => [feed.id, feed])),
     [feeds]
   );
+  const selectedFeedTitle = useMemo(() => {
+    if (selectedFeedId === undefined) {
+      return null;
+    }
+
+    return (
+      route.params?.selectedFeedTitle ??
+      feedDetailsById.get(selectedFeedId)?.title
+    );
+  }, [feedDetailsById, route.params?.selectedFeedTitle, selectedFeedId]);
 
   const searchField = useMemo(
     () => (
@@ -418,6 +428,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
               </Text>
             </TouchableOpacity>
           )}
+        </View>
+      ) : null}
+
+      {selectedFeedTitle ? (
+        <View style={[styles.scopeRow, { borderBottomColor: colors.inkFaint }]}>
+          <Feather name="rss" size={14} color={colors.inkSoft} />
+          <Text style={[styles.scopeText, { color: colors.ink }]}>
+            {selectedFeedTitle}
+          </Text>
         </View>
       ) : null}
 
@@ -625,6 +644,20 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
     borderStyle: "dashed",
+  },
+  scopeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
+  },
+  scopeText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+    fontWeight: "600",
   },
   searchWrap: {
     paddingHorizontal: spacing.lg,

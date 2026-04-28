@@ -283,6 +283,7 @@ describe("FeedListScreen", () => {
     // Assert
     expect(allText).toContain("Alpha post");
     expect(allText).not.toContain("Beta post");
+    expect(allText).toContain("Alpha");
     expect(allText).toContain("Newest");
     expect(allText).not.toContain("Stacked");
 
