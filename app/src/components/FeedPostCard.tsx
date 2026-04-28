@@ -4,6 +4,7 @@ import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import { parseContentAndLinks } from "../utils/contentActions";
 import { proxiedImageUrl } from "../proxyFetch";
+import { extractRedditGalleryUrl } from "../redditGallery";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { MetaText } from "./ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -89,6 +90,11 @@ export function FeedPostCard({
     [contentLinks]
   );
   const isCardMediaBlurred = layout === "card" && nsfw && !cardMediaRevealed;
+  const isRedditGallery = useMemo(
+    () => Boolean(extractRedditGalleryUrl(item.url, item.content)),
+    [item.content, item.url]
+  );
+  const showCardRevealOverlay = isCardMediaBlurred && !isRedditGallery;
 
   if (layout === "card") {
     return (
@@ -111,10 +117,12 @@ export function FeedPostCard({
               itemUrl={item.url}
               content={item.content}
               testID={cardMediaTestID}
-              blur={isCardMediaBlurred}
+              blur={showCardRevealOverlay}
+              nsfw={nsfw}
+              deferGalleryLoad={isRedditGallery}
               useProxy={useProxy}
             />
-            {isCardMediaBlurred ? (
+            {showCardRevealOverlay ? (
               <TouchableOpacity
                 style={[
                   styles.mediaBlurOverlay,
@@ -126,7 +134,7 @@ export function FeedPostCard({
               >
                 <Feather name="eye" size={16} color={colors.ink} />
                 <Text style={[styles.mediaBlurText, { color: colors.ink }]}>
-                  Reveal image
+                  Reveal images
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -327,6 +335,8 @@ export function FeedPostCard({
               content={item.content}
               testID={expandedMediaTestID}
               useProxy={useProxy}
+              nsfw={nsfw}
+              deferGalleryLoad={false}
             />
           ) : null}
           {item.content ? (

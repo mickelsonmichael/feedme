@@ -94,6 +94,7 @@ describe("ExpandedFeedMedia", () => {
           content='<a href="https://www.reddit.com/gallery/1sw5l42">[link]</a>'
           imageUrl="https://preview.redd.it/thumb.jpg?width=140"
           testID="expanded-media"
+          deferGalleryLoad={false}
         />
       );
     });
@@ -187,6 +188,7 @@ describe("ExpandedFeedMedia", () => {
           content='<a href="https://www.reddit.com/gallery/1sw5l42">[link]</a>'
           imageUrl="https://preview.redd.it/thumb.jpg?width=140"
           testID="expanded-media"
+          deferGalleryLoad={false}
         />
       );
     });
@@ -230,6 +232,7 @@ describe("ExpandedFeedMedia", () => {
           content='<a href="https://www.reddit.com/gallery/1sw5l42">[link]</a>'
           imageUrl="https://preview.redd.it/thumb.jpg?width=140"
           testID="expanded-media"
+          deferGalleryLoad={false}
           useProxy
         />
       );
@@ -259,5 +262,53 @@ describe("ExpandedFeedMedia", () => {
     Reflect.deleteProperty(globalThis, "location");
     delete process.env.EXPO_PUBLIC_FEED_PROXY_TARGET;
     delete process.env.EXPO_PUBLIC_FEED_PROXY_LIVE_URL;
+  });
+
+  it("defers loading Reddit gallery until user taps load", async () => {
+    // Arrange
+    mockExtractRedditGalleryUrl.mockReturnValue(
+      "https://www.reddit.com/gallery/1sw5l42"
+    );
+    mockFetchRedditGalleryImageUrls.mockResolvedValue([
+      "https://preview.redd.it/full-1.jpg",
+    ]);
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://www.reddit.com/r/castiron/comments/1sw5l42/post/"
+          content='<a href="https://www.reddit.com/gallery/1sw5l42">[link]</a>'
+          imageUrl="https://preview.redd.it/thumb.jpg?width=140"
+          testID="expanded-media"
+          nsfw
+        />
+      );
+    });
+
+    // Assert pre-load state
+    expect(mockFetchRedditGalleryImageUrls).not.toHaveBeenCalled();
+    const loadButton = tree!.root.findByProps({
+      accessibilityLabel: "Load Images",
+    });
+
+    // Act
+    await act(async () => {
+      loadButton.props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert post-load state
+    expect(mockFetchRedditGalleryImageUrls).toHaveBeenCalledWith(
+      "https://www.reddit.com/gallery/1sw5l42",
+      false
+    );
+    expect(
+      tree!.root.findByProps({ testID: "expanded-media-image-0" }).props.source
+        .uri
+    ).toBe("https://preview.redd.it/full-1.jpg");
   });
 });

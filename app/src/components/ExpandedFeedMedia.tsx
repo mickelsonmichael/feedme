@@ -13,7 +13,9 @@ import {
   Platform,
   ScrollView,
   StyleSheet,
+  Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { Feather } from "@expo/vector-icons";
@@ -29,10 +31,8 @@ import {
   getYouTubeEmbedUrl,
 } from "../youtubeUtils";
 import { MAX_EXPANDED_IMAGE_EDGE } from "../expandedImageSize";
-import { radii, spacing } from "../theme";
+import { fontSize, fonts, radii, spacing } from "../theme";
 import { ExpandedFeedImage } from "./ExpandedFeedImage";
-
-const GALLERY_MIN_EDGE = 480;
 
 type Props = {
   itemUrl?: string | null;
@@ -41,6 +41,8 @@ type Props = {
   imageAlignment?: "flex-start" | "center";
   testID?: string;
   blur?: boolean;
+  nsfw?: boolean;
+  deferGalleryLoad?: boolean;
   useProxy?: boolean;
 };
 
@@ -56,9 +58,13 @@ export function ExpandedFeedMedia({
   imageAlignment = "flex-start",
   testID,
   blur = false,
+  nsfw = false,
+  deferGalleryLoad = true,
   useProxy = false,
 }: Props) {
   const { colors } = useTheme();
+  const { width: viewportWidth } = useWindowDimensions();
+  const maxGalleryWidth = Math.max(1, viewportWidth - spacing.lg * 2);
   const galleryScrollRef = useRef<ScrollView | null>(null);
   const [galleryImageUrls, setGalleryImageUrls] = useState<string[] | null>(
     null
@@ -69,6 +75,8 @@ export function ExpandedFeedMedia({
     height: number;
   } | null>(null);
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
+  const [hasRequestedGalleryLoad, setHasRequestedGalleryLoad] =
+    useState(!deferGalleryLoad);
   const youtubeVideoId = useMemo(
     () =>
       extractYouTubeVideoId(itemUrl) ??
@@ -79,11 +87,17 @@ export function ExpandedFeedMedia({
     () => extractRedditGalleryUrl(itemUrl, content),
     [itemUrl, content]
   );
+  const shouldLoadGallery =
+    Boolean(redditGalleryUrl) && hasRequestedGalleryLoad;
+
+  useEffect(() => {
+    setHasRequestedGalleryLoad(!deferGalleryLoad);
+  }, [deferGalleryLoad, redditGalleryUrl]);
 
   useEffect(() => {
     let active = true;
 
-    if (!redditGalleryUrl) {
+    if (!redditGalleryUrl || !shouldLoadGallery) {
       setGalleryImageUrls(null);
       setGalleryContainerSize(null);
       setIsLoadingGallery(false);
@@ -121,7 +135,7 @@ export function ExpandedFeedMedia({
     return () => {
       active = false;
     };
-  }, [redditGalleryUrl, useProxy]);
+  }, [redditGalleryUrl, shouldLoadGallery, useProxy]);
 
   useEffect(() => {
     if (!galleryImageUrls?.length) {
@@ -142,14 +156,19 @@ export function ExpandedFeedMedia({
             MAX_EXPANDED_IMAGE_EDGE / width,
             MAX_EXPANDED_IMAGE_EDGE / height
           );
+
+          const scaledWidth = Math.max(1, Math.round(width * scale));
+          const scaledHeight = Math.max(1, Math.round(height * scale));
+          const viewportScale = Math.min(1, maxGalleryWidth / scaledWidth);
+
           setGalleryContainerSize({
-            width: Math.max(GALLERY_MIN_EDGE, Math.round(width * scale)),
-            height: Math.max(GALLERY_MIN_EDGE, Math.round(height * scale)),
+            width: Math.max(1, Math.round(scaledWidth * viewportScale)),
+            height: Math.max(1, Math.round(scaledHeight * viewportScale)),
           });
         } else {
           setGalleryContainerSize({
-            width: GALLERY_MIN_EDGE,
-            height: GALLERY_MIN_EDGE,
+            width: maxGalleryWidth,
+            height: maxGalleryWidth,
           });
         }
       },
@@ -158,8 +177,8 @@ export function ExpandedFeedMedia({
           return;
         }
         setGalleryContainerSize({
-          width: GALLERY_MIN_EDGE,
-          height: GALLERY_MIN_EDGE,
+          width: maxGalleryWidth,
+          height: maxGalleryWidth,
         });
       }
     );
@@ -167,7 +186,7 @@ export function ExpandedFeedMedia({
     return () => {
       active = false;
     };
-  }, [galleryImageUrls]);
+  }, [galleryImageUrls, maxGalleryWidth]);
 
   const handleGalleryMomentumEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -248,6 +267,33 @@ export function ExpandedFeedMedia({
     );
   }
 
+  if (redditGalleryUrl && !shouldLoadGallery) {
+    return (
+      <TouchableOpacity
+        style={[
+          styles.galleryPlaceholder,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.paperWarm,
+          },
+        ]}
+        onPress={() => setHasRequestedGalleryLoad(true)}
+        activeOpacity={0.8}
+        accessibilityLabel="Load Images"
+      >
+        <Feather name="image" size={18} color={colors.inkSoft} />
+        <Text style={[styles.galleryPlaceholderTitle, { color: colors.ink }]}>
+          Load Images
+        </Text>
+        <Text
+          style={[styles.galleryPlaceholderSubtle, { color: colors.inkSoft }]}
+        >
+          {nsfw ? "NSFW gallery. Tap to load." : "Tap to load gallery images."}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
   if (galleryImageUrls?.length) {
     if (!galleryContainerSize) {
       return (
@@ -282,67 +328,69 @@ export function ExpandedFeedMedia({
         </View>
       ) : null;
 
-    // On web, render a single controlled slide with navigation buttons placed
-    // beside the image (not overlaid), and no ScrollView.
+    // On web, render a single controlled slide with overlaid edge controls.
     if (Platform.OS === "web") {
       return (
-        <View style={{ alignSelf: imageAlignment }}>
-          <View style={styles.galleryRow}>
-            {galleryImageUrls.length > 1 ? (
+        <View
+          style={[
+            styles.galleryContainer,
+            { width: slideW, height: slideH, alignSelf: imageAlignment },
+          ]}
+          testID={testID}
+          accessibilityLabel="Reddit gallery"
+        >
+          <View style={{ width: slideW, height: slideH }}>
+            <Image
+              source={{ uri: galleryImageUrls[activeGalleryIndex] }}
+              style={styles.galleryImage}
+              resizeMode="contain"
+              blurRadius={blur ? 24 : 0}
+              testID={
+                testID ? `${testID}-image-${activeGalleryIndex}` : undefined
+              }
+            />
+          </View>
+          {galleryImageUrls.length > 1 ? (
+            <>
               <TouchableOpacity
                 accessibilityLabel="Previous gallery image"
                 disabled={activeGalleryIndex === 0}
                 onPress={() => scrollToGalleryIndex(activeGalleryIndex - 1)}
                 style={[
-                  styles.galleryControlButton,
+                  styles.mobileGalleryControlButton,
+                  styles.mobileGalleryControlLeft,
                   {
-                    backgroundColor: colors.paperWarm,
-                    borderColor: colors.border,
-                    opacity: activeGalleryIndex === 0 ? 0.45 : 0.96,
+                    backgroundColor: `${colors.ink}cc`,
+                    borderColor: colors.paper,
+                    opacity: activeGalleryIndex === 0 ? 0.35 : 0.95,
                   },
                 ]}
                 testID={testID ? `${testID}-previous` : undefined}
               >
-                <Feather name="chevron-left" size={18} color={colors.ink} />
+                <Feather name="chevron-left" size={18} color={colors.paper} />
               </TouchableOpacity>
-            ) : null}
-            <View
-              style={{ width: slideW, height: slideH }}
-              testID={testID}
-              accessibilityLabel="Reddit gallery"
-            >
-              <Image
-                source={{ uri: galleryImageUrls[activeGalleryIndex] }}
-                style={styles.galleryImage}
-                resizeMode="contain"
-                blurRadius={blur ? 24 : 0}
-                testID={
-                  testID ? `${testID}-image-${activeGalleryIndex}` : undefined
-                }
-              />
-            </View>
-            {galleryImageUrls.length > 1 ? (
               <TouchableOpacity
                 accessibilityLabel="Next gallery image"
                 disabled={activeGalleryIndex === galleryImageUrls.length - 1}
                 onPress={() => scrollToGalleryIndex(activeGalleryIndex + 1)}
                 style={[
-                  styles.galleryControlButton,
+                  styles.mobileGalleryControlButton,
+                  styles.mobileGalleryControlRight,
                   {
-                    backgroundColor: colors.paperWarm,
-                    borderColor: colors.border,
+                    backgroundColor: `${colors.ink}cc`,
+                    borderColor: colors.paper,
                     opacity:
                       activeGalleryIndex === galleryImageUrls.length - 1
-                        ? 0.45
-                        : 0.96,
+                        ? 0.35
+                        : 0.95,
                   },
                 ]}
                 testID={testID ? `${testID}-next` : undefined}
               >
-                <Feather name="chevron-right" size={18} color={colors.ink} />
+                <Feather name="chevron-right" size={18} color={colors.paper} />
               </TouchableOpacity>
-            ) : null}
-          </View>
+            </>
+          ) : null}
           {galleryDots}
         </View>
       );
@@ -380,6 +428,47 @@ export function ExpandedFeedMedia({
             </View>
           ))}
         </ScrollView>
+        {galleryImageUrls.length > 1 ? (
+          <>
+            <TouchableOpacity
+              accessibilityLabel="Previous gallery image"
+              disabled={activeGalleryIndex === 0}
+              onPress={() => scrollToGalleryIndex(activeGalleryIndex - 1)}
+              style={[
+                styles.mobileGalleryControlButton,
+                styles.mobileGalleryControlLeft,
+                {
+                  backgroundColor: `${colors.ink}cc`,
+                  borderColor: colors.paper,
+                  opacity: activeGalleryIndex === 0 ? 0.35 : 0.95,
+                },
+              ]}
+              testID={testID ? `${testID}-previous` : undefined}
+            >
+              <Feather name="chevron-left" size={18} color={colors.paper} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              accessibilityLabel="Next gallery image"
+              disabled={activeGalleryIndex === galleryImageUrls.length - 1}
+              onPress={() => scrollToGalleryIndex(activeGalleryIndex + 1)}
+              style={[
+                styles.mobileGalleryControlButton,
+                styles.mobileGalleryControlRight,
+                {
+                  backgroundColor: `${colors.ink}cc`,
+                  borderColor: colors.paper,
+                  opacity:
+                    activeGalleryIndex === galleryImageUrls.length - 1
+                      ? 0.35
+                      : 0.95,
+                },
+              ]}
+              testID={testID ? `${testID}-next` : undefined}
+            >
+              <Feather name="chevron-right" size={18} color={colors.paper} />
+            </TouchableOpacity>
+          </>
+        ) : null}
         {galleryDots}
       </View>
     );
@@ -435,6 +524,25 @@ const styles = StyleSheet.create({
   galleryContainer: {
     overflow: "hidden",
   },
+  mobileGalleryControlButton: {
+    position: "absolute",
+    top: "50%",
+    marginTop: -44,
+    width: 24,
+    height: 88,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+    elevation: 4,
+  },
+  mobileGalleryControlLeft: {
+    left: 0,
+  },
+  mobileGalleryControlRight: {
+    right: 0,
+  },
   galleryRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -470,5 +578,28 @@ const styles = StyleSheet.create({
     minHeight: 120,
     alignItems: "center",
     justifyContent: "center",
+  },
+  galleryPlaceholder: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: MAX_EXPANDED_IMAGE_EDGE,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    borderStyle: "dashed",
+    minHeight: 120,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: spacing.md,
+    gap: spacing.xs,
+  },
+  galleryPlaceholderTitle: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+    fontWeight: "600",
+  },
+  galleryPlaceholderSubtle: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+    textAlign: "center",
   },
 });
