@@ -184,7 +184,7 @@ describe("database.web — items", () => {
     expect(withoutImage.image_url).toBeNull();
   });
 
-  it("upserts items and skips duplicates by (feed_id, url)", async () => {
+  it("upserts items and updates duplicates by (feed_id, url)", async () => {
     await upsertItems(feedId, [
       {
         title: "One",
@@ -202,23 +202,31 @@ describe("database.web — items", () => {
       },
     ]);
 
-    // Re-running with one duplicate URL should not create a duplicate row.
+    // Re-running with one duplicate URL should update existing cached fields.
     await upsertItems(feedId, [
       {
         title: "One again",
         url: "https://x/1",
-        content: null,
-        publishedAt: 1000,
+        content: "updated body",
+        imageUrl: "https://example.com/updated.jpg",
+        publishedAt: 3333,
       },
       { title: "Three", url: "https://x/3", content: null, publishedAt: 3000 },
     ]);
 
     const items = await getItemsForFeed(feedId);
+    // After update, item at https://x/1 has published_at=3333 (highest),
+    // so it sorts first in descending order.
     expect(items.map((i) => i.url)).toEqual([
+      "https://x/1",
       "https://x/3",
       "https://x/2",
-      "https://x/1",
     ]);
+    const updated = items.find((i) => i.url === "https://x/1");
+    expect(updated?.title).toBe("One again");
+    expect(updated?.content).toBe("updated body");
+    expect(updated?.image_url).toBe("https://example.com/updated.jpg");
+    expect(updated?.published_at).toBe(3333);
     expect(await getItemCountForFeed(feedId)).toBe(3);
   });
 

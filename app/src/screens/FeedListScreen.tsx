@@ -28,6 +28,7 @@ import {
 } from "../database";
 import { Feather } from "@expo/vector-icons";
 import { refreshFeeds } from "../feedRefresher";
+import type { FeedRefreshProgress } from "../feedRefresher";
 import {
   FeedLayoutMode,
   Feed,
@@ -81,6 +82,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<number>>(
     new Set()
   );
+  const [refreshProgress, setRefreshProgress] =
+    useState<FeedRefreshProgress | null>(null);
   const selectedFeedId = route.params?.selectedFeedId;
 
   const loadData = useCallback(async () => {
@@ -89,10 +92,27 @@ export default function FeedListScreen({ navigation, route }: Props) {
       setFeeds(feedData);
 
       if (feedData.length > 0) {
-        const errors = await refreshFeeds(feedData);
+        setRefreshProgress({
+          total: feedData.length,
+          completed: 0,
+          loading: feedData.length,
+          succeeded: 0,
+          failed: 0,
+        });
+        const errors = await refreshFeeds(feedData, {
+          onProgress: setRefreshProgress,
+        });
         if (errors > 0) {
           Alert.alert("Refresh", `${errors} feed(s) could not be refreshed.`);
         }
+      } else {
+        setRefreshProgress({
+          total: 0,
+          completed: 0,
+          loading: 0,
+          succeeded: 0,
+          failed: 0,
+        });
       }
 
       const [itemData, ids] = await Promise.all([
@@ -106,6 +126,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      setRefreshProgress(null);
     }
   }, []);
 
@@ -388,6 +409,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
   }, [sortedItems, filter, savedIds, retainedUnreadIds]);
 
   if (loading) {
+    const totalLoading = refreshProgress?.total ?? 0;
+    const completed = refreshProgress?.completed ?? 0;
+    const activeLoading = refreshProgress?.loading ?? totalLoading;
+
     return (
       <View
         style={[
@@ -397,6 +422,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
         ]}
       >
         <ActivityIndicator size="large" color={colors.accent} />
+        <Text style={[styles.loadingTitle, { color: colors.ink }]}>
+          Loading feeds...
+        </Text>
+        <Text style={[styles.loadingMeta, { color: colors.inkSoft }]}>
+          {completed} completed of {totalLoading}
+        </Text>
+        <Text style={[styles.loadingMeta, { color: colors.inkSoft }]}>
+          {activeLoading} still loading
+        </Text>
       </View>
     );
   }
@@ -513,6 +547,22 @@ export default function FeedListScreen({ navigation, route }: Props) {
           </TouchableOpacity>
         ) : null}
       </View>
+
+      {refreshing && refreshProgress && refreshProgress.total > 0 ? (
+        <View
+          style={[
+            styles.refreshProgressRow,
+            { borderBottomColor: colors.inkFaint },
+          ]}
+        >
+          <MetaText>
+            Refreshing feeds: {refreshProgress.completed}/
+            {refreshProgress.total} completed
+          </MetaText>
+          <View style={styles.progressSpacer} />
+          <MetaText>{refreshProgress.loading} loading</MetaText>
+        </View>
+      ) : null}
 
       {feeds.length === 0 ? (
         <View style={styles.center}>
@@ -711,6 +761,28 @@ const styles = StyleSheet.create({
     width: 1,
     height: 16,
     marginHorizontal: spacing.xs,
+  },
+  refreshProgressRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
+  },
+  progressSpacer: {
+    flex: 1,
+  },
+  loadingTitle: {
+    marginTop: spacing.md,
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+  },
+  loadingMeta: {
+    marginTop: spacing.xs,
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
   },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   cardList: {

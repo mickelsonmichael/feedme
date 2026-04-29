@@ -12,6 +12,7 @@ jest.mock("./database", () => ({
   upsertItems: jest.fn(),
   updateFeedLastFetched: jest.fn(),
   setFeedError: jest.fn(),
+  getItemCountForFeed: jest.fn(),
 }));
 
 const mockFetchFeed = fetchFeed as jest.MockedFunction<typeof fetchFeed>;
@@ -25,6 +26,10 @@ const mockUpdateFeedLastFetched =
 const mockSetFeedError = database.setFeedError as jest.MockedFunction<
   typeof database.setFeedError
 >;
+const mockGetItemCountForFeed =
+  database.getItemCountForFeed as jest.MockedFunction<
+    typeof database.getItemCountForFeed
+  >;
 
 const makeFeed = (id: number): Feed => ({
   id,
@@ -48,6 +53,7 @@ beforeEach(() => {
   mockUpsertItems.mockResolvedValue(undefined);
   mockUpdateFeedLastFetched.mockResolvedValue(undefined);
   mockSetFeedError.mockResolvedValue(undefined);
+  mockGetItemCountForFeed.mockResolvedValue(0);
 });
 
 describe("refreshFeeds", () => {
@@ -124,5 +130,48 @@ describe("refreshFeeds", () => {
     expect(mockUpsertItems).not.toHaveBeenCalled();
     expect(mockSetFeedError).toHaveBeenCalledWith(1, "Offline");
     expect(mockSetFeedError).toHaveBeenCalledWith(2, "Offline");
+  });
+
+  it("reports progress counts while refreshing feeds", async () => {
+    // Arrange
+    const feeds = [makeFeed(1), makeFeed(2)];
+    const onProgress = jest.fn();
+
+    // Act
+    const errors = await refreshFeeds(feeds, { onProgress });
+
+    // Assert
+    expect(errors).toBe(0);
+    expect(onProgress).toHaveBeenCalledWith({
+      total: 2,
+      completed: 0,
+      loading: 2,
+      succeeded: 0,
+      failed: 0,
+    });
+    expect(onProgress).toHaveBeenCalledWith({
+      total: 2,
+      completed: 2,
+      loading: 0,
+      succeeded: 2,
+      failed: 0,
+    });
+  });
+
+  it("keeps failed feed errors but notes cached fallback when available", async () => {
+    // Arrange
+    const feeds = [makeFeed(1)];
+    mockFetchFeed.mockRejectedValue(new Error("Offline"));
+    mockGetItemCountForFeed.mockResolvedValue(3);
+
+    // Act
+    const errors = await refreshFeeds(feeds);
+
+    // Assert
+    expect(errors).toBe(1);
+    expect(mockSetFeedError).toHaveBeenCalledWith(
+      1,
+      "Offline Showing cached posts."
+    );
   });
 });

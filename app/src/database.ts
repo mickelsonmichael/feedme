@@ -206,7 +206,12 @@ export async function upsertItems(
     await database.runAsync(
       `INSERT INTO items (feed_id, title, url, content, image_url, raw_xml, published_at)
        VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (feed_id, url) DO NOTHING`,
+       ON CONFLICT (feed_id, url) DO UPDATE SET
+         title = excluded.title,
+         content = excluded.content,
+         image_url = excluded.image_url,
+         raw_xml = excluded.raw_xml,
+         published_at = excluded.published_at`,
       [
         feedId,
         item.title,

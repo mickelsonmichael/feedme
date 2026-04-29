@@ -251,14 +251,22 @@ export async function upsertItems(
 ): Promise<void> {
   const state = loadState();
   for (const item of items) {
-    // Mirror `ON CONFLICT (feed_id, url) DO NOTHING` — but only when url is
+    // Mirror `ON CONFLICT (feed_id, url) DO UPDATE` — but only when `url` is
     // non-null (SQLite does not consider NULLs equal in UNIQUE constraints).
-    if (
-      item.url != null &&
-      state.items.some((i) => i.feed_id === feedId && i.url === item.url)
-    ) {
-      continue;
+    if (item.url != null) {
+      const existing = state.items.find(
+        (i) => i.feed_id === feedId && i.url === item.url
+      );
+      if (existing) {
+        existing.title = item.title;
+        existing.content = item.content ?? null;
+        existing.image_url = item.imageUrl ?? null;
+        existing.raw_xml = item.rawXml ?? null;
+        existing.published_at = item.publishedAt ?? null;
+        continue;
+      }
     }
+
     state.items.push({
       id: state.nextItemId++,
       feed_id: feedId,
