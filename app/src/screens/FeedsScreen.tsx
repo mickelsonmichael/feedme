@@ -268,8 +268,9 @@ const styles = StyleSheet.create({
   addBtn: {
     borderRadius: radii.md,
     borderWidth: 1,
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+    minHeight: 40,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -290,6 +291,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    minHeight: 44,
   },
   quickLinkText: {
     flex: 1,
@@ -316,6 +318,7 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
+    minHeight: 44,
   },
   feedIcon: {
     width: 16,
@@ -342,8 +345,8 @@ const styles = StyleSheet.create({
   editBtn: {
     borderWidth: 1,
     borderRadius: radii.md,
-    width: 34,
-    height: 34,
+    width: 38,
+    height: 38,
     marginRight: spacing.lg,
     alignItems: "center",
     justifyContent: "center",

@@ -180,6 +180,7 @@ export function FeedPostCard({
             <ReadToggleButton read={item.read} onPress={onToggleRead} />
             <SaveButton saved={saved} onPress={onToggleSave} />
             <TouchableOpacity
+              style={styles.iconActionBtn}
               onPress={onOpenOriginalLink}
               activeOpacity={0.6}
               hitSlop={8}
@@ -194,6 +195,7 @@ export function FeedPostCard({
             </TouchableOpacity>
             {redditCommentsLink ? (
               <TouchableOpacity
+                style={styles.iconActionBtn}
                 onPress={() => onOpenContentLink(redditCommentsLink.url)}
                 activeOpacity={0.6}
                 hitSlop={8}
@@ -279,6 +281,7 @@ export function FeedPostCard({
             <ReadToggleButton read={item.read} onPress={onToggleRead} />
             <SaveButton saved={saved} onPress={onToggleSave} />
             <TouchableOpacity
+              style={styles.iconActionBtn}
               onPress={onOpenOriginalLink}
               activeOpacity={0.6}
               hitSlop={8}
@@ -293,6 +296,7 @@ export function FeedPostCard({
             </TouchableOpacity>
             {redditCommentsLink ? (
               <TouchableOpacity
+                style={styles.iconActionBtn}
                 onPress={() => onOpenContentLink(redditCommentsLink.url)}
                 activeOpacity={0.6}
                 hitSlop={8}
@@ -307,6 +311,7 @@ export function FeedPostCard({
             ) : null}
             {showRawXml && onOpenRawXml ? (
               <TouchableOpacity
+                style={styles.iconActionBtn}
                 onPress={onOpenRawXml}
                 activeOpacity={0.6}
                 hitSlop={8}
@@ -425,6 +430,7 @@ function ReadToggleButton({
 
   return (
     <TouchableOpacity
+      style={styles.iconActionBtn}
       onPress={onPress}
       activeOpacity={0.6}
       hitSlop={8}
@@ -450,6 +456,7 @@ function SaveButton({
 
   return (
     <TouchableOpacity
+      style={styles.iconActionBtn}
       onPress={onPress}
       activeOpacity={0.6}
       hitSlop={8}
@@ -598,11 +605,19 @@ const styles = StyleSheet.create({
   contentLinkBtn: {
     borderWidth: 1,
     borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    minHeight: 32,
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+  },
+  iconActionBtn: {
+    minHeight: 30,
+    minWidth: 30,
+    padding: 6,
+    alignItems: "center",
+    justifyContent: "center",
   },
   contentLinkText: {
     fontFamily: fonts.sans,

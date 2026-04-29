@@ -154,8 +154,9 @@ const styles = StyleSheet.create({
   pillBase: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 10,
-    paddingVertical: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    minHeight: 30,
     borderRadius: radii.pill,
     borderWidth: 1,
     alignSelf: "flex-start",
