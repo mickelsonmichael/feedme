@@ -116,6 +116,37 @@ export default function FeedsScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
+      <View
+        style={[
+          styles.quickLinksSection,
+          { borderBottomColor: colors.inkFaint },
+        ]}
+      >
+        <TouchableOpacity
+          style={styles.quickLinkRow}
+          onPress={() => navigation.navigate("Feed", {})}
+          accessibilityLabel="Go to all feeds"
+          activeOpacity={0.8}
+        >
+          <Feather name="home" size={16} color={colors.inkSoft} />
+          <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+            All Feeds
+          </Text>
+        </TouchableOpacity>
+        <DashedDivider />
+        <TouchableOpacity
+          style={styles.quickLinkRow}
+          onPress={() => navigation.navigate("Saved")}
+          accessibilityLabel="Go to saved"
+          activeOpacity={0.8}
+        >
+          <Feather name="bookmark" size={16} color={colors.inkSoft} />
+          <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+            Saved
+          </Text>
+        </TouchableOpacity>
+      </View>
+
       {feeds.length === 0 ? (
         <View style={styles.center}>
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
@@ -139,38 +170,6 @@ export default function FeedsScreen({ navigation }: Props) {
           data={visibleFeeds}
           keyExtractor={(item) => String(item.id)}
           contentContainerStyle={styles.list}
-          ListHeaderComponent={
-            <View
-              style={[
-                styles.quickLinksSection,
-                { borderBottomColor: colors.inkFaint },
-              ]}
-            >
-              <TouchableOpacity
-                style={styles.quickLinkRow}
-                onPress={() => navigation.navigate("Feed", {})}
-                accessibilityLabel="Go to all feeds"
-                activeOpacity={0.8}
-              >
-                <Feather name="home" size={16} color={colors.inkSoft} />
-                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
-                  All Feeds
-                </Text>
-              </TouchableOpacity>
-              <DashedDivider />
-              <TouchableOpacity
-                style={styles.quickLinkRow}
-                onPress={() => navigation.navigate("Saved")}
-                accessibilityLabel="Go to saved"
-                activeOpacity={0.8}
-              >
-                <Feather name="bookmark" size={16} color={colors.inkSoft} />
-                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
-                  Saved
-                </Text>
-              </TouchableOpacity>
-            </View>
-          }
           ItemSeparatorComponent={() => <DashedDivider />}
           renderItem={({ item }) => {
             const iconUri = getFeedIconUrl(item.url);
