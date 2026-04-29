@@ -369,6 +369,67 @@ describe("FeedListScreen", () => {
     });
   });
 
+  it("does not refresh on mobile focus and refreshes only on pull-to-refresh", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 103,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Manual refresh only",
+        url: "https://alpha.example/manual-refresh-only",
+        content: "body",
+        image_url: null,
+        published_at: 1_700_000_000_000,
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-mobile-refresh",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert - focus load on mobile does not trigger remote refresh
+    expect(refreshFeeds).not.toHaveBeenCalled();
+
+    const list = tree!.root.findByType(FlatList);
+    await act(async () => {
+      await list.props.onRefresh();
+    });
+
+    // Assert - pull to refresh triggers remote refresh
+    expect(refreshFeeds).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
   it("opens the original post from the main feed row action", async () => {
     // Arrange
     (getFeeds as jest.Mock).mockResolvedValue([

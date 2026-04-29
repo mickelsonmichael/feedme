@@ -62,6 +62,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const { setHeaderContent, clearHeaderContent } = useHeaderContent();
   const { width: viewportWidth } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
+  const shouldRefreshOnFocus = isWeb;
   const isFocused = useIsFocused();
   const [feedLayout, setFeedLayout] = useState<FeedLayoutMode>(
     () => loadConfig().feedLayout ?? "compact"
@@ -86,12 +87,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
     useState<FeedRefreshProgress | null>(null);
   const selectedFeedId = route.params?.selectedFeedId;
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (refreshRemote: boolean) => {
     try {
       const feedData = await getFeeds();
       setFeeds(feedData);
 
-      if (feedData.length > 0) {
+      if (!refreshRemote) {
+        setRefreshProgress(null);
+      } else if (feedData.length > 0) {
         setRefreshProgress({
           total: feedData.length,
           completed: 0,
@@ -133,15 +136,17 @@ export default function FeedListScreen({ navigation, route }: Props) {
   useFocusEffect(
     useCallback(() => {
       setFeedLayout(loadConfig().feedLayout ?? "compact");
-      setRefreshing(true);
-      loadData();
-    }, [loadData])
+      if (shouldRefreshOnFocus) {
+        setRefreshing(true);
+      }
+      loadData(shouldRefreshOnFocus);
+    }, [loadData, shouldRefreshOnFocus])
   );
 
   const handleRefreshAll = async () => {
     setRetainedUnreadIds(new Set());
     setRefreshing(true);
-    await loadData();
+    await loadData(true);
   };
 
   const handleOpenItem = async (item: FeedItemWithFeed) => {
