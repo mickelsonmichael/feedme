@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   ScrollView,
+  Switch,
   TouchableOpacity,
   Platform,
 } from "react-native";
@@ -31,6 +32,29 @@ function SectionHeading({ label }: { label: string }) {
     <Text style={[styles.sectionHeading, { color: colors.inkSoft }]}>
       {label}
     </Text>
+  );
+}
+
+function ToggleRow({
+  label,
+  value,
+  onValueChange,
+}: {
+  label: string;
+  value: boolean;
+  onValueChange: (v: boolean) => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={[styles.row, { borderBottomColor: colors.inkFaint }]}>
+      <Text style={[styles.rowLabel, { color: colors.ink }]}>{label}</Text>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        thumbColor={colors.paper}
+        trackColor={{ false: colors.inkFaint, true: colors.accent }}
+      />
+    </View>
   );
 }
 
@@ -248,6 +272,15 @@ export default function SettingsScreen({ navigation }: Props) {
   const [linkOpenMode, setLinkOpenMode] = React.useState<LinkOpenMode>(
     () => loadConfig().linkOpenMode ?? "embedded"
   );
+  const [markAsReadOnScroll, setMarkAsReadOnScroll] = React.useState(
+    () => loadConfig().markAsReadOnScroll ?? false
+  );
+  const [hideReadByDefault, setHideReadByDefault] = React.useState(
+    () => loadConfig().hideReadByDefault ?? false
+  );
+  const [defaultSort, setDefaultSort] = React.useState<"newest" | "stacked">(
+    () => loadConfig().defaultSort ?? "stacked"
+  );
 
   const handleLayoutChange = React.useCallback((nextLayout: FeedLayoutMode) => {
     setFeedLayout(nextLayout);
@@ -270,6 +303,36 @@ export default function SettingsScreen({ navigation }: Props) {
     []
   );
 
+  const handleMarkAsReadOnScrollChange = React.useCallback((value: boolean) => {
+    setMarkAsReadOnScroll(value);
+    try {
+      saveConfig({ markAsReadOnScroll: value });
+    } catch (e) {
+      console.warn("[feedme] Failed to persist markAsReadOnScroll:", e);
+    }
+  }, []);
+
+  const handleHideReadByDefaultChange = React.useCallback((value: boolean) => {
+    setHideReadByDefault(value);
+    try {
+      saveConfig({ hideReadByDefault: value });
+    } catch (e) {
+      console.warn("[feedme] Failed to persist hideReadByDefault:", e);
+    }
+  }, []);
+
+  const handleDefaultSortChange = React.useCallback(
+    (value: "newest" | "stacked") => {
+      setDefaultSort(value);
+      try {
+        saveConfig({ defaultSort: value });
+      } catch (e) {
+        console.warn("[feedme] Failed to persist defaultSort:", e);
+      }
+    },
+    []
+  );
+
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -282,6 +345,28 @@ export default function SettingsScreen({ navigation }: Props) {
             { value: "system", label: "System" },
           ]}
           onChange={(v) => setMode(v as ThemeMode)}
+        />
+
+        <SectionHeading label="Reading" />
+        <ToggleRow
+          label="Mark as read on scroll"
+          value={markAsReadOnScroll}
+          onValueChange={handleMarkAsReadOnScrollChange}
+        />
+        <ToggleRow
+          label="Hide read items by default"
+          value={hideReadByDefault}
+          onValueChange={handleHideReadByDefaultChange}
+        />
+
+        <SectionHeading label="Default sort" />
+        <Segmented
+          value={defaultSort}
+          options={[
+            { value: "newest", label: "Newest" },
+            { value: "stacked", label: "Stacked" },
+          ]}
+          onChange={handleDefaultSortChange}
         />
 
         <SectionHeading label="Feed layout" />

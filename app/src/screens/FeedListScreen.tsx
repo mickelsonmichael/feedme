@@ -16,6 +16,7 @@ import {
   ScrollView,
   useWindowDimensions,
   Platform,
+  ViewToken,
 } from "react-native";
 import { FlashList, FlashListRef } from "@shopify/flash-list";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -76,8 +77,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [items, setItems] = useState<FeedItemWithFeed[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState<FilterMode>("all");
-  const [sort, setSort] = useState<SortMode>("stacked");
+  const [filter, setFilter] = useState<FilterMode>(() =>
+    loadConfig().hideReadByDefault ? "unread" : "all"
+  );
+  const [sort, setSort] = useState<SortMode>(
+    () => loadConfig().defaultSort ?? "stacked"
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
@@ -94,6 +99,31 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const scrollToTopParam = route.params?.scrollToTop;
 
   const flatListRef = useRef<FlashListRef<FeedItemWithFeed>>(null);
+
+  const viewabilityConfig = useRef({
+    itemVisiblePercentThreshold: 60,
+    minimumViewTime: 400,
+  }).current;
+
+  const handleViewableItemsChanged = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+      if (!loadConfig().markAsReadOnScroll) return;
+      for (const token of viewableItems) {
+        const item = token.item as FeedItemWithFeed;
+        if (!item.read) {
+          setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+          markItemRead(item.id)
+            .then(() => {
+              setItems((prev) =>
+                prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
+              );
+            })
+            .catch(() => {});
+        }
+      }
+    },
+    []
+  );
 
   // Mobile: scroll to top when the Feed tab button is tapped while already focused
   useEffect(() => {
@@ -659,6 +689,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
           keyExtractor={keyExtractor}
           onRefresh={handleRefreshAll}
           refreshing={refreshing}
+          viewabilityConfig={viewabilityConfig}
+          onViewableItemsChanged={handleViewableItemsChanged}
           contentContainerStyle={[
             styles.list,
             feedLayout === "card" ? styles.cardList : null,

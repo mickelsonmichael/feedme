@@ -14,6 +14,9 @@ export type WebConfig = {
   themeMode?: ThemeMode;
   feedLayout?: FeedLayoutMode;
   linkOpenMode?: LinkOpenMode;
+  markAsReadOnScroll?: boolean;
+  hideReadByDefault?: boolean;
+  defaultSort?: "newest" | "stacked";
 };
 
 let cachedConfig: WebConfig | null = null;
@@ -47,6 +50,23 @@ function validateConfig(raw: unknown): WebConfig {
       LINK_OPEN_MODES.includes(linkOpenMode as LinkOpenMode)
     ) {
       config.linkOpenMode = linkOpenMode as LinkOpenMode;
+    }
+
+    const markAsReadOnScroll = (raw as Record<string, unknown>)
+      .markAsReadOnScroll;
+    if (typeof markAsReadOnScroll === "boolean") {
+      config.markAsReadOnScroll = markAsReadOnScroll;
+    }
+
+    const hideReadByDefault = (raw as Record<string, unknown>)
+      .hideReadByDefault;
+    if (typeof hideReadByDefault === "boolean") {
+      config.hideReadByDefault = hideReadByDefault;
+    }
+
+    const defaultSort = (raw as Record<string, unknown>).defaultSort;
+    if (defaultSort === "newest" || defaultSort === "stacked") {
+      config.defaultSort = defaultSort;
     }
   }
   return config;
