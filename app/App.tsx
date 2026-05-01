@@ -130,7 +130,11 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
         ]}
         onPress={() => {
           if (name === "Feed") {
-            navigation.navigate("Feed", {});
+            if (currentRoute === "Feed" && selectedFeedId === undefined) {
+              navigation.navigate("Feed", { scrollToTop: Date.now() });
+            } else {
+              navigation.navigate("Feed", {});
+            }
             return;
           }
           navigation.navigate(name);

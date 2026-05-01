@@ -70,6 +70,7 @@ export type TabParamList = {
     | {
         selectedFeedId?: number;
         selectedFeedTitle?: string;
+        scrollToTop?: number;
       }
     | undefined;
   Saved: undefined;

@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useMemo, useEffect } from "react";
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useEffect,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -86,6 +92,27 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [refreshProgress, setRefreshProgress] =
     useState<FeedRefreshProgress | null>(null);
   const selectedFeedId = route.params?.selectedFeedId;
+  const scrollToTopParam = route.params?.scrollToTop;
+
+  const flatListRef =
+    useRef<InstanceType<typeof FlatList<FeedItemWithFeed>>>(null);
+
+  // Mobile: scroll to top when the Feed tab button is tapped while already focused
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("tabPress", () => {
+      if (navigation.isFocused()) {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }
+    });
+    return unsubscribe;
+  }, [navigation]);
+
+  // Web sidebar: scroll to top when the Feed nav item is pressed while already active
+  useEffect(() => {
+    if (scrollToTopParam) {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+    }
+  }, [scrollToTopParam]);
 
   const loadData = useCallback(async (refreshRemote: boolean) => {
     try {
@@ -604,6 +631,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         </View>
       ) : (
         <FlatList
+          ref={flatListRef}
           data={visibleItems}
           keyExtractor={(item) => String(item.id)}
           onRefresh={handleRefreshAll}
