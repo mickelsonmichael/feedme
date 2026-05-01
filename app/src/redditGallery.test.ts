@@ -98,7 +98,7 @@ describe("fetchRedditGalleryImageUrls", () => {
     // Assert
     expect(mockFetchWithProxyFallback).toHaveBeenCalledWith(
       "https://www.reddit.com/comments/1sw5l42.json?raw_json=1",
-      undefined,
+      { headers: { "User-Agent": "Mozilla/5.0 (compatible; feedme/1.0)" } },
       undefined
     );
     expect(result).toEqual([
@@ -123,7 +123,7 @@ describe("fetchRedditGalleryImageUrls", () => {
     // Assert
     expect(mockFetchWithProxyFallback).toHaveBeenCalledWith(
       "https://www.reddit.com/comments/1sw5l42.json?raw_json=1",
-      undefined,
+      { headers: { "User-Agent": "Mozilla/5.0 (compatible; feedme/1.0)" } },
       true
     );
   });

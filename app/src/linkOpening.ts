@@ -1,4 +1,5 @@
 import { Alert, Linking, Platform } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { loadConfig } from "./storage";
 import type { LinkOpenMode, RootStackParamList } from "./types";
@@ -16,10 +17,18 @@ export function openUrlWithPreference({
   navigation: Pick<NativeStackNavigationProp<RootStackParamList>, "navigate">;
   title?: string;
 }): void {
-  const shouldUseEmbedded =
-    Platform.OS !== "web" && preferredLinkOpenMode() === "embedded";
+  const mode = preferredLinkOpenMode();
 
-  if (shouldUseEmbedded) {
+  if (Platform.OS !== "web" && mode === "embedded") {
+    // Use Chrome Custom Tabs (Android) / SFSafariViewController (iOS) so that
+    // the user's existing browser session and cookies are available.
+    WebBrowser.openBrowserAsync(url).catch(() =>
+      Alert.alert("Error", "Cannot open this URL.")
+    );
+    return;
+  }
+
+  if (Platform.OS === "web" && mode === "embedded") {
     navigation.navigate("InAppBrowser", { url, title });
     return;
   }

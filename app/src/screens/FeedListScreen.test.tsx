@@ -173,6 +173,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-test",
@@ -265,6 +267,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-selected",
@@ -326,6 +330,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-open",
@@ -399,6 +405,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-mobile-refresh",
@@ -460,6 +468,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-open-original",
@@ -538,6 +548,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-unread",
@@ -627,6 +639,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-read-toggle",
@@ -692,6 +706,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-reddit",
@@ -779,6 +795,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-card",
@@ -874,6 +892,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-nsfw-compact",
@@ -959,6 +979,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-search",
@@ -1032,6 +1054,8 @@ describe("FeedListScreen", () => {
 
     const navigation = {
       navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
       key: "Feed-layout-toggle",
