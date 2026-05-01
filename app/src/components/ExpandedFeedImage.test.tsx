@@ -1,5 +1,6 @@
 import React from "react";
-import { Image, StyleSheet } from "react-native";
+import { Image as RNImage, StyleSheet } from "react-native";
+import { Image } from "expo-image";
 import renderer, { act } from "react-test-renderer";
 import { ExpandedFeedImage } from "../components/ExpandedFeedImage";
 
@@ -27,7 +28,7 @@ describe("ExpandedFeedImage", () => {
   it("left-aligns the image and constrains it to the available width while preserving aspect ratio", async () => {
     // Arrange
     const getSizeSpy = jest
-      .spyOn(Image, "getSize")
+      .spyOn(RNImage, "getSize")
       .mockImplementation((uri, success) => {
         success?.(1600, 800);
       });
@@ -77,9 +78,11 @@ describe("ExpandedFeedImage", () => {
 
   it("falls back to a bounded square box when image metadata cannot be read", async () => {
     // Arrange
-    jest.spyOn(Image, "getSize").mockImplementation((uri, success, failure) => {
-      failure?.(new Error("metadata failed"));
-    });
+    jest
+      .spyOn(RNImage, "getSize")
+      .mockImplementation((uri, success, failure) => {
+        failure?.(new Error("metadata failed"));
+      });
 
     let tree: renderer.ReactTestRenderer;
 
@@ -121,7 +124,7 @@ describe("ExpandedFeedImage", () => {
 
   it("falls back when image metadata resolves to non-positive dimensions", async () => {
     // Arrange
-    jest.spyOn(Image, "getSize").mockImplementation((uri, success) => {
+    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
       success?.(0, 0);
     });
 
@@ -167,10 +170,12 @@ describe("ExpandedFeedImage", () => {
     // Arrange
     let resolveSize: ((width: number, height: number) => void) | null = null;
     let rejectSize: ((error: Error) => void) | null = null;
-    jest.spyOn(Image, "getSize").mockImplementation((uri, success, failure) => {
-      resolveSize = success ?? null;
-      rejectSize = failure ?? null;
-    });
+    jest
+      .spyOn(RNImage, "getSize")
+      .mockImplementation((uri, success, failure) => {
+        resolveSize = success ?? null;
+        rejectSize = failure ?? null;
+      });
 
     let tree: renderer.ReactTestRenderer;
 
@@ -223,7 +228,7 @@ describe("ExpandedFeedImage", () => {
     // Arrange
     let rejectSize: ((error: Error) => void) | null = null;
     jest
-      .spyOn(Image, "getSize")
+      .spyOn(RNImage, "getSize")
       .mockImplementation((uri, _success, failure) => {
         rejectSize = failure ?? null;
       });
@@ -272,7 +277,7 @@ describe("ExpandedFeedImage", () => {
 
   it("centers the image when card mode requests centered alignment", async () => {
     // Arrange
-    jest.spyOn(Image, "getSize").mockImplementation((uri, success) => {
+    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
       success?.(1200, 600);
     });
 

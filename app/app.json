@@ -28,6 +28,6 @@
     "experiments": {
       "baseUrl": "/feedme"
     },
-    "plugins": ["expo-web-browser"]
+    "plugins": ["expo-web-browser", "expo-image"]
   }
 }

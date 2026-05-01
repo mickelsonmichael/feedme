@@ -7,8 +7,8 @@ import {
   TextInput,
   StyleSheet,
   ActivityIndicator,
-  Image,
 } from "react-native";
+import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
@@ -192,6 +192,8 @@ export default function FeedsScreen({ navigation }: Props) {
                     <Image
                       source={{ uri: iconUri ?? undefined }}
                       style={styles.feedIcon}
+                      cachePolicy="memory-disk"
+                      transition={80}
                       onError={() => {
                         if (!iconUri) {
                           return;

@@ -1,8 +1,7 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback } from "react";
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   Alert,
   StyleSheet,
@@ -10,6 +9,7 @@ import {
   Modal,
   ScrollView,
 } from "react-native";
+import { FlashList } from "@shopify/flash-list";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
@@ -77,27 +77,39 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     }
   }, [feed, loadItems]);
 
+  const hasLoadedOnceRef = React.useRef(false);
   useFocusEffect(
     useCallback(() => {
-      handleRefresh();
-    }, [handleRefresh])
+      // Only auto-refresh on first focus; subsequent focuses (e.g. returning
+      // from the detail screen) reload from the local DB to keep navigation
+      // snappy and avoid burning the radio.
+      if (!hasLoadedOnceRef.current) {
+        hasLoadedOnceRef.current = true;
+        handleRefresh();
+      } else {
+        loadItems();
+      }
+    }, [handleRefresh, loadItems])
   );
 
-  const handleOpenItem = async (item: FeedItem) => {
-    navigation.navigate("FeedItemView", {
-      item: {
-        itemId: item.id,
-        title: item.title,
-        url: item.url,
-        content: item.content,
-        imageUrl: item.image_url,
-        publishedAt: item.published_at,
-        feedTitle: feed.title,
-        read: item.read,
-        useProxy: feed.use_proxy === 1,
-      },
-    });
-  };
+  const handleOpenItem = useCallback(
+    (item: FeedItem) => {
+      navigation.navigate("FeedItemView", {
+        item: {
+          itemId: item.id,
+          title: item.title,
+          url: item.url,
+          content: item.content,
+          imageUrl: item.image_url,
+          publishedAt: item.published_at,
+          feedTitle: feed.title,
+          read: item.read,
+          useProxy: feed.use_proxy === 1,
+        },
+      });
+    },
+    [feed.title, feed.use_proxy, navigation]
+  );
 
   const handleOpenContentLink = useCallback(
     (url: string) => {
@@ -117,41 +129,47 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     [navigation]
   );
 
-  const toggleSave = async (item: FeedItem) => {
-    const alreadySaved = savedIds.has(item.id);
-    try {
-      if (alreadySaved) {
-        await unsavePost(item.id);
-        setSavedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(item.id);
-          return next;
-        });
-      } else {
-        await savePost(item, feed.title);
-        setSavedIds((prev) => new Set(prev).add(item.id));
-      }
-    } catch (err) {
-      Alert.alert("Error", "Could not update saved status.");
-    }
-  };
-
-  const handleToggleExpand = async (item: FeedItem) => {
-    const isExpanding = !expandedIds.has(item.id);
-    setExpandedIds((prev) => toggleExpandedId(prev, item.id));
-    if (isExpanding && !item.read) {
+  const toggleSave = useCallback(
+    async (item: FeedItem) => {
+      const alreadySaved = savedIds.has(item.id);
       try {
-        await markItemRead(item.id);
-        setItems((prev) =>
-          prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
-        );
-      } catch {
-        Alert.alert("Error", "Could not update read status.");
+        if (alreadySaved) {
+          await unsavePost(item.id);
+          setSavedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
+        } else {
+          await savePost(item, feed.title);
+          setSavedIds((prev) => new Set(prev).add(item.id));
+        }
+      } catch (err) {
+        Alert.alert("Error", "Could not update saved status.");
       }
-    }
-  };
+    },
+    [feed.title, savedIds]
+  );
 
-  const toggleRead = async (item: FeedItem) => {
+  const handleToggleExpand = useCallback(
+    async (item: FeedItem) => {
+      const isExpanding = !expandedIds.has(item.id);
+      setExpandedIds((prev) => toggleExpandedId(prev, item.id));
+      if (isExpanding && !item.read) {
+        try {
+          await markItemRead(item.id);
+          setItems((prev) =>
+            prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
+          );
+        } catch {
+          Alert.alert("Error", "Could not update read status.");
+        }
+      }
+    },
+    [expandedIds]
+  );
+
+  const toggleRead = useCallback(async (item: FeedItem) => {
     try {
       if (item.read) {
         await markItemUnread(item.id);
@@ -172,9 +190,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     } catch {
       Alert.alert("Error", "Could not update read status.");
     }
-  };
-
-  const visibleItems = useMemo(() => items, [items]);
+  }, []);
 
   if (loading) {
     return (
@@ -201,7 +217,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
         <View style={styles.spacer} />
         <MetaText>{refreshing ? "refreshing…" : "pull to refresh"}</MetaText>
       </View>
-      {visibleItems.length === 0 ? (
+      {items.length === 0 ? (
         <View style={styles.center}>
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
             No items yet.
@@ -223,36 +239,34 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={visibleItems}
-          keyExtractor={(item) => String(item.id)}
+        <FlashList
+          data={items}
+          keyExtractor={keyExtractor}
           onRefresh={handleRefresh}
           refreshing={refreshing}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => {
-            return (
-              <FeedPostCard
-                item={item}
-                feedTitle={feed.title}
-                layout="compact"
-                nsfw={feed.nsfw === 1}
-                useProxy={feed.use_proxy === 1}
-                saved={savedIds.has(item.id)}
-                expanded={expandedIds.has(item.id)}
-                showExpand
-                showRawXml
-                expandedMediaTestID={`expanded-media-${item.id}`}
-                onOpenItem={() => handleOpenItem(item)}
-                onToggleExpand={() => handleToggleExpand(item)}
-                onToggleRead={() => toggleRead(item)}
-                onToggleSave={() => toggleSave(item)}
-                onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
-                onOpenContentLink={handleOpenContentLink}
-                onOpenRawXml={() => setRawXmlItem(item)}
-              />
-            );
-          }}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={({ item }) => (
+            <FeedPostCard
+              item={item}
+              feedTitle={feed.title}
+              layout="compact"
+              nsfw={feed.nsfw === 1}
+              useProxy={feed.use_proxy === 1}
+              saved={savedIds.has(item.id)}
+              expanded={expandedIds.has(item.id)}
+              showExpand
+              showRawXml
+              expandedMediaTestID={`expanded-media-${item.id}`}
+              onOpenItem={() => handleOpenItem(item)}
+              onToggleExpand={() => handleToggleExpand(item)}
+              onToggleRead={() => toggleRead(item)}
+              onToggleSave={() => toggleSave(item)}
+              onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
+              onOpenContentLink={handleOpenContentLink}
+              onOpenRawXml={() => setRawXmlItem(item)}
+            />
+          )}
+          ItemSeparatorComponent={Separator}
         />
       )}
       <Modal
@@ -261,55 +275,63 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
         transparent
         onRequestClose={() => setRawXmlItem(null)}
       >
-        <View
-          style={[
-            styles.rawModalOverlay,
-            { backgroundColor: "rgba(0,0,0,0.5)" },
-          ]}
-        >
+        {rawXmlItem ? (
           <View
             style={[
-              styles.rawModalSheet,
-              {
-                backgroundColor: colors.paperWarm,
-                borderColor: colors.border,
-              },
+              styles.rawModalOverlay,
+              { backgroundColor: "rgba(0,0,0,0.5)" },
             ]}
           >
             <View
               style={[
-                styles.rawModalHeader,
-                { borderBottomColor: colors.inkFaint },
+                styles.rawModalSheet,
+                {
+                  backgroundColor: colors.paperWarm,
+                  borderColor: colors.border,
+                },
               ]}
             >
-              <Feather name="terminal" size={16} color={colors.inkSoft} />
-              <Text style={[styles.rawModalTitle, { color: colors.ink }]}>
-                Raw XML
-              </Text>
-              <TouchableOpacity
-                onPress={() => setRawXmlItem(null)}
-                hitSlop={8}
-                accessibilityLabel="Close raw XML"
+              <View
+                style={[
+                  styles.rawModalHeader,
+                  { borderBottomColor: colors.inkFaint },
+                ]}
               >
-                <Feather name="x" size={18} color={colors.inkSoft} />
-              </TouchableOpacity>
+                <Feather name="terminal" size={16} color={colors.inkSoft} />
+                <Text style={[styles.rawModalTitle, { color: colors.ink }]}>
+                  Raw XML
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setRawXmlItem(null)}
+                  hitSlop={8}
+                  accessibilityLabel="Close raw XML"
+                >
+                  <Feather name="x" size={18} color={colors.inkSoft} />
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                style={styles.rawModalScroll}
+                contentContainerStyle={styles.rawModalContent}
+              >
+                <Text
+                  style={[styles.rawModalText, { color: colors.ink }]}
+                  selectable
+                >
+                  {rawXmlItem.raw_xml ?? "(no raw XML available)"}
+                </Text>
+              </ScrollView>
             </View>
-            <ScrollView
-              style={styles.rawModalScroll}
-              contentContainerStyle={styles.rawModalContent}
-            >
-              <Text
-                style={[styles.rawModalText, { color: colors.ink }]}
-                selectable
-              >
-                {rawXmlItem?.raw_xml ?? "(no raw XML available)"}
-              </Text>
-            </ScrollView>
           </View>
-        </View>
+        ) : null}
       </Modal>
     </View>
   );
+}
+
+const keyExtractor = (item: FeedItem) => String(item.id);
+
+function Separator() {
+  return <View style={styles.separator} />;
 }
 
 const styles = StyleSheet.create({

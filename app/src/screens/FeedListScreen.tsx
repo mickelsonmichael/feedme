@@ -8,17 +8,16 @@ import React, {
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   TextInput,
   Alert,
   StyleSheet,
   ActivityIndicator,
   ScrollView,
-  Image,
   useWindowDimensions,
   Platform,
 } from "react-native";
+import { FlashList, FlashListRef } from "@shopify/flash-list";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
@@ -94,8 +93,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const selectedFeedId = route.params?.selectedFeedId;
   const scrollToTopParam = route.params?.scrollToTop;
 
-  const flatListRef =
-    useRef<InstanceType<typeof FlatList<FeedItemWithFeed>>>(null);
+  const flatListRef = useRef<FlashListRef<FeedItemWithFeed>>(null);
 
   // Mobile: scroll to top when the Feed tab button is tapped while already focused
   useEffect(() => {
@@ -176,95 +174,116 @@ export default function FeedListScreen({ navigation, route }: Props) {
     await loadData(true);
   };
 
-  const handleOpenItem = async (item: FeedItemWithFeed) => {
-    if (filter === "unread" && !item.read) {
-      setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
-    }
+  const feedDetailsById = useMemo(
+    () => new Map(feeds.map((feed) => [feed.id, feed])),
+    [feeds]
+  );
 
-    navigation.navigate("FeedItemView", {
-      item: {
-        itemId: item.id,
-        title: item.title,
-        url: item.url,
-        content: item.content,
-        imageUrl: item.image_url,
-        publishedAt: item.published_at,
-        feedTitle: item.feed_title,
-        read: item.read,
-        useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
-      },
-    });
-  };
-
-  const toggleSave = async (item: FeedItemWithFeed) => {
-    const alreadySaved = savedIds.has(item.id);
-    try {
-      if (alreadySaved) {
-        await unsavePost(item.id);
-        setSavedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(item.id);
-          return next;
-        });
-      } else {
-        await savePost(item, item.feed_title);
-        setSavedIds((prev) => new Set(prev).add(item.id));
-      }
-    } catch (err) {
-      Alert.alert("Error", "Could not update saved status.");
-    }
-  };
-
-  const handleToggleExpand = async (item: FeedItemWithFeed) => {
-    const isExpanding = !expandedIds.has(item.id);
-    setExpandedIds((prev) => toggleExpandedId(prev, item.id));
-    if (isExpanding && !item.read) {
-      if (filter === "unread") {
+  const handleOpenItem = useCallback(
+    (item: FeedItemWithFeed) => {
+      if (filter === "unread" && !item.read) {
         setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
       }
 
+      navigation.navigate("FeedItemView", {
+        item: {
+          itemId: item.id,
+          title: item.title,
+          url: item.url,
+          content: item.content,
+          imageUrl: item.image_url,
+          publishedAt: item.published_at,
+          feedTitle: item.feed_title,
+          read: item.read,
+          useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
+        },
+      });
+    },
+    [filter, navigation, feedDetailsById]
+  );
+
+  const toggleSave = useCallback(
+    async (item: FeedItemWithFeed) => {
+      const alreadySaved = savedIds.has(item.id);
       try {
+        if (alreadySaved) {
+          await unsavePost(item.id);
+          setSavedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
+        } else {
+          await savePost(item, item.feed_title);
+          setSavedIds((prev) => new Set(prev).add(item.id));
+        }
+      } catch (err) {
+        Alert.alert("Error", "Could not update saved status.");
+      }
+    },
+    [savedIds]
+  );
+
+  const handleToggleExpand = useCallback(
+    async (item: FeedItemWithFeed) => {
+      const isExpanding = !expandedIds.has(item.id);
+      setExpandedIds((prev) => toggleExpandedId(prev, item.id));
+      if (isExpanding && !item.read) {
+        if (filter === "unread") {
+          setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+        }
+
+        try {
+          await markItemRead(item.id);
+          setItems((prev) =>
+            prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
+          );
+        } catch {
+          Alert.alert("Error", "Could not update read status.");
+        }
+      }
+    },
+    [expandedIds, filter]
+  );
+
+  const toggleRead = useCallback(
+    async (item: FeedItemWithFeed) => {
+      try {
+        if (item.read) {
+          await markItemUnread(item.id);
+          setItems((prev) =>
+            prev.map((current) =>
+              current.id === item.id ? { ...current, read: 0 } : current
+            )
+          );
+          setRetainedUnreadIds((prev) => {
+            const next = new Set(prev);
+            next.add(item.id);
+            return next;
+          });
+          return;
+        }
+
+        if (filter === "unread") {
+          setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+        }
+
         await markItemRead(item.id);
         setItems((prev) =>
-          prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
+          prev.map((current) =>
+            current.id === item.id ? { ...current, read: 1 } : current
+          )
         );
       } catch {
         Alert.alert("Error", "Could not update read status.");
       }
-    }
-  };
+    },
+    [filter]
+  );
 
-  const toggleRead = async (item: FeedItemWithFeed) => {
-    try {
-      if (item.read) {
-        await markItemUnread(item.id);
-        setItems((prev) =>
-          prev.map((current) =>
-            current.id === item.id ? { ...current, read: 0 } : current
-          )
-        );
-        setRetainedUnreadIds((prev) => {
-          const next = new Set(prev);
-          next.add(item.id);
-          return next;
-        });
-        return;
-      }
-
-      if (filter === "unread") {
-        setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
-      }
-
-      await markItemRead(item.id);
-      setItems((prev) =>
-        prev.map((current) =>
-          current.id === item.id ? { ...current, read: 1 } : current
-        )
-      );
-    } catch {
-      Alert.alert("Error", "Could not update read status.");
-    }
-  };
+  const handleRevealCardMedia = useCallback((id: number) => {
+    setRevealedNsfwCardIds((prev) => new Set(prev).add(id));
+  }, []);
 
   const handleOpenContentLink = useCallback(
     (url: string) => {
@@ -323,10 +342,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
     setRetainedUnreadIds(new Set());
   }, [filter]);
 
-  const feedDetailsById = useMemo(
-    () => new Map(feeds.map((feed) => [feed.id, feed])),
-    [feeds]
-  );
   const selectedFeedTitle = useMemo(() => {
     if (selectedFeedId === undefined) {
       return null;
@@ -399,12 +414,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
     return items.filter((item) => item.feed_id === selectedFeedId);
   }, [items, selectedFeedId, hasSearch]);
 
-  const searchedItems = useMemo(() => {
-    if (!hasSearch) {
-      return scopedItems;
-    }
-
-    return scopedItems.filter((item) => {
+  const searchHaystacks = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const item of items) {
       const sourceFeed = feedDetailsById.get(item.feed_id);
       const haystack = [
         item.feed_title,
@@ -418,10 +430,21 @@ export default function FeedListScreen({ navigation, route }: Props) {
         .filter((value): value is string => Boolean(value))
         .join("\n")
         .toLowerCase();
+      map.set(item.id, haystack);
+    }
+    return map;
+  }, [items, feedDetailsById]);
 
+  const searchedItems = useMemo(() => {
+    if (!hasSearch) {
+      return scopedItems;
+    }
+
+    return scopedItems.filter((item) => {
+      const haystack = searchHaystacks.get(item.id) ?? "";
       return haystack.includes(normalizedSearch);
     });
-  }, [scopedItems, hasSearch, feedDetailsById, normalizedSearch]);
+  }, [scopedItems, hasSearch, searchHaystacks, normalizedSearch]);
 
   const sortedItems = useMemo(
     () => applySortMode(searchedItems, sort),
@@ -630,10 +653,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
           </Text>
         </View>
       ) : (
-        <FlatList
+        <FlashList
           ref={flatListRef}
           data={visibleItems}
-          keyExtractor={(item) => String(item.id)}
+          keyExtractor={keyExtractor}
           onRefresh={handleRefreshAll}
           refreshing={refreshing}
           contentContainerStyle={[
@@ -662,9 +685,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   cardWidth={cardWidth}
                   cardMediaTestID={`card-media-${item.id}`}
                   onOpenItem={() => handleOpenItem(item)}
-                  onRevealCardMedia={() =>
-                    setRevealedNsfwCardIds((prev) => new Set(prev).add(item.id))
-                  }
+                  onRevealCardMedia={() => handleRevealCardMedia(item.id)}
                   onToggleRead={() => toggleRead(item)}
                   onToggleSave={() => toggleSave(item)}
                   onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
@@ -693,7 +714,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
               />
             );
           }}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ItemSeparatorComponent={Separator}
         />
       )}
     </View>
@@ -713,6 +734,12 @@ function isRedditCommentsUrl(url: string): boolean {
       url
     );
   }
+}
+
+const keyExtractor = (item: FeedItemWithFeed) => String(item.id);
+
+function Separator() {
+  return <View style={styles.separator} />;
 }
 
 const styles = StyleSheet.create({

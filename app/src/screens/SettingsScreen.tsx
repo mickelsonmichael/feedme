@@ -7,7 +7,6 @@ import {
   TouchableOpacity,
   Platform,
 } from "react-native";
-import Svg, { Line, Rect } from "react-native-svg";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -115,16 +114,43 @@ function CompactLayoutIcon({ active }: { active: boolean }) {
   const stroke = active ? colors.paper : colors.inkSoft;
   const fill = active ? colors.paper : colors.paperWarm;
 
+  const row = (
+    <View style={layoutIconStyles.row}>
+      <View
+        style={[
+          layoutIconStyles.compactThumb,
+          { backgroundColor: fill, borderColor: stroke },
+        ]}
+      />
+      <View style={layoutIconStyles.compactLines}>
+        <View
+          style={[
+            layoutIconStyles.line,
+            { backgroundColor: stroke, width: 21 },
+          ]}
+        />
+        <View
+          style={[
+            layoutIconStyles.line,
+            { backgroundColor: stroke, width: 16 },
+          ]}
+        />
+      </View>
+    </View>
+  );
+
   return (
-    <Svg width={42} height={28} viewBox="0 0 42 28" fill="none">
-      <Rect x="1" y="2" width="40" height="24" rx="5" stroke={stroke} />
-      <Rect x="4" y="6" width="8" height="6" rx="1.5" fill={fill} />
-      <Line x1="15" y1="8" x2="36" y2="8" stroke={stroke} strokeWidth="1.5" />
-      <Line x1="15" y1="11" x2="31" y2="11" stroke={stroke} strokeWidth="1.5" />
-      <Rect x="4" y="16" width="8" height="6" rx="1.5" fill={fill} />
-      <Line x1="15" y1="18" x2="36" y2="18" stroke={stroke} strokeWidth="1.5" />
-      <Line x1="15" y1="21" x2="29" y2="21" stroke={stroke} strokeWidth="1.5" />
-    </Svg>
+    <View
+      style={[
+        layoutIconStyles.frame,
+        layoutIconStyles.compactFrame,
+        { borderColor: stroke },
+      ]}
+    >
+      {row}
+      <View style={layoutIconStyles.compactSpacer} />
+      {row}
+    </View>
   );
 }
 
@@ -134,14 +160,84 @@ function CardLayoutIcon({ active }: { active: boolean }) {
   const fill = active ? colors.paper : colors.paperWarm;
 
   return (
-    <Svg width={42} height={28} viewBox="0 0 42 28" fill="none">
-      <Rect x="7" y="2" width="28" height="24" rx="5" stroke={stroke} />
-      <Rect x="10" y="5" width="22" height="9" rx="2" fill={fill} />
-      <Line x1="10" y1="18" x2="31" y2="18" stroke={stroke} strokeWidth="1.5" />
-      <Line x1="10" y1="21" x2="28" y2="21" stroke={stroke} strokeWidth="1.5" />
-    </Svg>
+    <View
+      style={[
+        layoutIconStyles.frame,
+        layoutIconStyles.cardFrame,
+        { borderColor: stroke },
+      ]}
+    >
+      <View
+        style={[
+          layoutIconStyles.cardThumb,
+          { backgroundColor: fill, borderColor: stroke },
+        ]}
+      />
+      <View
+        style={[
+          layoutIconStyles.line,
+          { backgroundColor: stroke, width: 22, marginTop: 3 },
+        ]}
+      />
+      <View
+        style={[
+          layoutIconStyles.line,
+          { backgroundColor: stroke, width: 19, marginTop: 2 },
+        ]}
+      />
+    </View>
   );
 }
+
+const layoutIconStyles = StyleSheet.create({
+  frame: {
+    width: 42,
+    height: 28,
+    borderRadius: 5,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  compactFrame: {
+    paddingHorizontal: 3,
+    paddingVertical: 3,
+    justifyContent: "space-between",
+  },
+  cardFrame: {
+    width: 28,
+    alignSelf: "center",
+    paddingHorizontal: 3,
+    paddingTop: 3,
+  },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  compactSpacer: {
+    height: 2,
+  },
+  compactThumb: {
+    width: 8,
+    height: 8,
+    borderRadius: 1.5,
+    borderWidth: 0.5,
+    marginRight: 3,
+  },
+  compactLines: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  cardThumb: {
+    width: 22,
+    height: 9,
+    borderRadius: 2,
+    borderWidth: 0.5,
+  },
+  line: {
+    height: 1.5,
+    borderRadius: 1,
+    marginVertical: 1,
+  },
+});
 
 export default function SettingsScreen({ navigation }: Props) {
   const { colors, mode, setMode } = useTheme();

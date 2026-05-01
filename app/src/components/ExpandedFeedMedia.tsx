@@ -7,7 +7,7 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
-  Image,
+  Image as RNImage,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
@@ -18,6 +18,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import {
   extractRedditGalleryUrl,
@@ -152,39 +153,38 @@ export function ExpandedFeedMedia({
     }
 
     let active = true;
+    const url = galleryImageUrls[0];
 
-    Image.getSize(
-      galleryImageUrls[0],
-      (width, height) => {
-        if (!active) {
-          return;
-        }
-        if (width > 0 && height > 0) {
-          const scale = Math.min(
-            1,
-            MAX_EXPANDED_IMAGE_EDGE / width,
-            MAX_EXPANDED_IMAGE_EDGE / height
-          );
+    const apply = (width: number, height: number) => {
+      if (!active) return;
+      if (width > 0 && height > 0) {
+        const scale = Math.min(
+          1,
+          MAX_EXPANDED_IMAGE_EDGE / width,
+          MAX_EXPANDED_IMAGE_EDGE / height
+        );
 
-          const scaledWidth = Math.max(1, Math.round(width * scale));
-          const scaledHeight = Math.max(1, Math.round(height * scale));
-          const viewportScale = Math.min(1, maxGalleryWidth / scaledWidth);
+        const scaledWidth = Math.max(1, Math.round(width * scale));
+        const scaledHeight = Math.max(1, Math.round(height * scale));
+        const viewportScale = Math.min(1, maxGalleryWidth / scaledWidth);
 
-          setGalleryContainerSize({
-            width: Math.max(1, Math.round(scaledWidth * viewportScale)),
-            height: Math.max(1, Math.round(scaledHeight * viewportScale)),
-          });
-        } else {
-          setGalleryContainerSize({
-            width: maxGalleryWidth,
-            height: maxGalleryWidth,
-          });
-        }
-      },
+        setGalleryContainerSize({
+          width: Math.max(1, Math.round(scaledWidth * viewportScale)),
+          height: Math.max(1, Math.round(scaledHeight * viewportScale)),
+        });
+      } else {
+        setGalleryContainerSize({
+          width: maxGalleryWidth,
+          height: maxGalleryWidth,
+        });
+      }
+    };
+
+    RNImage.getSize(
+      url,
+      (w, h) => apply(w, h),
       () => {
-        if (!active) {
-          return;
-        }
+        if (!active) return;
         setGalleryContainerSize({
           width: maxGalleryWidth,
           height: maxGalleryWidth,
@@ -420,8 +420,10 @@ export function ExpandedFeedMedia({
             <Image
               source={{ uri: galleryImageUrls[activeGalleryIndex] }}
               style={styles.galleryImage}
-              resizeMode="contain"
+              contentFit="contain"
+              cachePolicy="memory-disk"
               blurRadius={blur ? 24 : 0}
+              transition={120}
               testID={
                 testID ? `${testID}-image-${activeGalleryIndex}` : undefined
               }
@@ -498,8 +500,10 @@ export function ExpandedFeedMedia({
               <Image
                 source={{ uri: galleryImageUrl }}
                 style={styles.galleryImage}
-                resizeMode="contain"
+                contentFit="contain"
+                cachePolicy="memory-disk"
                 blurRadius={blur ? 24 : 0}
+                transition={120}
                 testID={testID ? `${testID}-image-${index}` : undefined}
               />
             </View>

@@ -106,6 +106,14 @@ async function initializeSchema(
   } catch {
     // Column already exists — ignore
   }
+
+  // Indexes: ensure efficient sort/filter for the list screens.
+  await database.execAsync(`
+    CREATE INDEX IF NOT EXISTS idx_items_published_at ON items(published_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_items_feed_id ON items(feed_id);
+    CREATE INDEX IF NOT EXISTS idx_items_read ON items(read);
+    CREATE INDEX IF NOT EXISTS idx_saved_posts_item_id ON saved_posts(item_id);
+  `);
 }
 
 // ── Feeds ──────────────────────────────────────────────────────────────────
@@ -181,12 +189,17 @@ export async function getItemCountForFeed(feedId: number): Promise<number> {
 
 export async function getAllItems(): Promise<FeedItemWithFeed[]> {
   const database = await getDatabase();
-  return database.getAllAsync<FeedItemWithFeed>(
-    `SELECT items.*, feeds.title AS feed_title
+  // Skip raw_xml in the global list view: it can be tens of KB per row and is
+  // only needed by the per-feed raw XML modal, which loads it on demand.
+  const rows = await database.getAllAsync<Omit<FeedItemWithFeed, "raw_xml">>(
+    `SELECT items.id, items.feed_id, items.title, items.url, items.content,
+            items.image_url, items.published_at, items.read,
+            feeds.title AS feed_title
      FROM items
      JOIN feeds ON items.feed_id = feeds.id
      ORDER BY items.published_at DESC`
   );
+  return rows.map((row) => ({ ...row, raw_xml: null }));
 }
 
 export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
@@ -201,28 +214,44 @@ export async function upsertItems(
   feedId: number,
   items: ParsedFeedItem[]
 ): Promise<void> {
+  if (items.length === 0) return;
   const database = await getDatabase();
-  for (const item of items) {
-    await database.runAsync(
-      `INSERT INTO items (feed_id, title, url, content, image_url, raw_xml, published_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (feed_id, url) DO UPDATE SET
-         title = excluded.title,
-         content = excluded.content,
-         image_url = excluded.image_url,
-         raw_xml = excluded.raw_xml,
-         published_at = excluded.published_at`,
-      [
-        feedId,
-        item.title,
-        item.url ?? null,
-        item.content ?? null,
-        item.imageUrl ?? null,
-        item.rawXml ?? null,
-        item.publishedAt ?? null,
-      ]
-    );
+  const statement = await database.prepareAsync(
+    `INSERT INTO items (feed_id, title, url, content, image_url, raw_xml, published_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (feed_id, url) DO UPDATE SET
+       title = excluded.title,
+       content = excluded.content,
+       image_url = excluded.image_url,
+       raw_xml = excluded.raw_xml,
+       published_at = excluded.published_at`
+  );
+  try {
+    await database.withTransactionAsync(async () => {
+      for (const item of items) {
+        await statement.executeAsync([
+          feedId,
+          item.title,
+          item.url ?? null,
+          item.content ?? null,
+          item.imageUrl ?? null,
+          item.rawXml ?? null,
+          item.publishedAt ?? null,
+        ]);
+      }
+    });
+  } finally {
+    await statement.finalizeAsync();
   }
+}
+
+export async function getItemRawXml(itemId: number): Promise<string | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{ raw_xml: string | null }>(
+    "SELECT raw_xml FROM items WHERE id = ?",
+    [itemId]
+  );
+  return row?.raw_xml ?? null;
 }
 
 export async function markItemRead(itemId: number): Promise<void> {

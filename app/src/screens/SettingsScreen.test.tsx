@@ -10,21 +10,6 @@ import { loadConfig, saveConfig } from "../storage";
 
 const mockSetMode = jest.fn();
 
-jest.mock("react-native-svg", () => {
-  const React = require("react");
-  const { View } = require("react-native");
-
-  const MockSvg = ({ children }: { children?: React.ReactNode }) =>
-    React.createElement(View, null, children);
-
-  return {
-    __esModule: true,
-    default: MockSvg,
-    Rect: MockSvg,
-    Line: MockSvg,
-  };
-});
-
 jest.mock("../context/ThemeContext", () => ({
   useTheme: () => ({
     colors: {

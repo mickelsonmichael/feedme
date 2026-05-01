@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import { parseContentAndLinks } from "../utils/contentActions";
@@ -46,7 +47,7 @@ type Props = {
   onOpenRawXml?: () => void;
 };
 
-export function FeedPostCard({
+function FeedPostCardComponent({
   item,
   feedTitle,
   layout,
@@ -237,7 +238,10 @@ export function FeedPostCard({
             source={{ uri: proxiedImageUrl(item.image_url, useProxy) }}
             blurRadius={nsfw ? 24 : 0}
             style={styles.cardImage}
-            resizeMode="cover"
+            contentFit="cover"
+            cachePolicy="memory-disk"
+            recyclingKey={`thumb-${item.id}`}
+            transition={120}
           />
         ) : null}
         <View style={styles.cardContent}>
@@ -505,6 +509,48 @@ function isRedditCommentsUrl(url: string): boolean {
       url
     );
   }
+}
+
+export const FeedPostCard = React.memo(FeedPostCardComponent, arePropsEqual);
+
+function arePropsEqual(prev: Props, next: Props): boolean {
+  // Item identity is the most expensive thing to compare; rely on referential
+  // equality + the small set of mutable fields list screens flip in place.
+  if (prev.item !== next.item) {
+    if (
+      prev.item.id !== next.item.id ||
+      prev.item.read !== next.item.read ||
+      prev.item.title !== next.item.title ||
+      prev.item.url !== next.item.url ||
+      prev.item.content !== next.item.content ||
+      prev.item.image_url !== next.item.image_url ||
+      prev.item.published_at !== next.item.published_at
+    ) {
+      return false;
+    }
+  }
+  return (
+    prev.feedTitle === next.feedTitle &&
+    prev.layout === next.layout &&
+    prev.nsfw === next.nsfw &&
+    prev.useProxy === next.useProxy &&
+    prev.saved === next.saved &&
+    prev.expanded === next.expanded &&
+    prev.showExpand === next.showExpand &&
+    prev.showRawXml === next.showRawXml &&
+    prev.cardWidth === next.cardWidth &&
+    prev.cardMediaRevealed === next.cardMediaRevealed &&
+    prev.cardMediaTestID === next.cardMediaTestID &&
+    prev.expandedMediaTestID === next.expandedMediaTestID &&
+    prev.onOpenItem === next.onOpenItem &&
+    prev.onRevealCardMedia === next.onRevealCardMedia &&
+    prev.onToggleExpand === next.onToggleExpand &&
+    prev.onToggleRead === next.onToggleRead &&
+    prev.onToggleSave === next.onToggleSave &&
+    prev.onOpenOriginalLink === next.onOpenOriginalLink &&
+    prev.onOpenContentLink === next.onOpenContentLink &&
+    prev.onOpenRawXml === next.onOpenRawXml
+  );
 }
 
 const styles = StyleSheet.create({

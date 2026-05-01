@@ -1,5 +1,5 @@
 import React from "react";
-import { Image, Platform, StyleSheet, View } from "react-native";
+import { Image as RNImage, Platform, StyleSheet, View } from "react-native";
 import renderer, { act } from "react-test-renderer";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 
@@ -66,7 +66,7 @@ describe("ExpandedFeedMedia", () => {
       configurable: true,
       value: "web",
     });
-    jest.spyOn(Image, "getSize").mockImplementation((_uri, success) => {
+    jest.spyOn(RNImage, "getSize").mockImplementation((_uri, success) => {
       success(1080, 1080);
     });
     mockExtractGifEmbedUrl.mockReturnValue(null);

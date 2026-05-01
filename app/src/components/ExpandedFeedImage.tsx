@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
-  Image,
+  Image as RNImage,
   LayoutChangeEvent,
   StyleSheet,
   View,
 } from "react-native";
+import { Image } from "expo-image";
 import {
   getExpandedImageSize,
   MAX_EXPANDED_IMAGE_EDGE,
@@ -15,6 +16,38 @@ import { radii } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
 const PLACEHOLDER_HEIGHT = 200;
+
+// Module-level memoization for `Image.getSize` so revisiting an item or
+// re-rendering a row in the list doesn't re-issue a network HEAD per image.
+type CachedSize = { width: number; height: number } | "failed";
+const imageSizeCache = new Map<string, CachedSize>();
+const inflightImageSizes = new Map<string, Promise<CachedSize>>();
+
+function getCachedImageSize(url: string): Promise<CachedSize> {
+  const cached = imageSizeCache.get(url);
+  if (cached) return Promise.resolve(cached);
+  const inflight = inflightImageSizes.get(url);
+  if (inflight) return inflight;
+  const promise = new Promise<CachedSize>((resolve) => {
+    RNImage.getSize(
+      url,
+      (width, height) => {
+        const result: CachedSize =
+          width > 0 && height > 0 ? { width, height } : "failed";
+        imageSizeCache.set(url, result);
+        inflightImageSizes.delete(url);
+        resolve(result);
+      },
+      () => {
+        imageSizeCache.set(url, "failed");
+        inflightImageSizes.delete(url);
+        resolve("failed");
+      }
+    );
+  });
+  inflightImageSizes.set(url, promise);
+  return promise;
+}
 
 type Props = {
   imageUrl: string;
@@ -44,32 +77,35 @@ export function ExpandedFeedImage({
   useEffect(() => {
     let active = true;
 
+    const cached = imageSizeCache.get(resolvedImageUrl);
+    if (cached) {
+      if (cached === "failed") {
+        setSourceSize(null);
+        setDidMetadataLookupFail(true);
+        setIsLoadingMetadata(false);
+      } else {
+        setSourceSize(cached);
+        setDidMetadataLookupFail(false);
+        setIsLoadingMetadata(false);
+      }
+      return () => {
+        active = false;
+      };
+    }
+
     setSourceSize(null);
     setDidMetadataLookupFail(false);
     setIsLoadingMetadata(true);
-    Image.getSize(
-      resolvedImageUrl,
-      (width, height) => {
-        if (!active) {
-          return;
-        }
-
-        if (width <= 0 || height <= 0) {
-          setDidMetadataLookupFail(true);
-          setIsLoadingMetadata(false);
-          return;
-        }
-
-        setSourceSize({ width, height });
+    getCachedImageSize(resolvedImageUrl).then((result) => {
+      if (!active) return;
+      if (result === "failed") {
+        setDidMetadataLookupFail(true);
         setIsLoadingMetadata(false);
-      },
-      () => {
-        if (active) {
-          setDidMetadataLookupFail(true);
-          setIsLoadingMetadata(false);
-        }
+        return;
       }
-    );
+      setSourceSize(result);
+      setIsLoadingMetadata(false);
+    });
 
     return () => {
       active = false;
@@ -122,7 +158,9 @@ export function ExpandedFeedImage({
                   }
                 : styles.pendingImage),
           ]}
-          resizeMode="contain"
+          contentFit="contain"
+          cachePolicy="memory-disk"
+          transition={120}
           testID={testID}
         />
       )}

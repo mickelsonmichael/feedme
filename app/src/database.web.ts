@@ -291,6 +291,12 @@ export async function markItemRead(itemId: number): Promise<void> {
   }
 }
 
+export async function getItemRawXml(itemId: number): Promise<string | null> {
+  const state = loadState();
+  const item = state.items.find((i) => i.id === itemId);
+  return item?.raw_xml ?? null;
+}
+
 export async function markItemUnread(itemId: number): Promise<void> {
   const state = loadState();
   const item = state.items.find((i) => i.id === itemId);

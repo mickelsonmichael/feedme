@@ -6,9 +6,9 @@ import {
   Platform,
   TouchableOpacity,
   ScrollView,
-  Image,
   useWindowDimensions,
 } from "react-native";
+import { Image } from "expo-image";
 import { CommonActions, NavigationContainer } from "@react-navigation/native";
 import {
   createBottomTabNavigator,
@@ -220,6 +220,8 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
                     <Image
                       source={{ uri: iconUri ?? undefined }}
                       style={styles.feedItemIcon}
+                      cachePolicy="memory-disk"
+                      transition={80}
                       onError={() => {
                         if (!iconUri) {
                           return;

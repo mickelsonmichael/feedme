@@ -1,11 +1,7 @@
 import React from "react";
-import {
-  FlatList,
-  Image,
-  Text,
-  TextInput,
-  TouchableOpacity,
-} from "react-native";
+import { Text, TextInput, TouchableOpacity } from "react-native";
+import { Image } from "expo-image";
+import { FlashList } from "@shopify/flash-list";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -425,7 +421,7 @@ describe("FeedListScreen", () => {
     // Assert - focus load on mobile does not trigger remote refresh
     expect(refreshFeeds).not.toHaveBeenCalled();
 
-    const list = tree!.root.findByType(FlatList);
+    const list = tree!.root.findByType(FlashList);
     await act(async () => {
       await list.props.onRefresh();
     });
@@ -591,7 +587,7 @@ describe("FeedListScreen", () => {
       .map((node: renderer.ReactTestInstance) => node.props.children);
     expect(textBeforeRefresh).toContain("Unread post");
 
-    const list = tree!.root.findByType(FlatList);
+    const list = tree!.root.findByType(FlashList);
     await act(async () => {
       await list.props.onRefresh();
     });
@@ -849,7 +845,7 @@ describe("FeedListScreen", () => {
       )
     ).toBe(true);
 
-    const list = tree!.root.findByType(FlatList);
+    const list = tree!.root.findByType(FlashList);
     expect(list.props.contentContainerStyle).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ alignItems: "center" }),
