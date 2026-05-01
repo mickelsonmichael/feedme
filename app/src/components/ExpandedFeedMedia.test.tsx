@@ -5,12 +5,17 @@ import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 
 const mockExtractRedditGalleryUrl = jest.fn();
 const mockFetchRedditGalleryImageUrls = jest.fn();
+const mockExtractGifEmbedUrl = jest.fn();
 
 jest.mock("../redditGallery", () => ({
   extractRedditGalleryUrl: (...args: unknown[]) =>
     mockExtractRedditGalleryUrl(...args),
   fetchRedditGalleryImageUrls: (...args: unknown[]) =>
     mockFetchRedditGalleryImageUrls(...args),
+}));
+
+jest.mock("../gifUtils", () => ({
+  extractGifEmbedUrl: (...args: unknown[]) => mockExtractGifEmbedUrl(...args),
 }));
 
 jest.mock("../context/ThemeContext", () => ({
@@ -64,6 +69,7 @@ describe("ExpandedFeedMedia", () => {
     jest.spyOn(Image, "getSize").mockImplementation((_uri, success) => {
       success(1080, 1080);
     });
+    mockExtractGifEmbedUrl.mockReturnValue(null);
   });
 
   afterEach(() => {
@@ -310,5 +316,97 @@ describe("ExpandedFeedMedia", () => {
       tree!.root.findByProps({ testID: "expanded-media-image-0" }).props.source
         .uri
     ).toBe("https://preview.redd.it/full-1.jpg");
+  });
+
+  it("renders an embedded GIF iframe when itemUrl is a GIF host URL", async () => {
+    // Arrange
+    mockExtractRedditGalleryUrl.mockReturnValue(null);
+    mockExtractGifEmbedUrl.mockReturnValue(
+      "https://www.redgifs.com/ifr/TightGif"
+    );
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://www.redgifs.com/watch/TightGif"
+          testID="expanded-media"
+        />
+      );
+    });
+
+    // Assert
+    const container = tree!.root.findByProps({
+      accessibilityLabel: "Embedded GIF",
+    });
+    expect(container.props.testID).toBe("expanded-media");
+  });
+
+  it("defers GIF load when deferGifLoad is true and shows placeholder", async () => {
+    // Arrange
+    mockExtractRedditGalleryUrl.mockReturnValue(null);
+    mockExtractGifEmbedUrl.mockReturnValue(
+      "https://giphy.com/embed/xT9IgG50Lg7KXYNX8I"
+    );
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://giphy.com/gifs/cat-jumping-xT9IgG50Lg7KXYNX8I"
+          testID="expanded-media"
+          deferGifLoad
+        />
+      );
+    });
+
+    // Assert placeholder is shown before load
+    const loadButton = tree!.root.findByProps({
+      accessibilityLabel: "Load GIF",
+    });
+    expect(loadButton.props.testID).toBe("expanded-media");
+
+    // Act — tap to load
+    await act(async () => {
+      loadButton.props.onPress();
+    });
+
+    // Assert embed is now shown
+    const container = tree!.root.findByProps({
+      accessibilityLabel: "Embedded GIF",
+    });
+    expect(container).toBeTruthy();
+  });
+
+  it("shows NSFW label on GIF placeholder when nsfw is true", async () => {
+    // Arrange
+    mockExtractRedditGalleryUrl.mockReturnValue(null);
+    mockExtractGifEmbedUrl.mockReturnValue(
+      "https://www.redgifs.com/ifr/NsfwGif"
+    );
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://www.redgifs.com/watch/NsfwGif"
+          testID="expanded-media"
+          deferGifLoad
+          nsfw
+        />
+      );
+    });
+
+    // Assert
+    const subtleTexts = tree!.root.findAllByProps({
+      children: "NSFW GIF. Tap to load.",
+    });
+    expect(subtleTexts.length).toBeGreaterThan(0);
   });
 });

@@ -23,6 +23,7 @@ import {
   extractRedditGalleryUrl,
   fetchRedditGalleryImageUrls,
 } from "../redditGallery";
+import { extractGifEmbedUrl } from "../gifUtils";
 import { proxiedImageUrl } from "../proxyFetch";
 import { useTheme } from "../context/ThemeContext";
 import {
@@ -43,6 +44,7 @@ type Props = {
   blur?: boolean;
   nsfw?: boolean;
   deferGalleryLoad?: boolean;
+  deferGifLoad?: boolean;
   useProxy?: boolean;
 };
 
@@ -60,6 +62,7 @@ export function ExpandedFeedMedia({
   blur = false,
   nsfw = false,
   deferGalleryLoad = true,
+  deferGifLoad = false,
   useProxy = false,
 }: Props) {
   const { colors } = useTheme();
@@ -77,6 +80,7 @@ export function ExpandedFeedMedia({
   const [activeGalleryIndex, setActiveGalleryIndex] = useState(0);
   const [hasRequestedGalleryLoad, setHasRequestedGalleryLoad] =
     useState(!deferGalleryLoad);
+  const [hasRequestedGifLoad, setHasRequestedGifLoad] = useState(!deferGifLoad);
   const youtubeVideoId = useMemo(
     () =>
       extractYouTubeVideoId(itemUrl) ??
@@ -87,12 +91,17 @@ export function ExpandedFeedMedia({
     () => extractRedditGalleryUrl(itemUrl, content),
     [itemUrl, content]
   );
+  const gifEmbedUrl = useMemo(() => extractGifEmbedUrl(itemUrl), [itemUrl]);
   const shouldLoadGallery =
     Boolean(redditGalleryUrl) && hasRequestedGalleryLoad;
 
   useEffect(() => {
     setHasRequestedGalleryLoad(!deferGalleryLoad);
   }, [deferGalleryLoad, redditGalleryUrl]);
+
+  useEffect(() => {
+    setHasRequestedGifLoad(!deferGifLoad);
+  }, [deferGifLoad, gifEmbedUrl]);
 
   useEffect(() => {
     let active = true;
@@ -226,6 +235,74 @@ export function ExpandedFeedMedia({
     },
     [galleryImageUrls, galleryContainerSize]
   );
+
+  if (gifEmbedUrl && !hasRequestedGifLoad) {
+    return (
+      <TouchableOpacity
+        style={[
+          styles.galleryPlaceholder,
+          {
+            borderColor: colors.border,
+            backgroundColor: colors.paperWarm,
+          },
+        ]}
+        onPress={() => setHasRequestedGifLoad(true)}
+        activeOpacity={0.8}
+        accessibilityLabel="Load GIF"
+        testID={testID}
+      >
+        <Feather name="film" size={18} color={colors.inkSoft} />
+        <Text style={[styles.galleryPlaceholderTitle, { color: colors.ink }]}>
+          Load GIF
+        </Text>
+        <Text
+          style={[styles.galleryPlaceholderSubtle, { color: colors.inkSoft }]}
+        >
+          {nsfw ? "NSFW GIF. Tap to load." : "Tap to load GIF."}
+        </Text>
+      </TouchableOpacity>
+    );
+  }
+
+  if (gifEmbedUrl) {
+    if (Platform.OS === "web") {
+      return (
+        <View
+          style={styles.videoContainer}
+          testID={testID}
+          accessibilityLabel="Embedded GIF"
+        >
+          <iframe
+            src={gifEmbedUrl}
+            title="Embedded GIF"
+            style={styles.iframe as unknown as React.CSSProperties}
+            allow="autoplay"
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="strict-origin-when-cross-origin"
+          />
+        </View>
+      );
+    }
+
+    const { WebView } =
+      require("react-native-webview") as typeof import("react-native-webview");
+    return (
+      <View
+        style={styles.videoContainer}
+        testID={testID}
+        accessibilityLabel="Embedded GIF"
+      >
+        <WebView
+          source={{ uri: gifEmbedUrl }}
+          style={styles.video}
+          allowsFullscreenVideo
+          mediaPlaybackRequiresUserAction={false}
+          testID={testID ? `${testID}-webview` : undefined}
+        />
+      </View>
+    );
+  }
 
   if (youtubeVideoId) {
     if (Platform.OS === "web") {

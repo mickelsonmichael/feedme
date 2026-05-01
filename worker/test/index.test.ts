@@ -32,7 +32,7 @@ const loadLocalWorker = async (): Promise<ExportedHandler<Env>> => {
 const runFetch = async (
 	worker: ExportedHandler<Env>,
 	request: Request<unknown, IncomingRequestCfProperties>,
-	runtimeEnv: Env = env as Env
+	runtimeEnv: Env = env as Env,
 ): Promise<Response> => {
 	const ctx = createExecutionContext();
 	const response = await worker.fetch!(request, runtimeEnv, ctx);
@@ -60,6 +60,29 @@ describe('RSS proxy worker', () => {
 		// Assert
 		expect(response.status).toBe(405);
 		expect(await response.text()).toBe('Method Not Allowed');
+	});
+
+	it('responds to CORS preflight OPTIONS requests with 204 and CORS headers', async () => {
+		// Arrange
+		const worker = await loadWorker();
+		const request = makeRequest('https://proxy.test/?url=https://example.com/feed.xml', {
+			method: 'OPTIONS',
+			headers: {
+				origin: ALLOWED_ORIGIN,
+				'Access-Control-Request-Headers': 'user-agent',
+				'Access-Control-Request-Method': 'GET',
+			},
+		});
+
+		// Act
+		const response = await runFetch(worker, request);
+
+		// Assert
+		expect(response.status).toBe(204);
+		expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+		expect(response.headers.get('Access-Control-Allow-Methods')).toContain('GET');
+		expect(response.headers.get('Access-Control-Allow-Methods')).toContain('OPTIONS');
+		expect(response.headers.get('Access-Control-Allow-Headers')).toBe('user-agent');
 	});
 
 	it('returns 403 when origin and referer are not allowed', async () => {
@@ -161,7 +184,7 @@ describe('RSS proxy worker', () => {
 		expect(fetchSpy).toHaveBeenCalledWith('https://example.com/feed.xml', expect.any(Object));
 		expect(response.status).toBe(200);
 		expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
-		expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET');
+		expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
 		expect(await response.text()).toBe('<rss />');
 	});
 });

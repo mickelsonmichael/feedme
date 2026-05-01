@@ -4,6 +4,7 @@ import {
   fetchRedditGalleryImageUrls,
 } from "./redditGallery";
 import { fetchWithProxyFallback } from "./proxyFetch";
+import { Platform } from "react-native";
 
 jest.mock("./proxyFetch", () => ({
   fetchWithProxyFallback: jest.fn(),
@@ -11,6 +12,10 @@ jest.mock("./proxyFetch", () => ({
 
 const mockFetchWithProxyFallback =
   fetchWithProxyFallback as jest.MockedFunction<typeof fetchWithProxyFallback>;
+
+const setPlatformOs = (os: typeof Platform.OS) => {
+  Object.defineProperty(Platform, "OS", { configurable: true, value: os });
+};
 
 describe("extractRedditPostIdFromUrl", () => {
   it("extracts a Reddit post id from a gallery URL", () => {
@@ -52,8 +57,11 @@ describe("extractRedditGalleryUrl", () => {
 });
 
 describe("fetchRedditGalleryImageUrls", () => {
+  const originalPlatform = Platform.OS;
+
   afterEach(() => {
     jest.clearAllMocks();
+    setPlatformOs(originalPlatform);
   });
 
   it("fetches ordered gallery images from Reddit post JSON", async () => {
@@ -105,6 +113,25 @@ describe("fetchRedditGalleryImageUrls", () => {
       "https://preview.redd.it/first.jpg?width=1080&height=720",
       "https://preview.redd.it/second.jpg?width=1080&height=720",
     ]);
+  });
+
+  it("omits User-Agent header on web to avoid CORS preflight", async () => {
+    // Arrange
+    setPlatformOs("web");
+    mockFetchWithProxyFallback.mockResolvedValue({
+      response: new Response(JSON.stringify([]), { status: 200 }),
+      usedProxy: false,
+    });
+
+    // Act
+    await fetchRedditGalleryImageUrls("https://www.reddit.com/gallery/1sw5l42");
+
+    // Assert
+    expect(mockFetchWithProxyFallback).toHaveBeenCalledWith(
+      "https://www.reddit.com/comments/1sw5l42.json?raw_json=1",
+      undefined,
+      undefined
+    );
   });
 
   it("forwards forceProxy when requested", async () => {

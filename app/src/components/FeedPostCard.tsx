@@ -5,6 +5,7 @@ import { useTheme } from "../context/ThemeContext";
 import { parseContentAndLinks } from "../utils/contentActions";
 import { proxiedImageUrl } from "../proxyFetch";
 import { extractRedditGalleryUrl } from "../redditGallery";
+import { extractGifEmbedUrl } from "../gifUtils";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { MetaText } from "./ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -94,7 +95,12 @@ export function FeedPostCard({
     () => Boolean(extractRedditGalleryUrl(item.url, item.content)),
     [item.content, item.url]
   );
-  const showCardRevealOverlay = isCardMediaBlurred && !isRedditGallery;
+  const isGif = useMemo(
+    () => Boolean(extractGifEmbedUrl(item.url)),
+    [item.url]
+  );
+  const showCardRevealOverlay =
+    isCardMediaBlurred && !isRedditGallery && !isGif;
 
   if (layout === "card") {
     return (
@@ -120,6 +126,7 @@ export function FeedPostCard({
               blur={showCardRevealOverlay}
               nsfw={nsfw}
               deferGalleryLoad={isRedditGallery}
+              deferGifLoad={isGif}
               useProxy={useProxy}
             />
             {showCardRevealOverlay ? (

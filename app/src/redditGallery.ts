@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { fetchWithProxyFallback } from "./proxyFetch";
 
 type JsonRecord = Record<string, unknown>;
@@ -142,9 +143,17 @@ export async function fetchRedditGalleryImageUrls(
     return [];
   }
 
+  // On web, setting a custom User-Agent triggers a CORS preflight (OPTIONS),
+  // which the proxy worker doesn't handle. The worker sets its own UA when it
+  // forwards the request, so we only need this header on native runtimes.
+  const init: RequestInit | undefined =
+    Platform.OS === "web"
+      ? undefined
+      : { headers: { "User-Agent": "Mozilla/5.0 (compatible; feedme/1.0)" } };
+
   const { response } = await fetchWithProxyFallback(
     `https://www.reddit.com/comments/${postId}.json?raw_json=1`,
-    { headers: { "User-Agent": "Mozilla/5.0 (compatible; feedme/1.0)" } },
+    init,
     forceProxy
   );
 

@@ -8,7 +8,24 @@ if (isRunningLocally) {
 
 const worker: ExportedHandler<Env> = {
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
-		// Only allow GET requests
+		// Handle CORS preflight requests so clients can send custom headers
+		// (e.g. User-Agent on native) without breaking the proxy.
+		if (request.method === 'OPTIONS') {
+			const [preflightOrigin] = getOriginAndReferrer(request);
+			const requestedHeaders = request.headers.get('Access-Control-Request-Headers') ?? '*';
+			return new Response(null, {
+				status: 204,
+				headers: {
+					'Access-Control-Allow-Origin': isRunningLocally ? '*' : preflightOrigin,
+					'Access-Control-Allow-Methods': 'GET, OPTIONS',
+					'Access-Control-Allow-Headers': requestedHeaders,
+					'Access-Control-Max-Age': '86400',
+					Vary: 'Origin',
+				},
+			});
+		}
+
+		// Only allow GET requests for the proxy itself
 		if (request.method !== 'GET') {
 			return new Response('Method Not Allowed', { status: 405 });
 		}
@@ -16,6 +33,9 @@ const worker: ExportedHandler<Env> = {
 		if (!isRequestAllowed(request)) {
 			return new Response('Forbidden', { status: 403 });
 		}
+
+		const [origin] = getOriginAndReferrer(request);
+		const allowOrigin = isRunningLocally ? '*' : origin;
 
 		// Get target URL from query param: ?url=https://example.com/feed.xml
 		const { searchParams } = new URL(request.url);
@@ -56,14 +76,13 @@ const worker: ExportedHandler<Env> = {
 			return new Response('Failed to fetch target', { status: 502 });
 		}
 
-		const [origin] = getOriginAndReferrer(request);
-
 		console.log(`Proxied request to ${target} from origin ${origin}, response status: ${response.status}`);
 
 		// Stream the response back with CORS headers added
 		const newHeaders = new Headers(response.headers);
-		newHeaders.set('Access-Control-Allow-Origin', isRunningLocally ? '*' : origin);
-		newHeaders.set('Access-Control-Allow-Methods', 'GET');
+		newHeaders.set('Access-Control-Allow-Origin', allowOrigin);
+		newHeaders.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+		newHeaders.set('Vary', 'Origin');
 
 		return new Response(response.body, {
 			status: response.status,
