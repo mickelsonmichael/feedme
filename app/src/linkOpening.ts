@@ -19,17 +19,12 @@ export function openUrlWithPreference({
 }): void {
   const mode = preferredLinkOpenMode();
 
-  if (Platform.OS !== "web" && mode === "embedded") {
-    // Use Chrome Custom Tabs (Android) / SFSafariViewController (iOS) so that
-    // the user's existing browser session and cookies are available.
+  if (Platform.OS === "android" && mode === "embedded") {
+    // On Android, use Chrome Custom Tabs so existing browser session/cookies
+    // are available while keeping the app context.
     WebBrowser.openBrowserAsync(url).catch(() =>
       Alert.alert("Error", "Cannot open this URL.")
     );
-    return;
-  }
-
-  if (Platform.OS === "web" && mode === "embedded") {
-    navigation.navigate("InAppBrowser", { url, title });
     return;
   }
 
