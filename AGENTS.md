@@ -27,6 +27,28 @@ Examples:
 
 All agents must run the `code-quality` skill as part of each task.
 
+## Verification
+
+Changes that affect the UI or feed behaviour should be verified on **both platforms**:
+
+- **Android**: Use the Android emulator with the Expo dev server. See the `android-debug` skill for tooling.
+- **Web**: Use the embedded browser via `npx expo start --web` from `app/`.
+
+## Test Feeds
+
+Use these feeds when a feed is needed during development or testing:
+
+| Feed | URL / Description |
+|------|-----------------|
+| The Daily (podcast) | `https://feeds.simplecast.com/54nAGcIl` |
+| NYT US News | `https://rss.nytimes.com/services/xml/rss/nyt/US.xml` |
+| Reddit: `ama` | Text-focused subreddit |
+| Reddit: `aww` | Image-focused subreddit |
+| Reddit: `gifs` | Gif-focused subreddit |
+| Reddit: `gonewild` | NSFW subreddit (images, galleries, gifs) |
+| YouTube: Atrioc | YouTube: `atrioc` |
+| YouTube: Ludwig | YouTube: `ludwig` |
+
 ## Task Completion Requirements
 
 Before considering a task complete:
