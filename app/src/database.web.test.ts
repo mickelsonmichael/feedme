@@ -10,16 +10,20 @@
 import {
   __resetForTests,
   addFeed,
+  addToReadLater,
   deleteFeed,
   getAllItems,
   getFeeds,
   getItemCountForFeed,
   getItemsForFeed,
+  getReadLaterItemIds,
+  getReadLaterPosts,
   getSavedItemIds,
   getSavedPosts,
   getUnreadCount,
   markItemRead,
   markItemUnread,
+  removeFromReadLater,
   savePost,
   setFeedError,
   unsavePost,
@@ -469,5 +473,162 @@ describe("database.web — saved posts", () => {
     expect(posts).toHaveLength(1);
     expect(posts[0].title).toBe("Precious Post");
     expect(posts[0].content).toBe("body");
+  });
+});
+
+describe("database.web — read later posts", () => {
+  let feedId: number;
+
+  beforeEach(async () => {
+    feedId = await addFeed({
+      title: "My Feed",
+      url: "https://example.com/feed",
+      description: null,
+    });
+  });
+
+  it("starts with no read later posts", async () => {
+    // Arrange & Act
+    const posts = await getReadLaterPosts();
+
+    // Assert
+    expect(posts).toEqual([]);
+  });
+
+  it("adds a post and retrieves it", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      {
+        title: "Hello World",
+        url: "https://example.com/1",
+        content: "<p>Content</p>",
+        imageUrl: "https://example.com/img.png",
+        publishedAt: 1000,
+      },
+    ]);
+    const item = (await getItemsForFeed(feedId))[0];
+
+    // Act
+    await addToReadLater(item, "My Feed");
+    const posts = await getReadLaterPosts();
+
+    // Assert
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      item_id: item.id,
+      feed_title: "My Feed",
+      title: "Hello World",
+      url: "https://example.com/1",
+      content: "<p>Content</p>",
+      image_url: "https://example.com/img.png",
+      published_at: 1000,
+    });
+    expect(typeof posts[0].added_at).toBe("number");
+    expect(posts[0].added_at).toBeGreaterThan(0);
+  });
+
+  it("does not duplicate a read later post (idempotent add)", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      { title: "P", url: "https://x/p", content: null, publishedAt: 1 },
+    ]);
+    const item = (await getItemsForFeed(feedId))[0];
+
+    // Act
+    await addToReadLater(item, "My Feed");
+    await addToReadLater(item, "My Feed");
+
+    // Assert
+    expect(await getReadLaterPosts()).toHaveLength(1);
+  });
+
+  it("removes a post by item_id", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      { title: "P", url: "https://x/p", content: null, publishedAt: 1 },
+    ]);
+    const item = (await getItemsForFeed(feedId))[0];
+    await addToReadLater(item, "My Feed");
+
+    // Act
+    await removeFromReadLater(item.id);
+
+    // Assert
+    expect(await getReadLaterPosts()).toEqual([]);
+  });
+
+  it("getReadLaterItemIds returns a set of item IDs", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      { title: "A", url: "https://x/a", content: null, publishedAt: 1 },
+      { title: "B", url: "https://x/b", content: null, publishedAt: 2 },
+    ]);
+    const items = await getItemsForFeed(feedId);
+    await addToReadLater(items[0], "My Feed");
+
+    // Act
+    const ids = await getReadLaterItemIds();
+
+    // Assert
+    expect(ids.has(items[0].id)).toBe(true);
+    expect(ids.has(items[1].id)).toBe(false);
+  });
+
+  it("auto-removes from read later when the item is marked read", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      { title: "P", url: "https://x/p", content: null, publishedAt: 1 },
+    ]);
+    const item = (await getItemsForFeed(feedId))[0];
+    await addToReadLater(item, "My Feed");
+    expect(await getReadLaterPosts()).toHaveLength(1);
+
+    // Act
+    await markItemRead(item.id);
+
+    // Assert
+    expect(await getReadLaterPosts()).toEqual([]);
+  });
+
+  it("marking an item unread does NOT re-add it to read later", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      { title: "P", url: "https://x/p", content: null, publishedAt: 1 },
+    ]);
+    const item = (await getItemsForFeed(feedId))[0];
+    await addToReadLater(item, "My Feed");
+    await markItemRead(item.id);
+
+    // Act
+    await markItemUnread(item.id);
+
+    // Assert
+    expect(await getReadLaterPosts()).toEqual([]);
+  });
+
+  it("returns posts sorted by added_at descending", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      { title: "Older", url: "https://x/old", content: null, publishedAt: 1 },
+      { title: "Newer", url: "https://x/new", content: null, publishedAt: 2 },
+    ]);
+    const items = await getItemsForFeed(feedId);
+    const olderItem = items.find((i) => i.title === "Older")!;
+    const newerItem = items.find((i) => i.title === "Newer")!;
+
+    const dateSpy = jest
+      .spyOn(Date, "now")
+      .mockReturnValueOnce(1000)
+      .mockReturnValueOnce(2000);
+    await addToReadLater(olderItem, "My Feed");
+    await addToReadLater(newerItem, "My Feed");
+    dateSpy.mockRestore();
+
+    // Act
+    const posts = await getReadLaterPosts();
+
+    // Assert
+    expect(posts[0].title).toBe("Newer");
+    expect(posts[1].title).toBe("Older");
   });
 });

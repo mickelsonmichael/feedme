@@ -34,6 +34,18 @@ export type SavedPost = {
   saved_at: number;
 };
 
+export type ReadLaterPost = {
+  id: number;
+  item_id: number | null;
+  feed_title: string;
+  title: string;
+  url: string | null;
+  content: string | null;
+  image_url: string | null;
+  published_at: number | null;
+  added_at: number;
+};
+
 export type ParsedFeedItem = {
   title: string;
   url: string | null;
@@ -74,6 +86,7 @@ export type TabParamList = {
       }
     | undefined;
   Saved: undefined;
+  ReadLater: undefined;
   Feeds: undefined;
   Settings: undefined;
   AddFeed: { from?: string } | undefined;

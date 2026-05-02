@@ -4,18 +4,24 @@ import renderer, { act } from "react-test-renderer";
 import FeedItemScreen from "../screens/FeedItemScreen";
 import { RootStackParamList } from "../types";
 import {
+  addToReadLater,
+  getReadLaterItemIds,
   getSavedItemIds,
   markItemRead,
   markItemUnread,
+  removeFromReadLater,
   savePost,
   unsavePost,
 } from "../database";
 import { openUrlWithPreference } from "../linkOpening";
 
 jest.mock("../database", () => ({
+  addToReadLater: jest.fn(),
+  getReadLaterItemIds: jest.fn(),
   getSavedItemIds: jest.fn(),
   markItemRead: jest.fn(),
   markItemUnread: jest.fn(),
+  removeFromReadLater: jest.fn(),
   savePost: jest.fn(),
   unsavePost: jest.fn(),
 }));
@@ -105,10 +111,13 @@ function buildPropsWithContent(content: string): Props {
 describe("FeedItemScreen", () => {
   beforeEach(() => {
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (getReadLaterItemIds as jest.Mock).mockResolvedValue(new Set<number>());
     (markItemRead as jest.Mock).mockResolvedValue(undefined);
     (markItemUnread as jest.Mock).mockResolvedValue(undefined);
     (savePost as jest.Mock).mockResolvedValue(undefined);
     (unsavePost as jest.Mock).mockResolvedValue(undefined);
+    (addToReadLater as jest.Mock).mockResolvedValue(undefined);
+    (removeFromReadLater as jest.Mock).mockResolvedValue(undefined);
     (openUrlWithPreference as jest.Mock).mockClear();
   });
 

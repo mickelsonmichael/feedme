@@ -145,6 +145,18 @@ export default function FeedsScreen({ navigation }: Props) {
             Saved
           </Text>
         </TouchableOpacity>
+        <DashedDivider />
+        <TouchableOpacity
+          style={styles.quickLinkRow}
+          onPress={() => navigation.navigate("ReadLater")}
+          accessibilityLabel="Go to read later"
+          activeOpacity={0.8}
+        >
+          <Feather name="clock" size={16} color={colors.inkSoft} />
+          <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+            Read Later
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {feeds.length === 0 ? (

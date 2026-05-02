@@ -32,6 +32,9 @@ import {
   savePost,
   unsavePost,
   getSavedItemIds,
+  addToReadLater,
+  removeFromReadLater,
+  getReadLaterItemIds,
 } from "../database";
 import { Feather } from "@expo/vector-icons";
 import { refreshFeeds } from "../feedRefresher";
@@ -87,6 +90,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
+  const [readLaterIds, setReadLaterIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [revealedNsfwCardIds, setRevealedNsfwCardIds] = useState<Set<number>>(
     new Set()
@@ -118,6 +122,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
               setItems((prev) =>
                 prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
               );
+              // markItemRead auto-removes from Read Later list.
+              setReadLaterIds((prev) => {
+                if (!prev.has(item.id)) return prev;
+                const next = new Set(prev);
+                next.delete(item.id);
+                return next;
+              });
             })
             .catch(() => {});
         }
@@ -184,8 +195,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
         getAllItems(),
         getSavedItemIds(),
       ]);
+      const readLaterIdsLoaded = await getReadLaterItemIds();
       setItems(itemData);
       setSavedIds(ids);
+      setReadLaterIds(readLaterIdsLoaded);
     } catch (err) {
       Alert.alert("Error", "Failed to load: " + (err as Error).message);
     } finally {
@@ -261,6 +274,28 @@ export default function FeedListScreen({ navigation, route }: Props) {
     [savedIds]
   );
 
+  const toggleReadLater = useCallback(
+    async (item: FeedItemWithFeed) => {
+      const alreadyAdded = readLaterIds.has(item.id);
+      try {
+        if (alreadyAdded) {
+          await removeFromReadLater(item.id);
+          setReadLaterIds((prev) => {
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
+        } else {
+          await addToReadLater(item, item.feed_title);
+          setReadLaterIds((prev) => new Set(prev).add(item.id));
+        }
+      } catch {
+        Alert.alert("Error", "Could not update read later status.");
+      }
+    },
+    [readLaterIds]
+  );
+
   const handleToggleExpand = useCallback(
     async (item: FeedItemWithFeed) => {
       const isExpanding = !expandedIds.has(item.id);
@@ -275,6 +310,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
           setItems((prev) =>
             prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
           );
+          setReadLaterIds((prev) => {
+            if (!prev.has(item.id)) return prev;
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
         } catch {
           Alert.alert("Error", "Could not update read status.");
         }
@@ -311,6 +352,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
             current.id === item.id ? { ...current, read: 1 } : current
           )
         );
+        setReadLaterIds((prev) => {
+          if (!prev.has(item.id)) return prev;
+          const next = new Set(prev);
+          next.delete(item.id);
+          return next;
+        });
       } catch {
         Alert.alert("Error", "Could not update read status.");
       }
@@ -749,6 +796,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   nsfw={isFeedNsfw}
                   useProxy={feedUseProxy}
                   saved={savedIds.has(item.id)}
+                  readLater={readLaterIds.has(item.id)}
                   cardMediaRevealed={revealedNsfwCardIds.has(item.id)}
                   cardWidth={cardWidth}
                   cardMediaTestID={`card-media-${item.id}`}
@@ -756,6 +804,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   onRevealCardMedia={() => handleRevealCardMedia(item.id)}
                   onToggleRead={() => toggleRead(item)}
                   onToggleSave={() => toggleSave(item)}
+                  onToggleReadLater={() => toggleReadLater(item)}
                   onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
                   onOpenContentLink={handleOpenContentLink}
                 />
@@ -770,6 +819,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 nsfw={isFeedNsfw}
                 useProxy={feedUseProxy}
                 saved={savedIds.has(item.id)}
+                readLater={readLaterIds.has(item.id)}
                 expanded={expandedIds.has(item.id)}
                 showExpand
                 expandedMediaTestID={`expanded-media-${item.id}`}
@@ -777,6 +827,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 onToggleExpand={() => handleToggleExpand(item)}
                 onToggleRead={() => toggleRead(item)}
                 onToggleSave={() => toggleSave(item)}
+                onToggleReadLater={() => toggleReadLater(item)}
                 onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
                 onOpenContentLink={handleOpenContentLink}
               />

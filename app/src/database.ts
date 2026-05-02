@@ -4,16 +4,13 @@ import {
   FeedItem,
   FeedItemWithFeed,
   ParsedFeedItem,
+  ReadLaterPost,
   SavedPost,
 } from "./types";
 
-let db: SQLite.SQLiteDatabase | null = null;
-
-// Serialises all write transactions on the shared SQLite connection.
-// expo-sqlite's withTransactionAsync issues BEGIN/COMMIT/ROLLBACK via
-// execAsync on a single connection; if two transactions run concurrently the
-// trailing ROLLBACK finds no active transaction and throws
-// "cannot rollback - no transaction is active".
+// Serialises all write operations on the shared SQLite connection.
+// Prevents concurrent writes from racing and leaving the DB in an
+// inconsistent state.
 let dbWriteLock: Promise<unknown> = Promise.resolve();
 function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   const next = dbWriteLock.then(fn);
@@ -25,6 +22,14 @@ function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
   return next;
 }
 
+// A single Promise that resolves to the fully-initialised database.
+// Using a promise (rather than a plain nullable variable) prevents a race
+// condition where multiple concurrent callers each see db===null, call
+// openDatabaseAsync in parallel, and then run initializeSchema concurrently
+// on the same connection — which causes NullPointerException in the native
+// SQLite layer.
+let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
+
 // Native (iOS / Android) implementation of the database module.
 //
 // The web build uses `database.web.ts`, which is backed by `localStorage`
@@ -33,11 +38,14 @@ function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
 // Cross-Origin-Isolated, e.g. on GitHub Pages). On native we always have a
 // real SQLite engine, so no fallback is needed here.
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
-  if (!db) {
-    db = await SQLite.openDatabaseAsync("feedme.db");
-    await initializeSchema(db);
+  if (!dbPromise) {
+    dbPromise = (async () => {
+      const database = await SQLite.openDatabaseAsync("feedme.db");
+      await initializeSchema(database);
+      return database;
+    })();
   }
-  return db;
+  return dbPromise;
 }
 
 async function initializeSchema(
@@ -89,6 +97,19 @@ async function initializeSchema(
       saved_at INTEGER NOT NULL,
       UNIQUE (item_id)
     );
+
+    CREATE TABLE IF NOT EXISTS read_later_posts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      item_id INTEGER,
+      feed_title TEXT NOT NULL,
+      title TEXT NOT NULL,
+      url TEXT,
+      content TEXT,
+      image_url TEXT,
+      published_at INTEGER,
+      added_at INTEGER NOT NULL,
+      UNIQUE (item_id)
+    );
   `);
 
   // Migration: add error column to feeds if it doesn't exist yet
@@ -136,6 +157,7 @@ async function initializeSchema(
     CREATE INDEX IF NOT EXISTS idx_items_feed_id ON items(feed_id);
     CREATE INDEX IF NOT EXISTS idx_items_read ON items(read);
     CREATE INDEX IF NOT EXISTS idx_saved_posts_item_id ON saved_posts(item_id);
+    CREATE INDEX IF NOT EXISTS idx_read_later_posts_item_id ON read_later_posts(item_id);
   `);
 }
 
@@ -297,9 +319,20 @@ export async function getItemRawXml(itemId: number): Promise<string | null> {
 
 export async function markItemRead(itemId: number): Promise<void> {
   const database = await getDatabase();
-  await withWriteLock(() =>
-    database.runAsync("UPDATE items SET read = 1 WHERE id = ?", [itemId])
-  );
+  // Run both writes sequentially under the write lock.
+  // Avoid withTransactionAsync here: wrapping a non-exclusive transaction
+  // inside withWriteLock can leave the connection in a bad state when the
+  // task throws (e.g. ROLLBACK failing on an interrupted transaction).
+  await withWriteLock(async () => {
+    await database.runAsync("UPDATE items SET read = 1 WHERE id = ?", [
+      itemId,
+    ]);
+    // Read Later items are auto-removed once they've been read.
+    await database.runAsync(
+      "DELETE FROM read_later_posts WHERE item_id = ?",
+      [itemId]
+    );
+  });
 }
 
 export async function markItemUnread(itemId: number): Promise<void> {
@@ -361,6 +394,56 @@ export async function getSavedItemIds(): Promise<Set<number>> {
   const database = await getDatabase();
   const rows = await database.getAllAsync<{ item_id: number }>(
     "SELECT item_id FROM saved_posts WHERE item_id IS NOT NULL"
+  );
+  return new Set(rows.map((r) => r.item_id));
+}
+
+// ── Read Later Posts ───────────────────────────────────────────────────────
+
+export async function addToReadLater(
+  item: FeedItem,
+  feedTitle: string
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      `INSERT INTO read_later_posts (item_id, feed_title, title, url, content, image_url, published_at, added_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (item_id) DO NOTHING`,
+      [
+        item.id,
+        feedTitle,
+        item.title,
+        item.url ?? null,
+        item.content ?? null,
+        item.image_url ?? null,
+        item.published_at ?? null,
+        Date.now(),
+      ]
+    )
+  );
+}
+
+export async function removeFromReadLater(itemId: number): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync("DELETE FROM read_later_posts WHERE item_id = ?", [
+      itemId,
+    ])
+  );
+}
+
+export async function getReadLaterPosts(): Promise<ReadLaterPost[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<ReadLaterPost>(
+    "SELECT * FROM read_later_posts ORDER BY added_at DESC"
+  );
+}
+
+export async function getReadLaterItemIds(): Promise<Set<number>> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{ item_id: number }>(
+    "SELECT item_id FROM read_later_posts WHERE item_id IS NOT NULL"
   );
   return new Set(rows.map((r) => r.item_id));
 }

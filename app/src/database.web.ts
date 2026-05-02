@@ -16,6 +16,7 @@ import {
   FeedItem,
   FeedItemWithFeed,
   ParsedFeedItem,
+  ReadLaterPost,
   SavedPost,
 } from "./types";
 
@@ -25,9 +26,11 @@ type DbState = {
   feeds: Feed[];
   items: FeedItem[];
   savedPosts: SavedPost[];
+  readLaterPosts: ReadLaterPost[];
   nextFeedId: number;
   nextItemId: number;
   nextSavedPostId: number;
+  nextReadLaterPostId: number;
 };
 
 function normalizeFeed(raw: Feed): Feed {
@@ -43,9 +46,11 @@ function emptyState(): DbState {
     feeds: [],
     items: [],
     savedPosts: [],
+    readLaterPosts: [],
     nextFeedId: 1,
     nextItemId: 1,
     nextSavedPostId: 1,
+    nextReadLaterPostId: 1,
   };
 }
 
@@ -84,10 +89,15 @@ function loadState(): DbState {
         parsed && Array.isArray(parsed.savedPosts)
           ? (parsed.savedPosts as SavedPost[])
           : [];
+      const readLaterPosts =
+        parsed && Array.isArray(parsed.readLaterPosts)
+          ? (parsed.readLaterPosts as ReadLaterPost[])
+          : [];
       cachedState = {
         feeds,
         items,
         savedPosts,
+        readLaterPosts,
         nextFeedId:
           typeof parsed?.nextFeedId === "number" && parsed.nextFeedId > 0
             ? parsed.nextFeedId
@@ -100,6 +110,11 @@ function loadState(): DbState {
           typeof parsed?.nextSavedPostId === "number" &&
           parsed.nextSavedPostId > 0
             ? parsed.nextSavedPostId
+            : 1,
+        nextReadLaterPostId:
+          typeof parsed?.nextReadLaterPostId === "number" &&
+          parsed.nextReadLaterPostId > 0
+            ? parsed.nextReadLaterPostId
             : 1,
       };
       return cachedState;
@@ -287,8 +302,12 @@ export async function markItemRead(itemId: number): Promise<void> {
   const item = state.items.find((i) => i.id === itemId);
   if (item) {
     item.read = 1;
-    saveState(state);
   }
+  // Read Later items are auto-removed once they've been read.
+  state.readLaterPosts = state.readLaterPosts.filter(
+    (p) => p.item_id !== itemId
+  );
+  saveState(state);
 }
 
 export async function getItemRawXml(itemId: number): Promise<string | null> {
@@ -353,6 +372,53 @@ export async function getSavedItemIds(): Promise<Set<number>> {
   const state = loadState();
   return new Set(
     state.savedPosts
+      .filter((p) => p.item_id !== null)
+      .map((p) => p.item_id as number)
+  );
+}
+
+// ── Read Later Posts ───────────────────────────────────────────────────────
+
+export async function addToReadLater(
+  item: FeedItem,
+  feedTitle: string
+): Promise<void> {
+  const state = loadState();
+  // Mirror `ON CONFLICT (item_id) DO NOTHING`
+  if (state.readLaterPosts.some((p) => p.item_id === item.id)) {
+    return;
+  }
+  state.readLaterPosts.push({
+    id: state.nextReadLaterPostId++,
+    item_id: item.id,
+    feed_title: feedTitle,
+    title: item.title,
+    url: item.url ?? null,
+    content: item.content ?? null,
+    image_url: item.image_url ?? null,
+    published_at: item.published_at ?? null,
+    added_at: Date.now(),
+  });
+  saveState(state);
+}
+
+export async function removeFromReadLater(itemId: number): Promise<void> {
+  const state = loadState();
+  state.readLaterPosts = state.readLaterPosts.filter(
+    (p) => p.item_id !== itemId
+  );
+  saveState(state);
+}
+
+export async function getReadLaterPosts(): Promise<ReadLaterPost[]> {
+  const state = loadState();
+  return [...state.readLaterPosts].sort((a, b) => b.added_at - a.added_at);
+}
+
+export async function getReadLaterItemIds(): Promise<Set<number>> {
+  const state = loadState();
+  return new Set(
+    state.readLaterPosts
       .filter((p) => p.item_id !== null)
       .map((p) => p.item_id as number)
   );

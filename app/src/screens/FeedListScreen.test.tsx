@@ -33,6 +33,9 @@ jest.mock("../database", () => ({
   savePost: jest.fn(),
   unsavePost: jest.fn(),
   getSavedItemIds: jest.fn(),
+  addToReadLater: jest.fn(),
+  removeFromReadLater: jest.fn(),
+  getReadLaterItemIds: jest.fn(() => Promise.resolve(new Set())),
 }));
 
 jest.mock("../feedRefresher", () => ({

@@ -30,6 +30,7 @@ type Props = {
   nsfw?: boolean;
   useProxy?: boolean;
   saved: boolean;
+  readLater?: boolean;
   expanded?: boolean;
   showExpand?: boolean;
   showRawXml?: boolean;
@@ -42,6 +43,7 @@ type Props = {
   onToggleExpand?: () => void;
   onToggleRead: () => void;
   onToggleSave: () => void;
+  onToggleReadLater?: () => void;
   onOpenOriginalLink: () => void;
   onOpenContentLink: (url: string) => void;
   onOpenRawXml?: () => void;
@@ -54,6 +56,7 @@ function FeedPostCardComponent({
   nsfw = false,
   useProxy = false,
   saved,
+  readLater = false,
   expanded = false,
   showExpand = false,
   showRawXml = false,
@@ -66,6 +69,7 @@ function FeedPostCardComponent({
   onToggleExpand,
   onToggleRead,
   onToggleSave,
+  onToggleReadLater,
   onOpenOriginalLink,
   onOpenContentLink,
   onOpenRawXml,
@@ -187,6 +191,12 @@ function FeedPostCardComponent({
           <View style={[styles.actionRow, { borderTopColor: colors.inkFaint }]}>
             <ReadToggleButton read={item.read} onPress={onToggleRead} />
             <SaveButton saved={saved} onPress={onToggleSave} />
+            {onToggleReadLater ? (
+              <ReadLaterButton
+                readLater={readLater}
+                onPress={onToggleReadLater}
+              />
+            ) : null}
             <TouchableOpacity
               style={styles.iconActionBtn}
               onPress={onOpenOriginalLink}
@@ -274,7 +284,9 @@ function FeedPostCardComponent({
               </Text>
             ) : null}
           </TouchableOpacity>
-          <View style={[styles.actionRow, { borderTopColor: colors.inkFaint }]}>
+        </View>
+      </View>
+      <View style={[styles.actionRow, { borderTopColor: colors.inkFaint, paddingHorizontal: spacing.md, paddingBottom: spacing.sm, justifyContent: "space-evenly" }]}>
             {showExpand && onToggleExpand ? (
               <TouchableOpacity
                 onPress={onToggleExpand}
@@ -291,6 +303,12 @@ function FeedPostCardComponent({
             ) : null}
             <ReadToggleButton read={item.read} onPress={onToggleRead} />
             <SaveButton saved={saved} onPress={onToggleSave} />
+            {onToggleReadLater ? (
+              <ReadLaterButton
+                readLater={readLater}
+                onPress={onToggleReadLater}
+              />
+            ) : null}
             <TouchableOpacity
               style={styles.iconActionBtn}
               onPress={onOpenOriginalLink}
@@ -331,8 +349,6 @@ function FeedPostCardComponent({
                 <Feather name="terminal" size={18} color={colors.inkSoft} />
               </TouchableOpacity>
             ) : null}
-          </View>
-        </View>
       </View>
       {showExpand && expanded ? (
         <View
@@ -467,7 +483,10 @@ function SaveButton({
 
   return (
     <TouchableOpacity
-      style={styles.iconActionBtn}
+      style={[
+        styles.iconActionBtn,
+        saved && { backgroundColor: colors.ink, borderRadius: 999 },
+      ]}
       onPress={onPress}
       activeOpacity={0.6}
       hitSlop={8}
@@ -476,7 +495,38 @@ function SaveButton({
       <Feather
         name="bookmark"
         size={18}
-        color={saved ? colors.accent : colors.inkSoft}
+        color={saved ? colors.paper : colors.inkSoft}
+      />
+    </TouchableOpacity>
+  );
+}
+
+function ReadLaterButton({
+  readLater,
+  onPress,
+}: {
+  readLater: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.iconActionBtn,
+        readLater && { backgroundColor: colors.ink, borderRadius: 999 },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.6}
+      hitSlop={8}
+      accessibilityLabel={
+        readLater ? "Remove from read later" : "Add to read later"
+      }
+    >
+      <Feather
+        name="clock"
+        size={18}
+        color={readLater ? colors.paper : colors.inkSoft}
       />
     </TouchableOpacity>
   );

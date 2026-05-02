@@ -12,9 +12,12 @@ import {
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import {
+  addToReadLater,
+  getReadLaterItemIds,
   getSavedItemIds,
   markItemRead,
   markItemUnread,
+  removeFromReadLater,
   savePost,
   unsavePost,
 } from "../database";
@@ -33,6 +36,8 @@ export default function FeedItemScreen({ route, navigation }: Props) {
   const { item } = route.params;
   const [saved, setSaved] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  const [readLater, setReadLater] = React.useState(false);
+  const [updatingReadLater, setUpdatingReadLater] = React.useState(false);
   const [read, setRead] = React.useState(item.read === 1);
   const [updatingRead, setUpdatingRead] = React.useState(false);
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
@@ -67,9 +72,13 @@ export default function FeedItemScreen({ route, navigation }: Props) {
     const hydrate = async () => {
       try {
         if (item.itemId !== null) {
-          const ids = await getSavedItemIds();
+          const [savedIds, readLaterIds] = await Promise.all([
+            getSavedItemIds(),
+            getReadLaterItemIds(),
+          ]);
           if (isMounted) {
-            setSaved(ids.has(item.itemId));
+            setSaved(savedIds.has(item.itemId));
+            setReadLater(readLaterIds.has(item.itemId));
           }
         }
 
@@ -77,6 +86,8 @@ export default function FeedItemScreen({ route, navigation }: Props) {
           await markItemRead(item.itemId);
           if (isMounted) {
             setRead(true);
+            // markItemRead auto-removes from Read Later list.
+            setReadLater(false);
           }
         }
       } catch {
@@ -145,11 +156,43 @@ export default function FeedItemScreen({ route, navigation }: Props) {
       } else {
         await markItemRead(item.itemId);
         setRead(true);
+        // markItemRead auto-removes from Read Later list.
+        setReadLater(false);
       }
     } catch {
       Alert.alert("Error", "Could not update read status.");
     } finally {
       setUpdatingRead(false);
+    }
+  };
+
+  const handleToggleReadLater = async () => {
+    if (item.itemId === null || updatingReadLater) return;
+
+    setUpdatingReadLater(true);
+    try {
+      if (readLater) {
+        await removeFromReadLater(item.itemId);
+        setReadLater(false);
+      } else {
+        const post: FeedItem = {
+          id: item.itemId,
+          feed_id: 0,
+          title: item.title,
+          url: item.url,
+          content: item.content,
+          image_url: item.imageUrl,
+          raw_xml: null,
+          published_at: item.publishedAt,
+          read: read ? 1 : 0,
+        };
+        await addToReadLater(post, item.feedTitle);
+        setReadLater(true);
+      }
+    } catch {
+      Alert.alert("Error", "Could not update read later status.");
+    } finally {
+      setUpdatingReadLater(false);
     }
   };
 
@@ -217,8 +260,8 @@ export default function FeedItemScreen({ route, navigation }: Props) {
               style={[
                 styles.actionBtn,
                 {
-                  borderColor: saved ? colors.accent : colors.border,
-                  backgroundColor: saved ? colors.accent : colors.paper,
+                  borderColor: saved ? colors.ink : colors.border,
+                  backgroundColor: saved ? colors.ink : colors.paper,
                 },
               ]}
               onPress={handleToggleSave}
@@ -238,6 +281,36 @@ export default function FeedItemScreen({ route, navigation }: Props) {
                 ]}
               >
                 {saved ? "Saved" : "Save"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.actionBtn,
+                {
+                  borderColor: readLater ? colors.ink : colors.border,
+                  backgroundColor: readLater ? colors.ink : colors.paper,
+                },
+              ]}
+              onPress={handleToggleReadLater}
+              activeOpacity={0.7}
+              disabled={item.itemId === null || updatingReadLater}
+              accessibilityLabel={
+                readLater ? "Remove from read later" : "Add to read later"
+              }
+            >
+              <Feather
+                name="clock"
+                size={16}
+                color={readLater ? colors.paper : colors.ink}
+              />
+              <Text
+                style={[
+                  styles.actionText,
+                  { color: readLater ? colors.paper : colors.ink },
+                ]}
+              >
+                {readLater ? "Later" : "Read Later"}
               </Text>
             </TouchableOpacity>
 
@@ -374,7 +447,8 @@ const styles = StyleSheet.create({
   actionRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
+    columnGap: spacing.xs,
+    rowGap: spacing.xs,
     flexWrap: "wrap",
   },
   actionBtn: {
@@ -384,7 +458,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 4,
+    flexShrink: 1,
+    minWidth: 0,
   },
   actionText: {
     fontFamily: fonts.sans,

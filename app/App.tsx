@@ -25,6 +25,7 @@ import AddFeedScreen from "./src/screens/AddFeedScreen";
 import FeedItemsScreen from "./src/screens/FeedItemsScreen";
 import FeedItemScreen from "./src/screens/FeedItemScreen";
 import SavedScreen from "./src/screens/SavedScreen";
+import ReadLaterScreen from "./src/screens/ReadLaterScreen";
 import FeedsScreen from "./src/screens/FeedsScreen";
 import FeedDetailScreen from "./src/screens/FeedDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
@@ -52,6 +53,7 @@ const TAB_CONFIG: {
 }[] = [
   { name: "Feed", icon: "inbox", label: "All Feeds" },
   { name: "Saved", icon: "bookmark", label: "Saved" },
+  { name: "ReadLater", icon: "clock", label: "Read Later" },
   { name: "Feeds", icon: "rss", label: "Manage Feeds" },
   { name: "Settings", icon: "settings", label: "Settings" },
 ];
@@ -333,6 +335,16 @@ function Tabs() {
         options={{
           tabBarIcon: ({ focused }) => (
             <FeatherTabIcon icon="bookmark" focused={focused} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="ReadLater"
+        component={ReadLaterScreen}
+        options={{
+          tabBarLabel: "Read\u00a0Later",
+          tabBarIcon: ({ focused }) => (
+            <FeatherTabIcon icon="clock" focused={focused} />
           ),
         }}
       />
