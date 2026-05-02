@@ -198,4 +198,43 @@ describe("refreshFeeds", () => {
     );
     expect(mockSetFeedError).toHaveBeenCalledWith(3, null);
   });
+
+  it("truncates items to MAX_ITEMS_PER_FEED before upserting", async () => {
+    // Arrange — return more items than the per-feed cap
+    const lotsOfItems: typeof parsedItem[] = Array.from(
+      { length: 200 },
+      (_, i) => ({ ...parsedItem, url: `https://example.com/article${i}` })
+    );
+    mockFetchFeed.mockResolvedValue(lotsOfItems);
+    const feeds = [makeFeed(1)];
+
+    // Act
+    await refreshFeeds(feeds);
+
+    // Assert — upsertItems should receive at most 100 items
+    expect(mockUpsertItems).toHaveBeenCalledTimes(1);
+    const upsertedItems = mockUpsertItems.mock.calls[0][1] as typeof parsedItem[];
+    expect(upsertedItems.length).toBeLessThanOrEqual(100);
+    expect(upsertedItems[0]).toEqual(lotsOfItems[0]);
+  });
+
+  it("marks a feed as failed and advances progress when refresh exceeds REFRESH_ONE_TIMEOUT_MS", async () => {
+    // Arrange — fetchFeed never resolves (simulates a hung network request)
+    jest.useFakeTimers();
+    mockFetchFeed.mockImplementation(() => new Promise(() => {}));
+    const feeds = [makeFeed(1)];
+    const onProgress = jest.fn();
+
+    // Act
+    const promise = refreshFeeds(feeds, { onProgress });
+    jest.advanceTimersByTime(60_001);
+
+    // Assert
+    const errors = await promise;
+    expect(errors).toBe(1); // timed-out feed counted as failure
+    expect(onProgress).toHaveBeenLastCalledWith(
+      expect.objectContaining({ completed: 1, loading: 0 })
+    );
+    jest.useRealTimers();
+  });
 });

@@ -33,7 +33,7 @@ get a response `200` response with the body `package-status:running`.
 Run from the `app/` directory:
 
 ```pwsh
-cd C:\dev\feedme\app
+cd app
 npx expo start
 ```
 
@@ -46,7 +46,7 @@ npx expo start
 Run from the `worker/` directory:
 
 ```pwsh
-cd C:\dev\feedme\worker
+cd worker
 npx wrangler dev
 ```
 

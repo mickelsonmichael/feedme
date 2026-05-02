@@ -1,10 +1,15 @@
 import { ParsedFeedItem } from "./types";
-import { fetchWithProxyFallback } from "./proxyFetch";
+import {
+  buildProxyRequestUrl,
+  isLikelyCorsBlockedError,
+} from "./proxyFetch";
 
 export type FetchFeedResult = {
   items: ParsedFeedItem[];
   usedProxy: boolean;
 };
+
+const FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * Fetches and parses an RSS/Atom feed URL.
@@ -20,34 +25,59 @@ export async function fetchFeed(
 
 export async function fetchFeedWithMeta(
   feedUrl: string,
-  forceProxy?: boolean
+  forceProxy?: boolean,
+  timeoutMs = FETCH_TIMEOUT_MS
 ): Promise<FetchFeedResult> {
-  const { response, usedProxy } = await fetchWithProxyFallback(
-    feedUrl,
-    undefined,
-    forceProxy
-  );
-  if (!response.ok) {
-    throw new Error(
-      `Failed to fetch feed: ${response.status} ${response.statusText}`
-    );
+  // Use XMLHttpRequest so that `xhr.timeout` is enforced at the native
+  // (OkHttp / NSURLSession) level. This fires independently of the JS event
+  // loop, unlike setTimeout-based AbortController which can be starved when
+  // the network layer is streaming a large body.
+  const proxyUrl = buildProxyRequestUrl(feedUrl);
+
+  const xhrFetch = (url: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.timeout = timeoutMs;
+      xhr.ontimeout = () => reject(new Error("Request timed out"));
+      xhr.onerror = () => reject(new Error("Network request failed"));
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(xhr.responseText);
+        } else {
+          reject(
+            new Error(
+              `Failed to fetch feed: ${xhr.status} ${xhr.statusText}`
+            )
+          );
+        }
+      };
+      xhr.open("GET", url);
+      xhr.send();
+    });
+
+  if (forceProxy && proxyUrl) {
+    return { items: parseFeed(await xhrFetch(proxyUrl)), usedProxy: true };
   }
-  const text = await response.text();
-  return {
-    items: parseFeed(text),
-    usedProxy,
-  };
+
+  try {
+    return { items: parseFeed(await xhrFetch(feedUrl)), usedProxy: false };
+  } catch (error) {
+    if (proxyUrl && isLikelyCorsBlockedError(error)) {
+      return { items: parseFeed(await xhrFetch(proxyUrl)), usedProxy: true };
+    }
+    throw error;
+  }
 }
 
 /**
  * Parses RSS 2.0 or Atom feed XML and extracts title and feed entries.
  */
-export function parseFeed(xml: string): ParsedFeedItem[] {
+export function parseFeed(xml: string, maxItems = 100): ParsedFeedItem[] {
   const isAtom = /<feed[^>]*xmlns[^>]*>/i.test(xml);
   if (isAtom) {
-    return parseAtom(xml);
+    return parseAtom(xml, maxItems);
   }
-  return parseRss(xml);
+  return parseRss(xml, maxItems);
 }
 
 /**
@@ -68,11 +98,11 @@ export function extractFeedTitle(xml: string): string {
 
 // ── RSS 2.0 ────────────────────────────────────────────────────────────────
 
-function parseRss(xml: string): ParsedFeedItem[] {
+function parseRss(xml: string, maxItems = 100): ParsedFeedItem[] {
   const items: ParsedFeedItem[] = [];
   const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
   let match;
-  while ((match = itemRegex.exec(xml)) !== null) {
+  while ((match = itemRegex.exec(xml)) !== null && items.length < maxItems) {
     const block = match[1];
     const rawXml = match[0];
     const title = extractCData(block, "title") ?? "Untitled";
@@ -93,11 +123,11 @@ function parseRss(xml: string): ParsedFeedItem[] {
 
 // ── Atom ───────────────────────────────────────────────────────────────────
 
-function parseAtom(xml: string): ParsedFeedItem[] {
+function parseAtom(xml: string, maxItems = 100): ParsedFeedItem[] {
   const items: ParsedFeedItem[] = [];
   const entryRegex = /<entry[^>]*>([\s\S]*?)<\/entry>/gi;
   let match;
-  while ((match = entryRegex.exec(xml)) !== null) {
+  while ((match = entryRegex.exec(xml)) !== null && items.length < maxItems) {
     const block = match[1];
     const rawXml = match[0];
     const title = extractCData(block, "title") ?? "Untitled";

@@ -126,11 +126,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
     []
   );
 
-  // Mobile: scroll to top when the Feed tab button is tapped while already focused
+  // Mobile: scroll to top when the Feed tab button is tapped while already focused.
+  // setTimeout defers past any navigation-triggered re-renders so FlashList has settled
+  // its layout (including variable-height expanded items) before the scroll fires.
   useEffect(() => {
     const unsubscribe = navigation.addListener("tabPress", () => {
       if (navigation.isFocused()) {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        setTimeout(() => {
+          flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+        }, 0);
       }
     });
     return unsubscribe;
@@ -139,7 +143,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // Web sidebar: scroll to top when the Feed nav item is pressed while already active
   useEffect(() => {
     if (scrollToTopParam) {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      setTimeout(() => {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+      }, 0);
     }
   }, [scrollToTopParam]);
 

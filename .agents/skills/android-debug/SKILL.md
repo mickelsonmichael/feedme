@@ -37,6 +37,7 @@ If a dev overlay appears, press keyevent 82 to open the dev menu and dismiss it 
 - Take a screenshot to confirm state
 - Perform the gesture/interaction being tested
 - Take another screenshot immediately after — the spinner or state change should be visible
+- You should wait a moment before taking the screenshot, unless you are specifically testing a loading state or spinner visibility. Otherwise, you may screenshot too early and miss the final state.
 
 ## Image Limit Management
 

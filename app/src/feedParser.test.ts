@@ -1,4 +1,4 @@
-import { parseFeed, extractFeedTitle, extractImageUrl } from "./feedParser";
+import { parseFeed, extractFeedTitle, extractImageUrl, fetchFeedWithMeta } from "./feedParser";
 import { ParsedFeedItem } from "./types";
 
 const RSS_FEED = `<?xml version="1.0" encoding="UTF-8"?>
@@ -351,3 +351,106 @@ describe("parseFeed – rawXml field", () => {
     });
   });
 });
+
+describe("fetchFeedWithMeta", () => {
+  let mockXhr: {
+    open: jest.Mock;
+    send: jest.Mock;
+    timeout: number;
+    ontimeout: (() => void) | null;
+    onerror: (() => void) | null;
+    onload: (() => void) | null;
+    status: number;
+    statusText: string;
+    responseText: string;
+  };
+
+  beforeEach(() => {
+    mockXhr = {
+      open: jest.fn(),
+      send: jest.fn(),
+      timeout: 0,
+      ontimeout: null,
+      onerror: null,
+      onload: null,
+      status: 200,
+      statusText: "OK",
+      responseText: "",
+    };
+    (globalThis as unknown as Record<string, unknown>).XMLHttpRequest = jest.fn(
+      () => mockXhr
+    );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    delete (globalThis as unknown as Record<string, unknown>).XMLHttpRequest;
+  });
+
+  it("parses and returns the feed when the request succeeds", async () => {
+    // Arrange
+    mockXhr.responseText = RSS_FEED;
+
+    // Act
+    const promise = fetchFeedWithMeta("https://example.com/feed.xml");
+    mockXhr.onload?.();
+
+    // Assert
+    const result = await promise;
+    expect(result.items).toHaveLength(2);
+    expect(result.usedProxy).toBe(false);
+  });
+
+  it("sets xhr.timeout to the supplied timeoutMs", async () => {
+    // Arrange
+    mockXhr.responseText = RSS_FEED;
+
+    // Act
+    const promise = fetchFeedWithMeta(
+      "https://example.com/feed.xml",
+      undefined,
+      7_500
+    );
+    mockXhr.onload?.();
+    await promise;
+
+    // Assert – native timeout must be configured before send()
+    expect(mockXhr.timeout).toBe(7_500);
+  });
+
+  it("throws 'Request timed out' when xhr.ontimeout fires", async () => {
+    // Arrange — simulate native-level timeout (OkHttp / NSURLSession)
+    const promise = fetchFeedWithMeta(
+      "https://example.com/feed.xml",
+      undefined,
+      5_000
+    );
+    mockXhr.ontimeout?.();
+
+    // Assert
+    await expect(promise).rejects.toThrow("Request timed out");
+  });
+
+  it("throws 'Network request failed' when xhr.onerror fires", async () => {
+    // Arrange
+    const promise = fetchFeedWithMeta("https://example.com/feed.xml");
+    mockXhr.onerror?.();
+
+    // Assert
+    await expect(promise).rejects.toThrow("Network request failed");
+  });
+
+  it("throws when the server responds with a non-2xx status", async () => {
+    // Arrange
+    mockXhr.status = 404;
+    mockXhr.statusText = "Not Found";
+
+    // Act
+    const promise = fetchFeedWithMeta("https://example.com/feed.xml");
+    mockXhr.onload?.();
+
+    // Assert
+    await expect(promise).rejects.toThrow("Failed to fetch feed: 404 Not Found");
+  });
+});
+

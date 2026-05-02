@@ -311,7 +311,7 @@ function Tabs() {
         component={FeedListScreen}
         options={{
           tabBarIcon: ({ focused }) => (
-            <FeatherTabIcon icon="home" focused={focused} />
+            <FeatherTabIcon icon="list" focused={focused} />
           ),
         }}
         listeners={({ navigation }) => ({

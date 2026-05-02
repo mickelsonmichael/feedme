@@ -43,10 +43,17 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 async function initializeSchema(
   database: SQLite.SQLiteDatabase
 ): Promise<void> {
-  await database.execAsync(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
+  // Run connection-level PRAGMAs individually before any schema work.
+  // journal_mode must be the very first statement on a fresh connection —
+  // batching it with DDL can silently prevent it from taking effect.
+  // busy_timeout makes SQLite wait and retry on SQLITE_BUSY instead of
+  // immediately throwing "database is locked", which happens when expo-sqlite's
+  // internal read and write connections briefly overlap.
+  await database.execAsync("PRAGMA journal_mode = WAL");
+  await database.execAsync("PRAGMA busy_timeout = 5000");
+  await database.execAsync("PRAGMA foreign_keys = ON");
 
+  await database.execAsync(`
     CREATE TABLE IF NOT EXISTS feeds (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,
@@ -150,24 +157,30 @@ export async function addFeed({
   "title" | "url" | "description" | "use_proxy" | "nsfw"
 >): Promise<number> {
   const database = await getDatabase();
-  const result = await database.runAsync(
-    "INSERT INTO feeds (title, url, description, use_proxy, nsfw) VALUES (?, ?, ?, ?, ?)",
-    [title, url, description ?? null, use_proxy ?? 0, nsfw ?? 0]
+  const result = await withWriteLock(() =>
+    database.runAsync(
+      "INSERT INTO feeds (title, url, description, use_proxy, nsfw) VALUES (?, ?, ?, ?, ?)",
+      [title, url, description ?? null, use_proxy ?? 0, nsfw ?? 0]
+    )
   );
   return result.lastInsertRowId;
 }
 
 export async function deleteFeed(feedId: number): Promise<void> {
   const database = await getDatabase();
-  await database.runAsync("DELETE FROM feeds WHERE id = ?", [feedId]);
+  await withWriteLock(() =>
+    database.runAsync("DELETE FROM feeds WHERE id = ?", [feedId])
+  );
 }
 
 export async function updateFeedLastFetched(feedId: number): Promise<void> {
   const database = await getDatabase();
-  await database.runAsync("UPDATE feeds SET last_fetched = ? WHERE id = ?", [
-    Date.now(),
-    feedId,
-  ]);
+  await withWriteLock(() =>
+    database.runAsync("UPDATE feeds SET last_fetched = ? WHERE id = ?", [
+      Date.now(),
+      feedId,
+    ])
+  );
 }
 
 export async function updateFeed(
@@ -175,9 +188,17 @@ export async function updateFeed(
   fields: Pick<Feed, "title" | "url" | "use_proxy" | "nsfw">
 ): Promise<void> {
   const database = await getDatabase();
-  await database.runAsync(
-    "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ? WHERE id = ?",
-    [fields.title, fields.url, fields.use_proxy ?? 0, fields.nsfw ?? 0, feedId]
+  await withWriteLock(() =>
+    database.runAsync(
+      "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ? WHERE id = ?",
+      [
+        fields.title,
+        fields.url,
+        fields.use_proxy ?? 0,
+        fields.nsfw ?? 0,
+        feedId,
+      ]
+    )
   );
 }
 
@@ -186,10 +207,12 @@ export async function setFeedError(
   error: string | null
 ): Promise<void> {
   const database = await getDatabase();
-  await database.runAsync("UPDATE feeds SET error = ? WHERE id = ?", [
-    error,
-    feedId,
-  ]);
+  await withWriteLock(() =>
+    database.runAsync("UPDATE feeds SET error = ? WHERE id = ?", [
+      error,
+      feedId,
+    ])
+  );
 }
 
 export async function getItemCountForFeed(feedId: number): Promise<number> {
@@ -274,12 +297,16 @@ export async function getItemRawXml(itemId: number): Promise<string | null> {
 
 export async function markItemRead(itemId: number): Promise<void> {
   const database = await getDatabase();
-  await database.runAsync("UPDATE items SET read = 1 WHERE id = ?", [itemId]);
+  await withWriteLock(() =>
+    database.runAsync("UPDATE items SET read = 1 WHERE id = ?", [itemId])
+  );
 }
 
 export async function markItemUnread(itemId: number): Promise<void> {
   const database = await getDatabase();
-  await database.runAsync("UPDATE items SET read = 0 WHERE id = ?", [itemId]);
+  await withWriteLock(() =>
+    database.runAsync("UPDATE items SET read = 0 WHERE id = ?", [itemId])
+  );
 }
 
 export async function getUnreadCount(feedId: number): Promise<number> {
@@ -298,27 +325,29 @@ export async function savePost(
   feedTitle: string
 ): Promise<void> {
   const database = await getDatabase();
-  await database.runAsync(
-    `INSERT INTO saved_posts (item_id, feed_title, title, url, content, published_at, saved_at)
+  await withWriteLock(() =>
+    database.runAsync(
+      `INSERT INTO saved_posts (item_id, feed_title, title, url, content, published_at, saved_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (item_id) DO NOTHING`,
-    [
-      item.id,
-      feedTitle,
-      item.title,
-      item.url ?? null,
-      item.content ?? null,
-      item.published_at ?? null,
-      Date.now(),
-    ]
+      [
+        item.id,
+        feedTitle,
+        item.title,
+        item.url ?? null,
+        item.content ?? null,
+        item.published_at ?? null,
+        Date.now(),
+      ]
+    )
   );
 }
 
 export async function unsavePost(itemId: number): Promise<void> {
   const database = await getDatabase();
-  await database.runAsync("DELETE FROM saved_posts WHERE item_id = ?", [
-    itemId,
-  ]);
+  await withWriteLock(() =>
+    database.runAsync("DELETE FROM saved_posts WHERE item_id = ?", [itemId])
+  );
 }
 
 export async function getSavedPosts(): Promise<SavedPost[]> {
