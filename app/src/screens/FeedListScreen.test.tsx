@@ -1023,7 +1023,7 @@ describe("FeedListScreen", () => {
     });
   });
 
-  it("toggles feed layout between compact and card and persists the selection", async () => {
+  it("does not render a feed layout toggle button", async () => {
     // Arrange
     (getFeeds as jest.Mock).mockResolvedValue([
       {
@@ -1036,19 +1036,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
-      {
-        id: 701,
-        feed_id: 1,
-        feed_title: "Alpha",
-        title: "Toggle test post",
-        url: "https://alpha.example/toggle",
-        content: "body",
-        image_url: null,
-        published_at: Date.now(),
-        read: 0,
-      },
-    ]);
+    (getAllItems as jest.Mock).mockResolvedValue([]);
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
 
     const navigation = {
@@ -1070,24 +1058,10 @@ describe("FeedListScreen", () => {
       await Promise.resolve();
     });
 
-    const toggleButton = tree!.root.findByProps({
-      accessibilityLabel: "Toggle feed layout",
-    });
-    expect(toggleButton).toBeTruthy();
-
-    await act(async () => {
-      await toggleButton.props.onPress();
-    });
-
-    // Assert: layout persisted as card
-    expect(saveConfig).toHaveBeenCalledWith({ feedLayout: "card" });
-
-    // Toggle back to compact
-    await act(async () => {
-      await toggleButton.props.onPress();
-    });
-
-    expect(saveConfig).toHaveBeenCalledWith({ feedLayout: "compact" });
+    // Assert: no toggle button present
+    expect(() =>
+      tree!.root.findByProps({ accessibilityLabel: "Toggle feed layout" })
+    ).toThrow();
 
     await act(async () => {
       tree!.unmount();

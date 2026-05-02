@@ -21,6 +21,11 @@ jest.mock("../context/ThemeContext", () => ({
   }),
 }));
 
+const mockUseWindowDimensions = jest.fn(() => ({ width: 1024, height: 768 }));
+jest.mock("react-native/Libraries/Utilities/useWindowDimensions", () => ({
+  default: () => mockUseWindowDimensions(),
+}));
+
 describe("AppHeader", () => {
   const originalPlatform = Platform.OS;
 
@@ -29,6 +34,7 @@ describe("AppHeader", () => {
       configurable: true,
       value: originalPlatform,
     });
+    mockUseWindowDimensions.mockReturnValue({ width: 1024, height: 768 });
   });
 
   it("renders injected header content on web", () => {
@@ -69,6 +75,86 @@ describe("AppHeader", () => {
       maxWidth: 440,
       marginLeft: "auto",
     });
+
+    act(() => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows the FeedMe title on wide web screens (>= 768px)", () => {
+    Object.defineProperty(Platform, "OS", {
+      configurable: true,
+      value: "web",
+    });
+    mockUseWindowDimensions.mockReturnValue({ width: 1024, height: 768 });
+
+    let tree: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <HeaderContentProvider>
+          <AppHeader />
+        </HeaderContentProvider>
+      );
+    });
+
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some((node) => node.props.children === "FeedMe")
+    ).toBe(true);
+
+    act(() => {
+      tree!.unmount();
+    });
+  });
+
+  it("hides the FeedMe title on narrow web screens (< 768px)", () => {
+    Object.defineProperty(Platform, "OS", {
+      configurable: true,
+      value: "web",
+    });
+    mockUseWindowDimensions.mockReturnValue({ width: 480, height: 812 });
+
+    let tree: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <HeaderContentProvider>
+          <AppHeader />
+        </HeaderContentProvider>
+      );
+    });
+
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some((node) => node.props.children === "FeedMe")
+    ).toBe(false);
+
+    act(() => {
+      tree!.unmount();
+    });
+  });
+
+  it("hides the FeedMe title on native (Android/iOS)", () => {
+    Object.defineProperty(Platform, "OS", {
+      configurable: true,
+      value: "android",
+    });
+
+    let tree: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <HeaderContentProvider>
+          <AppHeader />
+        </HeaderContentProvider>
+      );
+    });
+
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some((node) => node.props.children === "FeedMe")
+    ).toBe(false);
 
     act(() => {
       tree!.unmount();

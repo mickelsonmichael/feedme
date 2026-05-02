@@ -387,17 +387,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
     [navigation]
   );
 
-  const handleLayoutToggle = useCallback(() => {
-    const nextLayout: FeedLayoutMode =
-      feedLayout === "compact" ? "card" : "compact";
-    setFeedLayout(nextLayout);
-    try {
-      saveConfig({ feedLayout: nextLayout });
-    } catch (e) {
-      console.warn("[feedme] Failed to persist feed layout:", e);
-    }
-  }, [feedLayout]);
-
   const formatDate = (ts: number | null): string => {
     if (!ts) return "";
     const diff = Date.now() - ts;
@@ -671,20 +660,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           ) : null}
         </ScrollView>
-        {!isWeb ? (
-          <TouchableOpacity
-            style={styles.layoutToggleBtn}
-            onPress={handleLayoutToggle}
-            accessibilityLabel="Toggle feed layout"
-            activeOpacity={0.7}
-          >
-            <Feather
-              name={feedLayout === "card" ? "grid" : "list"}
-              size={18}
-              color={colors.inkSoft}
-            />
-          </TouchableOpacity>
-        ) : null}
+
       </View>
 
       {refreshing && refreshProgress && refreshProgress.total > 0 ? (
@@ -932,10 +908,6 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     flexDirection: "row",
     alignItems: "center",
-  },
-  layoutToggleBtn: {
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
   },
   pillDivider: {
     width: 1,
