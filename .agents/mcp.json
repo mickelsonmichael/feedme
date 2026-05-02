@@ -1,0 +1,13 @@
+{
+    "mcpServers": {
+        "mobile-mcp": {
+            "command": "npx",
+            "args": [
+                "@mobilenext/mobile-mcp@latest"
+            ],
+            "env": {
+                "ANDROID_HOME": "C:\\Program Files\\android-sdk"
+            }
+        }
+    }
+}

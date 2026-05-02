@@ -1,0 +1,183 @@
+# FeedMe — Screens Reference
+
+This file describes every screen in the app. Update this file whenever a new screen is added or a screen's primary purpose/features change.
+
+---
+
+## Navigation Structure
+
+### Bottom Tab Navigator
+| Tab | Screen |
+|-----|--------|
+| Feed | `FeedListScreen` |
+| Saved | `SavedScreen` |
+| Feeds | `FeedsScreen` |
+| Settings | `SettingsScreen` |
+| AddFeed | `AddFeedScreen` |
+
+### Root Stack Navigator (modal/push over tabs)
+| Route | Screen |
+|-------|--------|
+| `FeedItems` | `FeedItemsScreen` |
+| `FeedItemView` | `FeedItemScreen` |
+| `FeedDetail` | `FeedDetailScreen` |
+| `ImportExport` | `ImportExportScreen` |
+| `InAppBrowser` | `InAppBrowserScreen` |
+
+---
+
+## Screens
+
+### FeedListScreen
+**File:** `app/src/screens/FeedListScreen.tsx`  
+**Tab:** Feed  
+**Purpose:** The main home feed. Aggregates all items from every subscribed feed into a single chronological list. This is the primary reading experience.
+
+**Primary features:**
+- `FlashList`-based virtualized item list with pull-to-refresh
+- Layout modes: compact (text + small thumbnail) vs. card (large image)
+- Sort modes: newest-first, stacked
+- Filter modes: show all / unread only / saved
+- Per-item inline expand (shows media/content inline) or tap-to-open full item
+- Save/unsave and mark-read/unread per item
+- Background feed refresh with progress tracking
+- Header sort/filter controls injected via `HeaderContentContext`
+- Responsive desktop-web layout at ≥ 760 px
+
+---
+
+### FeedsScreen
+**File:** `app/src/screens/FeedsScreen.tsx`  
+**Tab:** Feeds  
+**Purpose:** Subscription manager — lists all added feeds with fuzzy search.
+
+**Primary features:**
+- `FlatList` of feeds with icon, title, and URL
+- Live fuzzy-match search bar (substring matching)
+- Tap a feed → navigates to `FeedItemsScreen` for that feed
+- Long-press or detail button → navigates to `FeedDetailScreen` to edit
+- Link to `ImportExportScreen`
+
+---
+
+### FeedItemsScreen
+**File:** `app/src/screens/FeedItemsScreen.tsx`  
+**Route:** `FeedItems` (stack)  
+**Purpose:** Shows all posts for a single feed, loaded by `feedId`.
+
+**Primary features:**
+- `FlashList` of `FeedPostCard` items, pull-to-refresh (re-fetches the RSS feed live)
+- Inline expand of items (images, video, Reddit gallery support)
+- Save/unsave and read/unread toggling per item
+- Modal overlay showing raw XML for a selected item (debug view)
+- Header title set to the feed's title
+
+---
+
+### FeedItemScreen
+**File:** `app/src/screens/FeedItemScreen.tsx`  
+**Route:** `FeedItemView` (stack)  
+**Purpose:** Full detail view for a single feed item/post.
+
+**Primary features:**
+- Renders parsed content text and extracted links
+- `ExpandedFeedMedia` component for images, GIFs, video
+- Reddit-specific: surfaces a dedicated "Comments" link for Reddit posts
+- Save/unsave button, read/unread toggle (auto-marks read on open)
+- "Open in browser" action using user's preferred link-open mode
+- Header title set to the feed's name
+
+---
+
+### FeedDetailScreen
+**File:** `app/src/screens/FeedDetailScreen.tsx`  
+**Route:** `FeedDetail` (stack)  
+**Purpose:** Edit an existing feed's metadata and settings.
+
+**Primary features:**
+- Editable fields: title, URL
+- Toggle switches: Use proxy, NSFW flag
+- Refresh now button — re-fetches the feed and upserts new items
+- Delete feed button with confirmation alert
+- Dirty-state detection; Save button only enabled when changes exist
+- Shows last-fetched timestamp and any feed error
+
+---
+
+### AddFeedScreen
+**File:** `app/src/screens/AddFeedScreen.tsx`  
+**Tab:** AddFeed  
+**Purpose:** Subscribe to a new feed by URL, subreddit name, or YouTube channel.
+
+**Primary features:**
+- Three source modes (segmented control): URL, Reddit, YouTube
+- Auto-fetches and pre-fills feed title from the feed's XML on URL blur
+- Toggle switches: Use proxy, NSFW
+- Validates URL format and duplicate detection before saving
+- Proxy-use alert shown if direct request was blocked and proxy was used as fallback
+- Responsive desktop-web layout
+
+---
+
+### SavedScreen
+**File:** `app/src/screens/SavedScreen.tsx`  
+**Tab:** Saved  
+**Purpose:** Bookmarks — shows all posts the user has explicitly saved.
+
+**Primary features:**
+- `FlatList` of saved posts with title, source feed name, and relative timestamp
+- Unsave action per item (removes from saved list immediately)
+- Tap → navigates to `FeedItemScreen` (marks the item as already-read)
+- Reloads on focus via `useFocusEffect`
+
+---
+
+### SettingsScreen
+**File:** `app/src/screens/SettingsScreen.tsx`  
+**Tab:** Settings  
+**Purpose:** App-wide preferences, all persisted to storage.
+
+**Primary features:**
+- Appearance: Light / Dark / System theme (segmented control)
+- Reading: "Mark as read on scroll" toggle, "Hide read items by default" toggle
+- Default sort: Newest / Stacked (segmented)
+- Feed layout: Compact / Card (segmented, with visual icon previews)
+- Link open mode: Embedded (in-app browser) / External browser
+- Navigation link to ImportExportScreen
+
+---
+
+### ImportExportScreen
+**File:** `app/src/screens/ImportExportScreen.tsx`  
+**Route:** `ImportExport` (stack)  
+**Purpose:** Bulk migrate subscriptions via OPML files.
+
+**Primary features:**
+- Export: generates an OPML file from all current feeds; on native uses share sheet, on web triggers browser download
+- Import: file picker for `.opml` files, parses and bulk-adds feeds
+- Status message area shows success/error inline
+- Graceful fallback for web vs. native file handling
+
+---
+
+### InAppBrowserScreen
+**File:** `app/src/screens/InAppBrowserScreen.tsx`  
+**Route:** `InAppBrowser` (stack)  
+**Purpose:** Embedded web browser for opening article links without leaving the app.
+
+**Primary features:**
+- Native: renders `react-native-webview` `WebView` with a toolbar
+- Web: fallback UI (can't embed webview in webview) with URL displayed
+- Toolbar: Close (go back) and Open in External Browser buttons
+- Header title set dynamically from the link's title param
+
+---
+
+### DiscoverScreen *(not yet wired to navigation)*
+**File:** `app/src/screens/DiscoverScreen.tsx`  
+**Purpose:** Placeholder for a future "find new feeds" feature.
+
+**Primary features:**
+- Static list of curated suggested feeds
+- Non-interactive search bar placeholder
+- Not currently linked to any tab or stack route

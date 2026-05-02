@@ -17,11 +17,16 @@ This is a monorepo with two independent projects. Every CLI command must be run 
 
 ## Before Starting Any Dev Server
 
-**Always check existing terminal instances first.** Look at all open terminals for:
-- A running Expo dev server (output contains "Metro waiting on exp://..." or similar, or a process running `expo start`)
-- A running Worker dev server (output contains `wrangler dev` or a local `localhost:8787` binding)
-
+You should check that the expo or worker servers are already working before starting a new one.
 If an instance is already running, use it — do not start a duplicate. Only start a new server if none is found.
+
+You can check the worker is running simply by pinging `127.0.0.1:8787` using `curl` (`curl -v 127.0.0.1:8787`)
+If no URL parameter is provided, you should get a `400` response with `Missing url parameter`, which is normal and means the
+servier is up and running.
+
+Similarly, you can check that the expo web server is running using `curl 127.0.0.1:8081`.
+Likewise, you can check for the expo Metro server using `curl 127.0.0.1:8081/status` and you should
+get a response `200` response with the body `package-status:running`.
 
 ## Starting the Expo Dev Server
 
@@ -47,15 +52,9 @@ npx wrangler dev
 
 The worker runs on `http://localhost:8787` by default and proxies feed requests for the app.
 
-**If network requests in the app are failing**, check whether the worker is running — it may need to be started first.
-
 ## Android Emulator / ADB
 
 The Android SDK should be available. If it is not, you should recommend the user set the `ANDROID_HOME` environment variable in `.vscode/mcp.json` or
 wherever necessary to ensure the variable is included in your terminal sessions and environment.
 
-Check for a running emulator before launching a new one:
-
-```pwsh
-& $adb devices
-```
+Check for a running emulator before launching a new one using the MCP Server tools.

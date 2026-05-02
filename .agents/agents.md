@@ -9,30 +9,29 @@ These instructions apply across both projects unless a nested `AGENTS.md` provid
 
 Before running tests or scripts from package.json, you must change your directory into either `app/` or `worker/`, depending on which you're working on.
 
-## Commits
+## Completing Tasks
 
-Use Conventional Commits.
-Examples:
+Before considering a task complete, you must have done the following:
 
-- `feat(feeds): add ability to favorite feeds`
-- `fix(settings): persist dark mode selection longer than 1 day`
+- Plan the work before beginning using the Plan agent. If you have any questions, use the built-in tool for asking the user for clarification
+- **ALWAYS** use the Android emulator to test the Android app
+- **ALWAYS** use the embedded web browser to test the web app
+- Add or update tests for the requested changes. Do not "break" any tests - the original tests must still pass unless it is reasonable that they change
+- After the task is completed, use the code quality skill to ensure the code meets the quality standards
+
+You should repeat these steps in whatever order necessary to consider the change a fully implemented, tested, quality change
 
 ## Testing
 
-- New features should include tests.
-- Keep the full existing test suite passing.
 - Follow `Arrange - Act - Assert` structure in tests.
-
-## Code Quality
-
-All agents must run the `code-quality` skill as part of each task.
+- You should test requirements, not code paths. But you should also test edge and error cases
 
 ## Verification
 
 Changes that affect the UI or feed behaviour should be verified on **both platforms**:
 
 - **Android**: Use the Android emulator with the Expo dev server. See the `android-debug` skill for tooling.
-- **Web**: Use the embedded browser via `npx expo start --web` from `app/`.
+- **Web**: Use the embedded browser.
 
 ## Test Feeds
 
@@ -49,11 +48,6 @@ Use these feeds when a feed is needed during development or testing:
 | YouTube: Atrioc | YouTube: `atrioc` |
 | YouTube: Ludwig | YouTube: `ludwig` |
 
-## Task Completion Requirements
-
-Before considering a task complete:
-
-1. Plan the work.
-2. Implement the requested changes.
-3. Add or update tests when functionality changes.
-4. Run the appropriate quality checks and fix any issues.
+If necessary, you should clear the existing feeds to ensure you are starting from a stable state.
+Some changes may require you to find a post with certain characteristics,
+you will need to scroll through the posts until you find one that meets the requirements.

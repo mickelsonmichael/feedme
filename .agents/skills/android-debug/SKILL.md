@@ -6,68 +6,48 @@ argument-hint: "Describe the issue or behavior to verify on Android"
 
 # Android Debugging
 
-## Tools Available
-
 The `mobile-mcp` MCP server provides device interaction. Tools are prefixed `mcp_mobile-mcp_`.
 
-## Step 1: Confirm Device is Available
+Before you begin, ensure the expo dev server is running using `npm expo start` from the `app/` directory.
+You should check for an existing process in the terminals before starting a new one to avoid duplicates.
 
-```
-mobile_list_available_devices
-```
+Once started, you can use the `mobile_list_available_devices` tool to confirm the emulator is detected.
 
-If empty, the MCP server likely can't find `adb`. Ask the user for their `ANDROID_HOME` path if it isn't already known, then ensure it is set in `.vscode/mcp.json`:
+If the tool returns an empty list, the MCP server likely can't find `adb`.
+Ask the user for their `ANDROID_HOME` path if it isn't already known, then ensure it is set in `.vscode/mcp.json`:
 
 ```json
 "env": { "ANDROID_HOME": "<path-to-android-sdk>" }
 ```
 
-Verify via terminal:
-```pwsh
-$env:ANDROID_HOME = "<path-to-android-sdk>"
-& "$env:ANDROID_HOME\platform-tools\adb.exe" devices
-```
-
-Device ID will be something like `emulator-5554`.
-
-## Step 2: Disable the Element Inspector
-
-The React Native element inspector activates when a tap lands on a non-interactive area — it will hijack every subsequent tap/type and prevent normal interaction.
-
-**Detect it:** If a screenshot shows "Tap something to inspect it" at the bottom, the inspector is ON.
-
-**Disable it:**
-1. Open dev menu: `adb shell input keyevent 82`
-2. Check the screenshot — tap "Toggle element inspector" to turn it OFF
-
-Alternatively, dismiss with: `adb shell input keyevent 4` (back)
-
-## Step 3: Interact with the App
+## Interacting with the Device
 
 **Prefer `mobile_list_elements_on_screen` over guessing coordinates** — it gives exact x/y positions of every element.
 
 **ALWAYS PREFER THE MCP SERVER TO ADB COMMANDS** for interactions, as it has better error handling and will confirm success/failure of each action.
 
 Never use multi-touch or simultaneous coordinate taps unless *truly* necessary.
+A three-finger tap will cause the inspect tool to show up and block your progress.
 Always use single tap x y commands with at least 300ms between actions.
 If a dev overlay appears, press keyevent 82 to open the dev menu and dismiss it before continuing.
 
-## Step 4: Verify the Fix
+## Verifying a change
 
-1. Navigate to the relevant screen
-2. Take a screenshot to confirm state
-3. Perform the gesture/interaction being tested
-4. Take another screenshot immediately after — the spinner or state change should be visible
+- Navigate to the relevant screen
+- Take a screenshot to confirm state
+- Perform the gesture/interaction being tested
+- Take another screenshot immediately after — the spinner or state change should be visible
 
 ## Image Limit Management
 
-Claude Sonnet has a **20-image context limit**. Screenshots accumulate quickly during a debugging session.
+Prefer using `mobile_list_elements_on_screen` to verify UI state instead of taking screenshots.
+Take screenshots occassionally to confirm visual state, but be mindful of the image context limit of your model.
 
-**Rules:**
-- Take a screenshot only when you need to confirm a state change or read content — not after every tap
+Some models (e.g. Claude Sonnet) have an **image context limit** (e.g. 20).
+Screenshots accumulate quickly during a debugging session.
+
 - Maintain a **rolling log of observations** in session memory instead of relying on screenshot history
 - Before taking a new screenshot, summarize the last known state from memory
-- If approaching the limit, prefer `mobile_list_elements_on_screen` (text-based, no image) over screenshots
 
 **Session memory pattern — update after each meaningful state change:**
 ```
