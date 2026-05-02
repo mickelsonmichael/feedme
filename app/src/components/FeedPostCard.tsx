@@ -612,6 +612,7 @@ const styles = StyleSheet.create({
   cardLayout: {
     width: "100%",
     maxWidth: 760,
+    alignSelf: "center",
     padding: spacing.md,
     gap: spacing.md,
   },
