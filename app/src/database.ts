@@ -9,6 +9,22 @@ import {
 
 let db: SQLite.SQLiteDatabase | null = null;
 
+// Serialises all write transactions on the shared SQLite connection.
+// expo-sqlite's withTransactionAsync issues BEGIN/COMMIT/ROLLBACK via
+// execAsync on a single connection; if two transactions run concurrently the
+// trailing ROLLBACK finds no active transaction and throws
+// "cannot rollback - no transaction is active".
+let dbWriteLock: Promise<unknown> = Promise.resolve();
+function withWriteLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = dbWriteLock.then(fn);
+  // swallow errors on the lock chain so a failure doesn't stall future writers
+  dbWriteLock = next.then(
+    () => {},
+    () => {}
+  );
+  return next;
+}
+
 // Native (iOS / Android) implementation of the database module.
 //
 // The web build uses `database.web.ts`, which is backed by `localStorage`
@@ -227,19 +243,21 @@ export async function upsertItems(
        published_at = excluded.published_at`
   );
   try {
-    await database.withTransactionAsync(async () => {
-      for (const item of items) {
-        await statement.executeAsync([
-          feedId,
-          item.title,
-          item.url ?? null,
-          item.content ?? null,
-          item.imageUrl ?? null,
-          item.rawXml ?? null,
-          item.publishedAt ?? null,
-        ]);
-      }
-    });
+    await withWriteLock(() =>
+      database.withTransactionAsync(async () => {
+        for (const item of items) {
+          await statement.executeAsync([
+            feedId,
+            item.title,
+            item.url ?? null,
+            item.content ?? null,
+            item.imageUrl ?? null,
+            item.rawXml ?? null,
+            item.publishedAt ?? null,
+          ]);
+        }
+      })
+    );
   } finally {
     await statement.finalizeAsync();
   }

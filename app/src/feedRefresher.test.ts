@@ -174,4 +174,28 @@ describe("refreshFeeds", () => {
       "Offline Showing cached posts."
     );
   });
+
+  it("completes all feeds when one upsert fails mid-concurrent-refresh", async () => {
+    // Arrange — simulate the DB throwing on one upsert (like a transaction
+    // conflict) while sibling feeds are still in-flight.
+    const feeds = [makeFeed(1), makeFeed(2), makeFeed(3)];
+    mockUpsertItems
+      .mockResolvedValueOnce(undefined) // feed 1 ok
+      .mockRejectedValueOnce(
+        new Error("cannot rollback - no transaction is active")
+      ) // feed 2 DB error
+      .mockResolvedValueOnce(undefined); // feed 3 ok
+
+    // Act
+    const errors = await refreshFeeds(feeds, { concurrency: 3 });
+
+    // Assert — only the one broken feed counts as an error; the others succeed
+    expect(errors).toBe(1);
+    expect(mockSetFeedError).toHaveBeenCalledWith(1, null);
+    expect(mockSetFeedError).toHaveBeenCalledWith(
+      2,
+      "cannot rollback - no transaction is active"
+    );
+    expect(mockSetFeedError).toHaveBeenCalledWith(3, null);
+  });
 });
