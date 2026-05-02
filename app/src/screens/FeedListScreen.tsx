@@ -14,6 +14,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   ScrollView,
+  RefreshControl,
   useWindowDimensions,
   Platform,
   ViewToken,
@@ -652,17 +653,34 @@ export default function FeedListScreen({ navigation, route }: Props) {
       {feeds.length === 0 ? (
         <View style={styles.center}>
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-            No feeds yet.
+            No feeds yet
           </Text>
           <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            Tap ＋ to add your first subscription.
+            Add one now or go to settings to import an OPML file
           </Text>
-          <Text style={[styles.scrawl, { color: colors.accent }]}>
-            or ↓ import an OPML file via Settings
-          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("AddFeed", { from: "Feed" })}
+            style={styles.refreshBtn}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.refreshBtnText, { color: colors.accent }]}>
+              Add Feed +
+            </Text>
+          </TouchableOpacity>
         </View>
       ) : visibleItems.length === 0 ? (
-        <View style={styles.center}>
+        <ScrollView
+          style={styles.fill}
+          contentContainerStyle={styles.center}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefreshAll}
+              colors={[colors.accent]}
+              tintColor={colors.accent}
+            />
+          }
+        >
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
             {hasSearch
               ? "No matches found."
@@ -681,7 +699,19 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   ? "Bookmark items to see them here."
                   : "Pull down to refresh your feeds."}
           </Text>
-        </View>
+          {!hasSearch && filter === "all" ? (
+            <TouchableOpacity
+              onPress={handleRefreshAll}
+              disabled={refreshing}
+              hitSlop={8}
+              style={styles.refreshBtn}
+            >
+              <Text style={[styles.refreshBtnText, { color: colors.accent }]}>
+                Refresh
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </ScrollView>
       ) : (
         <FlashList
           ref={flatListRef}
@@ -776,6 +806,7 @@ function Separator() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  fill: { flex: 1 },
   center: {
     flex: 1,
     alignItems: "center",
@@ -990,11 +1021,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     textAlign: "center",
   },
-  scrawl: {
-    fontFamily: fonts.brand,
-    fontSize: fontSize.bodyLg,
+  refreshBtn: {
     marginTop: spacing.lg,
-    transform: [{ rotate: "-2deg" }],
-    textAlign: "center",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+  },
+  refreshBtnText: {
+    fontSize: fontSize.bodyLg,
+    fontFamily: fonts.body,
   },
 });

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   Modal,
   ScrollView,
+  RefreshControl,
 } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useFocusEffect } from "@react-navigation/native";
@@ -216,9 +217,27 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
         </MetaText>
         <View style={styles.spacer} />
         <MetaText>{refreshing ? "refreshing…" : "pull to refresh"}</MetaText>
+        <TouchableOpacity
+          onPress={handleRefresh}
+          disabled={refreshing}
+          hitSlop={8}
+        >
+          <MetaText style={{ color: colors.accent }}>Refresh</MetaText>
+        </TouchableOpacity>
       </View>
       {items.length === 0 ? (
-        <View style={styles.center}>
+        <ScrollView
+          style={styles.fill}
+          contentContainerStyle={styles.center}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[colors.accent]}
+              tintColor={colors.accent}
+            />
+          }
+        >
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
             No items yet.
           </Text>
@@ -237,7 +256,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
               fetch items →
             </Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       ) : (
         <FlashList
           data={items}
@@ -336,6 +355,7 @@ function Separator() {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  fill: { flex: 1 },
   center: {
     flex: 1,
     alignItems: "center",
