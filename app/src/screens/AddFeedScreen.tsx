@@ -56,8 +56,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
   const [useProxy, setUseProxy] = useState(false);
   const [isNsfw, setIsNsfw] = useState(false);
 
-  const handleSourceChange = (newSource: FeedSource) => {
-    setSource(newSource);
+  const resetForm = () => {
     setUrl("");
     setSubreddit("");
     setYoutubeChannel("");
@@ -66,6 +65,11 @@ export default function AddFeedScreen({ navigation, route }: Props) {
     setFeedError(null);
     setUseProxy(false);
     setIsNsfw(false);
+  };
+
+  const handleSourceChange = (newSource: FeedSource) => {
+    setSource(newSource);
+    resetForm();
   };
 
   const handleSubredditChange = (value: string) => {
@@ -145,6 +149,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           use_proxy: usedProxy ? 1 : 0,
           nsfw: isNsfw ? 1 : 0,
         });
+        resetForm();
         navigation.navigate(from as "Feeds");
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
@@ -203,6 +208,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           use_proxy: usedProxy ? 1 : 0,
           nsfw: isNsfw ? 1 : 0,
         });
+        resetForm();
         navigation.navigate(from as "Feeds");
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
@@ -246,6 +252,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
         use_proxy: useProxy ? 1 : 0,
         nsfw: isNsfw ? 1 : 0,
       });
+      resetForm();
       navigation.navigate(from as "Feeds");
     } catch (err) {
       if ((err as Error).message?.includes("UNIQUE")) {

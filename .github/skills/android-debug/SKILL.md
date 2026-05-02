@@ -46,19 +46,11 @@ Alternatively, dismiss with: `adb shell input keyevent 4` (back)
 
 **Prefer `mobile_list_elements_on_screen` over guessing coordinates** — it gives exact x/y positions of every element.
 
-**Typing text:** If `mobile_type_keys` keeps triggering the inspector, fall back to adb:
-```pwsh
-& $adb shell input tap 160 278   # focus the field first
-& $adb shell input text "your-text-here"
-```
+**ALWAYS PREFER THE MCP SERVER TO ADB COMMANDS** for interactions, as it has better error handling and will confirm success/failure of each action.
 
-Note: `adb input text` doesn't handle special characters well (e.g., `://` in URLs). Use it for simple strings and `mobile_type_keys` otherwise.
-
-**Swipe gestures (e.g., pull-to-refresh):**
-```
-mobile_swipe_on_screen  direction=down  distance=300  x=160  y=300
-```
-Use a y position in the middle of the content area, not near the top bar.
+Never use multi-touch or simultaneous coordinate taps unless *truly* necessary.
+Always use single tap x y commands with at least 300ms between actions.
+If a dev overlay appears, press keyevent 82 to open the dev menu and dismiss it before continuing.
 
 ## Step 4: Verify the Fix
 
@@ -87,11 +79,17 @@ Issues: <anything unexpected>
 
 ## Common Issues
 
+The most common thing to be wary of is that the dev menu is often accidentally triggered because the gear icon has a large touch area.
+You should try to avoid accidentally clicking it, potentially moving the icon by long pressing and dragging it into a spot that is less likely
+to be accidentally clicked. If the dev menu is open, it will interfere with all interactions until it is closed.
+
 | Symptom | Cause | Fix |
 |---------|-------|-----|
+| Dev Menu opens on every tap | Dev Menu was accidentally clicked, the gear icon has a large touch area | Close the dev menu by tapping outside the menu or pressing the "x" button |
 | Inspector opens on every tap | Inspector was left ON | Open dev menu (keyevent 82), toggle it off |
 | `mobile_type_keys` types nothing | Input not focused | Tap the field first with `mobile_click_on_screen_at_coordinates` |
 | `adb devices` shows nothing | `ANDROID_HOME` not set | Set `$env:ANDROID_HOME` before calling adb |
 | Pull-to-refresh does nothing | Empty state is a plain `View` | Wrap in `ScrollView` + `RefreshControl` |
 | Dev menu won't open | App may not have focus | Tap the app screen first, then keyevent 82 |
 | MCP server returns "device not found" | Stale device list or `ANDROID_HOME` missing | Restart MCP server, verify `mcp.json` env |
+| Submit button click does nothing on web forms | `onBlur` on a field triggered an async fetch, setting `loading = true` and disabling the button before the click registered | Click another field first to trigger blur and wait for the async operation to complete (watch for the field to populate), then click the submit button |
