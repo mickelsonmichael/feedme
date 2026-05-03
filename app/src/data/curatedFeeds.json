@@ -52,5 +52,161 @@
     "url": "https://www.nasa.gov/feeds/iotd-feed/",
     "iconUrl": "https://www.nasa.gov/wp-content/plugins/nasa-hds-core-setup/assets/favicons/favicon-32x32.png",
     "description": "A new NASA image highlighted every day."
+  },
+  {
+    "title": "Sanctuary Integrated Monitoring Network (SIMoN)",
+    "url": "https://sanctuarysimon.org/feed/",
+    "iconUrl": "https://sanctuarysimon.org/favicon.ico",
+    "description": "News and research from NOAA's National Marine Sanctuary monitoring program."
+  },
+  {
+    "title": "Allen Institute for AI",
+    "url": "https://allenai.org/rss.xml",
+    "iconUrl": "https://allenai.org/favicon.ico",
+    "description": "Research and announcements from the Ai2 nonprofit AI research institute."
+  },
+  {
+    "title": "Alveus Sanctuary — All YouTube Videos",
+    "url": "https://www.alveussanctuary.org/feeds/youtube/all.xml",
+    "iconUrl": "https://www.alveussanctuary.org/favicon.ico",
+    "description": "New videos from all Alveus Sanctuary YouTube channels."
+  },
+  {
+    "title": "Association of Zoos & Aquariums",
+    "url": "https://www.aza.org/default.aspx?p=143781&feed=rss",
+    "iconUrl": "https://www.aza.org/sitefiles/2332/css/images/favicon.ico",
+    "description": "News releases from the Association of Zoos & Aquariums."
+  },
+  {
+    "title": "San Diego Zoo Wildlife Alliance",
+    "url": "https://sandiegozoowildlifealliance.org/rss.xml",
+    "iconUrl": "https://sandiegozoowildlifealliance.org/sites/default/files/favicon_0_0.ico",
+    "description": "Conservation news and stories from San Diego Zoo Wildlife Alliance."
+  },
+  {
+    "title": "OpenAI News",
+    "url": "https://openai.com/news/rss.xml",
+    "iconUrl": "https://openai.com/apple-icon.png",
+    "description": "Latest product releases, research, and announcements from OpenAI."
+  },
+  {
+    "title": "OWASP",
+    "url": "https://owasp.org/feed",
+    "iconUrl": "https://owasp.org/www--site-theme/favicon.ico",
+    "description": "News and updates from the Open Worldwide Application Security Project."
+  },
+  {
+    "title": "DuckDuckGo Blog",
+    "url": "https://spreadprivacy.com/rss/",
+    "iconUrl": "https://spreadprivacy.com/content/images/size/w256h256/2025/07/DuckDuckGo-Default-2.png",
+    "description": "Privacy news and product updates from DuckDuckGo."
+  },
+  {
+    "title": "The Mullvad Blog",
+    "url": "https://mullvad.net/en/blog/feed/atom/",
+    "iconUrl": "https://mullvad.net/apple-touch-icon.png",
+    "description": "Security and privacy updates from the Mullvad VPN team."
+  },
+  {
+    "title": "OpenRSS Blog",
+    "url": "https://openrss.org/blog.rss",
+    "iconUrl": "https://openrss.org/favicon.ico",
+    "description": "Updates and announcements from OpenRSS."
+  },
+  {
+    "title": "The ASF Blog",
+    "url": "https://news.apache.org/feed",
+    "iconUrl": "https://www.apache.org/favicons/favicon-32x32.png",
+    "description": "News and announcements from the Apache Software Foundation."
+  },
+  {
+    "title": "Open Source Initiative",
+    "url": "https://opensource.org/feed",
+    "iconUrl": "https://i0.wp.com/opensource.org/wp-content/uploads/2023/01/cropped-cropped-OSI_Horizontal_Logo_0-e1674081292667.png?fit=180%2C180&quality=80&ssl=1",
+    "description": "News and advocacy from the Open Source Initiative."
+  },
+  {
+    "title": "Silver Bulletin",
+    "url": "https://www.natesilver.net/feed",
+    "iconUrl": "https://substackcdn.com/image/fetch/f_auto,q_auto:good/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F3a96995a-b40b-47b0-aabd-7468d96daa27%2Ffavicon.ico",
+    "description": "Data-driven politics, sports, and culture from Nate Silver."
+  },
+  {
+    "title": "Linux Foundation Blog",
+    "url": "https://www.linuxfoundation.org/blog/rss.xml",
+    "iconUrl": "https://f.hubspotusercontent10.net/hubfs/8112310/LinuxFoundation_September2021/Images/cropped-favicon-80x80.png",
+    "description": "News and announcements from the Linux Foundation."
+  },
+  {
+    "title": "The GitHub Blog",
+    "url": "https://github.blog/feed/",
+    "iconUrl": "https://github.githubassets.com/favicon.ico",
+    "description": "Product news, engineering insights, and updates from GitHub."
+  },
+  {
+    "title": "Planet GNU",
+    "url": "https://planet.gnu.org/rss20.xml",
+    "iconUrl": "https://planet.gnu.org/static/planetgnu.ico",
+    "description": "Aggregated blogs from GNU project contributors."
+  },
+  {
+    "title": "curl Releases",
+    "url": "https://github.com/curl/curl/releases.atom",
+    "iconUrl": "https://github.githubassets.com/favicons/favicon.png",
+    "description": "Release announcements for curl, the ubiquitous command-line data transfer tool."
+  },
+  {
+    "title": "Ubuntu Blog",
+    "url": "https://ubuntu.com/blog/feed",
+    "iconUrl": "https://avatars.githubusercontent.com/u/53057619",
+    "description": "Engineering, design, and community stories from Canonical and Ubuntu."
+  },
+  {
+    "title": "NPR News",
+    "url": "https://feeds.npr.org/1001/rss.xml",
+    "iconUrl": "https://avatars.githubusercontent.com/u/332099",
+    "description": "Top stories and breaking news from NPR."
+  },
+  {
+    "title": "Matrix.org",
+    "url": "https://matrix.org/atom.xml",
+    "iconUrl": "https://avatars.githubusercontent.com/u/8418310",
+    "description": "News and updates from the Matrix open standard for decentralised communication."
+  },
+  {
+    "title": "Mega Crit Games",
+    "url": "https://www.megacrit.com/feed.xml",
+    "iconUrl": "https://cdn.cloudflare.steamstatic.com/steam/apps/646570/header.jpg",
+    "description": "Developer blog from Mega Crit, creators of Slay the Spire."
+  },
+  {
+    "title": "Steam Client Updates",
+    "url": "https://store.steampowered.com/feeds/news/app/593110/",
+    "iconUrl": "https://cdn.cloudflare.steamstatic.com/steam/apps/593110/header.jpg",
+    "description": "Release notes and patch notes for the Steam desktop client."
+  },
+  {
+    "title": "Deadlock — Game Updates",
+    "url": "https://store.steampowered.com/feeds/news/app/1422450/",
+    "iconUrl": "https://cdn.cloudflare.steamstatic.com/steam/apps/1422450/header.jpg",
+    "description": "Gameplay patches and announcements for Deadlock, Valve's hero shooter."
+  },
+  {
+    "title": "Podman Blog",
+    "url": "https://podman.io/blogs/rss.xml",
+    "iconUrl": "https://podman.io/favicon.ico",
+    "description": "Tutorials, announcements, and deep-dives from the Podman container engine team."
+  },
+  {
+    "title": "Retro Dodo",
+    "url": "https://retrododo.com/rss/",
+    "iconUrl": "https://storage.ghost.io/c/58/fd/58fdc82a-ad84-44e2-ad58-166d1b419bc4/content/images/size/w256h256/format/jpeg/2026/04/retrododo-favicon.jpg",
+    "description": "Reviews, news, and guides for retro gaming handhelds and hardware."
+  },
+  {
+    "title": "Model Context Protocol Blog",
+    "url": "https://blog.modelcontextprotocol.io/index.xml",
+    "iconUrl": "https://blog.modelcontextprotocol.io/og-image.png",
+    "description": "Technical updates and announcements from the MCP team at Anthropic."
   }
 ]
