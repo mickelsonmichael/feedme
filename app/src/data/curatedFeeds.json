@@ -1,5 +1,11 @@
 [
   {
+    "title": "FeedMe Releases",
+    "url": "https://github.com/mickelsonmichael/feedme/releases.atom",
+    "iconUrl": "https://github.githubassets.com/favicons/favicon.png",
+    "description": "New releases and changelogs for the FeedMe RSS reader app."
+  },
+  {
     "title": "New York Times — U.S. News",
     "url": "https://rss.nytimes.com/services/xml/rss/nyt/US.xml",
     "iconUrl": "https://www.nytimes.com/favicon.ico",
@@ -208,5 +214,53 @@
     "url": "https://blog.modelcontextprotocol.io/index.xml",
     "iconUrl": "https://blog.modelcontextprotocol.io/og-image.png",
     "description": "Technical updates and announcements from the MCP team at Anthropic."
+  },
+  {
+    "title": "Node.js Blog",
+    "url": "https://nodejs.org/en/feed/blog.xml",
+    "iconUrl": "https://nodejs.org/static/images/favicons/favicon.png",
+    "description": "Release announcements and updates from the Node.js project."
+  },
+  {
+    "title": "Python Insider",
+    "url": "https://blog.python.org/rss.xml",
+    "iconUrl": "https://blog.python.org/og/index.png",
+    "description": "Official blog of the Python core development team."
+  },
+  {
+    "title": "PowerShell Blog",
+    "url": "https://devblogs.microsoft.com/powershell/feed/",
+    "iconUrl": "https://devblogs.microsoft.com/powershell/wp-content/uploads/sites/30/2024/10/Microsoft-favicon-300x300.jpg",
+    "description": "News, releases, and tutorials from the Microsoft PowerShell team."
+  },
+  {
+    "title": "Discord Blog",
+    "url": "https://discord.com/blog/rss.xml",
+    "iconUrl": "https://cdn.prod.website-files.com/6257adef93867e50d84d30e2/6266bc493fb42d4e27bb8393_847541504914fd33810e70a0ea73177e.ico",
+    "description": "Product updates, community stories, and insights from Discord."
+  },
+  {
+    "title": "React Blog",
+    "url": "https://react.dev/rss.xml",
+    "iconUrl": "https://react.dev/favicon-32x32.png",
+    "description": "Release announcements and technical articles from the React team."
+  },
+  {
+    "title": "React Native Blog",
+    "url": "https://reactnative.dev/blog/rss.xml",
+    "iconUrl": "https://avatars.githubusercontent.com/u/12729740",
+    "description": "Release notes and updates from the React Native team at Meta."
+  },
+  {
+    "title": "Expo Blog",
+    "url": "https://expo.dev/blog/rss.xml",
+    "iconUrl": "https://static.expo.dev/static/favicons/favicon-light-48x48.png",
+    "description": "News, releases, and tutorials from the Expo and EAS team."
+  },
+  {
+    "title": "Fluxer Blog",
+    "url": "https://blog.fluxer.app/rss/",
+    "iconUrl": "https://blog.fluxer.app/content/images/size/w256h256/2026/01/512x512.png",
+    "description": "Updates and announcements from the Fluxer app team."
   }
 ]
