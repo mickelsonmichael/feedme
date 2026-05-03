@@ -102,6 +102,8 @@ export type TabParamList = {
   Saved: undefined;
   ReadLater: undefined;
   Feeds: undefined;
+  Discover: undefined;
+  FeedSearch: { initialUrl?: string } | undefined;
   Settings: undefined;
   AddFeed: { from?: string } | undefined;
   FeedItems: { feed: Feed };

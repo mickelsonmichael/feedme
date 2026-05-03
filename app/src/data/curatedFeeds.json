@@ -1,0 +1,56 @@
+[
+  {
+    "title": "New York Times — U.S. News",
+    "url": "https://rss.nytimes.com/services/xml/rss/nyt/US.xml",
+    "iconUrl": "https://www.nytimes.com/favicon.ico",
+    "description": "Latest U.S. news from The New York Times."
+  },
+  {
+    "title": "Simon Willison's Blog",
+    "url": "https://simonwillison.net/atom/everything",
+    "iconUrl": "https://simonwillison.net/favicon.ico",
+    "description": "Software engineering, AI, and open source from Simon Willison."
+  },
+  {
+    "title": "Visual Studio Code Blog",
+    "url": "https://code.visualstudio.com/feed.xml",
+    "iconUrl": "https://code.visualstudio.com/favicon.ico",
+    "description": "Release notes and announcements from the VS Code team."
+  },
+  {
+    "title": "xkcd",
+    "url": "https://xkcd.com/rss.xml",
+    "iconUrl": "https://xkcd.com/favicon.ico",
+    "description": "A webcomic of romance, sarcasm, math, and language."
+  },
+  {
+    "title": "Smithsonian — Latest Articles",
+    "url": "https://www.smithsonianmag.com/rss/latest_articles/",
+    "iconUrl": "https://www.smithsonianmag.com/favicon.ico",
+    "description": "Latest stories from Smithsonian Magazine."
+  },
+  {
+    "title": "Smithsonian — Photos",
+    "url": "https://www.smithsonianmag.com/rss/multimedia/",
+    "iconUrl": "https://www.smithsonianmag.com/favicon.ico",
+    "description": "Smithsonian's photo and multimedia features."
+  },
+  {
+    "title": "Ecosia Blog",
+    "url": "https://blog.ecosia.org/rss/",
+    "iconUrl": "https://blog.ecosia.org/favicon.png",
+    "description": "Stories from Ecosia, the search engine that plants trees."
+  },
+  {
+    "title": "Louvre News (Le Monde)",
+    "url": "https://www.lemonde.fr/en/louvre/rss_full.xml",
+    "iconUrl": "https://www.lemonde.fr/favicon.ico",
+    "description": "Le Monde's English coverage of the Louvre."
+  },
+  {
+    "title": "NASA — Image of the Day",
+    "url": "https://www.nasa.gov/feeds/iotd-feed/",
+    "iconUrl": "https://www.nasa.gov/wp-content/plugins/nasa-hds-core-setup/assets/favicons/favicon-32x32.png",
+    "description": "A new NASA image highlighted every day."
+  }
+]

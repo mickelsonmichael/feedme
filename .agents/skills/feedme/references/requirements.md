@@ -156,8 +156,25 @@ This file tracks functional requirements for each screen and feature area. Updat
 
 ---
 
-## DiscoverScreen *(planned)*
+## DiscoverScreen
 
 | ID | Requirement |
 |----|-------------|
-| REQ-DISCOVER-001 | *(Placeholder)* The screen shall allow users to discover and subscribe to curated or searched feeds. |
+| REQ-DISCOVER-001 | The Discover screen shall be reachable from the bottom tab bar / web sidebar via a Discover tab. |
+| REQ-DISCOVER-002 | On small screens (mobile or web < 768 px), the Discover tab shall replace the Saved and Read Later tabs in the bottom tab bar; Saved and Read Later remain reachable from `FeedsScreen` quick-links. |
+| REQ-DISCOVER-003 | The Discover screen shall display a curated list of suggested feeds sourced from `app/src/data/curatedFeeds.json`, each with a title, description, and icon. |
+| REQ-DISCOVER-004 | The user shall be able to subscribe to any curated feed with a single tap; rows for already-subscribed feeds shall be visibly disabled. |
+| REQ-DISCOVER-005 | The Discover screen shall provide an entry point that opens the FeedSearch screen. |
+
+---
+
+## FeedSearchScreen
+
+| ID | Requirement |
+|----|-------------|
+| REQ-FEEDSEARCH-001 | The user shall be able to enter a website URL and search it for RSS or Atom feeds. |
+| REQ-FEEDSEARCH-002 | The search shall detect feeds advertised via HTML `<link rel="alternate">` tags and by probing common feed paths (e.g. `/feed`, `/rss.xml`, `/atom.xml`). |
+| REQ-FEEDSEARCH-003 | If the input URL is itself an RSS/Atom feed, it shall be returned as a single result. |
+| REQ-FEEDSEARCH-004 | Search results shall display each feed's title, URL, and how it was discovered. |
+| REQ-FEEDSEARCH-005 | The user shall be able to subscribe to any result with a single tap; duplicate subscriptions shall be reported inline rather than via an error dialog. |
+| REQ-FEEDSEARCH-006 | When discovery fails (network error or no feeds found), the screen shall display an inline error/empty-state message. |

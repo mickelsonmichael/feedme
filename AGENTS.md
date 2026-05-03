@@ -33,6 +33,10 @@ Changes that affect the UI or feed behaviour should be verified on **both platfo
 - **Android**: Use the Android emulator with the Expo dev server. See the `android-debug` skill for tooling.
 - **Web**: Use the embedded browser.
 
+## Curated Discover Feeds
+
+Whenever a feed in the Discover screen's curated list is being **added, modified, or removed**, use the `curated-feeds` skill. It covers verifying the feed URL, retrieving and validating the favicon, and the JSON file format.
+
 ## Test Feeds
 
 Use these feeds when a feed is needed during development or testing:

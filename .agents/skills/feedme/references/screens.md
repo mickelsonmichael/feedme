@@ -7,13 +7,22 @@ This file describes every screen in the app. Update this file whenever a new scr
 ## Navigation Structure
 
 ### Bottom Tab Navigator
+
+The set of bottom tabs depends on screen size:
+
+- **Small screens (mobile / narrow web < 768 px):** Feed, Feeds, Discover, Settings. `Saved` and `ReadLater` are accessible from the `FeedsScreen` quick-links instead of from the tab bar.
+- **Wide web (≥ 768 px):** the bottom tab bar is replaced by the left web sidebar, which lists Feed, Saved, Read Later, Manage Feeds, Discover, and Settings.
+
 | Tab | Screen |
 |-----|--------|
 | Feed | `FeedListScreen` |
-| Saved | `SavedScreen` |
+| Saved | `SavedScreen` *(wide web only)* |
+| ReadLater | `ReadLaterScreen` *(wide web only)* |
 | Feeds | `FeedsScreen` |
+| Discover | `DiscoverScreen` |
 | Settings | `SettingsScreen` |
-| AddFeed | `AddFeedScreen` |
+| AddFeed | `AddFeedScreen` *(hidden route)* |
+| FeedSearch | `FeedSearchScreen` *(hidden route)* |
 
 ### Root Stack Navigator (modal/push over tabs)
 | Route | Screen |
@@ -192,11 +201,27 @@ This file describes every screen in the app. Update this file whenever a new scr
 
 ---
 
-### DiscoverScreen *(not yet wired to navigation)*
+### DiscoverScreen
 **File:** `app/src/screens/DiscoverScreen.tsx`  
-**Purpose:** Placeholder for a future "find new feeds" feature.
+**Tab:** Discover  
+**Purpose:** Find new feeds to subscribe to.
 
 **Primary features:**
-- Static list of curated suggested feeds
-- Non-interactive search bar placeholder
-- Not currently linked to any tab or stack route
+- Entry point that opens `FeedSearchScreen` for searching a website's RSS feeds.
+- Curated list of suggested feeds loaded from `app/src/data/curatedFeeds.json` (title, URL, icon, description).
+- Each curated row has an Add button that subscribes the feed; rows for already-subscribed feeds show "Added ✓" and are disabled.
+- Re-checks subscribed state on focus.
+
+---
+
+### FeedSearchScreen
+**File:** `app/src/screens/FeedSearchScreen.tsx`  
+**Route:** `FeedSearch` (hidden tab route)  
+**Purpose:** Find RSS/Atom feeds for an arbitrary website URL.
+
+**Primary features:**
+- URL input + Search button. Auto-runs the search if `initialUrl` was passed via params.
+- Uses `discoverFeeds` (HTML `<link rel="alternate">` parsing + common-path probing, with proxy fallback) to find feeds.
+- Displays each result with title, URL, and how it was discovered (direct URL, page link, or guessed path).
+- Each result has an Add button that subscribes the feed and reflects "Added ✓" / "Already added" state.
+- Inline error message when discovery fails or no feeds are found.
