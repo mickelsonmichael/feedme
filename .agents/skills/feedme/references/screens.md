@@ -21,6 +21,7 @@ This file describes every screen in the app. Update this file whenever a new scr
 | `FeedItems` | `FeedItemsScreen` |
 | `FeedItemView` | `FeedItemScreen` |
 | `FeedDetail` | `FeedDetailScreen` |
+| `TagDetail` | `TagDetailScreen` |
 | `ImportExport` | `ImportExportScreen` |
 | `InAppBrowser` | `InAppBrowserScreen` |
 
@@ -43,6 +44,7 @@ This file describes every screen in the app. Update this file whenever a new scr
 - Background feed refresh with progress tracking
 - Header sort/filter controls injected via `HeaderContentContext`
 - Responsive desktop-web layout at ≥ 760 px
+- Tag-scoped view: when navigated with `selectedTagId`, the list shows only items from feeds tagged with that tag, refresh is scoped to those feeds, and the scope row shows the tag name with a tag icon. The default "all feeds" view excludes feeds flagged `show_only_in_tag`.
 
 ---
 
@@ -57,6 +59,7 @@ This file describes every screen in the app. Update this file whenever a new scr
 - Tap a feed → navigates to `FeedItemsScreen` for that feed
 - Long-press or detail button → navigates to `FeedDetailScreen` to edit
 - Link to `ImportExportScreen`
+- Tags section listing all user-defined tags with feed counts. Tapping a tag navigates to the Feed view scoped to that tag; an edit (pencil) icon opens `TagDetailScreen` for that tag. A "+" button opens `TagDetailScreen` in add mode.
 
 ---
 
@@ -96,7 +99,8 @@ This file describes every screen in the app. Update this file whenever a new scr
 
 **Primary features:**
 - Editable fields: title, URL
-- Toggle switches: Use proxy, NSFW flag
+- Toggle switches: Use proxy, NSFW flag, Show only on tag feeds (hides items from the default home view; they only appear under a selected tag)
+- Multi-select tag picker (max 25 tags per feed) with inline create-new
 - Refresh now button — re-fetches the feed and upserts new items
 - Delete feed button with confirmation alert
 - Dirty-state detection; Save button only enabled when changes exist
@@ -112,10 +116,25 @@ This file describes every screen in the app. Update this file whenever a new scr
 **Primary features:**
 - Three source modes (segmented control): URL, Reddit, YouTube
 - Auto-fetches and pre-fills feed title from the feed's XML on URL blur
-- Toggle switches: Use proxy, NSFW
+- Toggle switches: Use proxy, NSFW, Show only on tag feeds
+- Multi-select tag picker (max 25 tags per feed) with inline create-new
 - Validates URL format and duplicate detection before saving
 - Proxy-use alert shown if direct request was blocked and proxy was used as fallback
 - Responsive desktop-web layout
+
+---
+
+### TagDetailScreen
+**File:** `app/src/screens/TagDetailScreen.tsx`  
+**Route:** `TagDetail` (stack)  
+**Purpose:** Add or edit a user-defined tag and its associated feeds.
+
+**Primary features:**
+- Add mode (no `tagId`): name input + searchable feed list with checkbox toggles
+- Edit mode (with `tagId`): pre-populates name and currently-tagged feeds
+- Save creates/updates the tag (case-insensitive uniqueness) and replaces feed associations
+- Delete button (edit mode only) with confirm dialog (`Alert` on native, `window.confirm` on web)
+- Returns to either `FeedsScreen` or the main `Feed` based on the `from` route param
 
 ---
 

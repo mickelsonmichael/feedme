@@ -28,13 +28,24 @@ Similarly, you can check that the expo web server is running using `curl 127.0.0
 Likewise, you can check for the expo Metro server using `curl 127.0.0.1:8081/status` and you should
 get a response `200` response with the body `package-status:running`.
 
+## Starting both servers simultaneously
+
+Run from the root directory:
+
+```
+npm run start
+```
+
+This will start both the app and worker processes in a single command and is a useful
+alternative instead of running two commands in two separate terminal instances.
+
 ## Starting the Expo Dev Server
 
 Run from the `app/` directory:
 
 ```pwsh
 cd app
-npx expo start
+npm run start
 ```
 
 - Expo uses **Fast Refresh** — JS/TS changes are pushed to the device/emulator instantly without a rebuild.
@@ -58,3 +69,9 @@ The Android SDK should be available. If it is not, you should recommend the user
 wherever necessary to ensure the variable is included in your terminal sessions and environment.
 
 Check for a running emulator before launching a new one using the MCP Server tools.
+
+## Interacting with the emulator
+
+For interacting with the emulator, you should prefer to use the `mobile-mcp` MCP tools to interact directly.
+
+Only use `adb` for functionality that is not exposed by the `mobile-mcp` tools, such as inspecting logs with `adb logcat` or running shell commands with `adb shell`. But prefer using `mobile-mcp`.

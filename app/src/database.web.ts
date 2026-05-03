@@ -18,19 +18,26 @@ import {
   ParsedFeedItem,
   ReadLaterPost,
   SavedPost,
+  Tag,
+  TagWithFeedCount,
 } from "./types";
 
 const STORAGE_KEY = "feedme_db_v1";
+
+type FeedTagRow = { feed_id: number; tag_id: number };
 
 type DbState = {
   feeds: Feed[];
   items: FeedItem[];
   savedPosts: SavedPost[];
   readLaterPosts: ReadLaterPost[];
+  tags: Tag[];
+  feedTags: FeedTagRow[];
   nextFeedId: number;
   nextItemId: number;
   nextSavedPostId: number;
   nextReadLaterPostId: number;
+  nextTagId: number;
 };
 
 function normalizeFeed(raw: Feed): Feed {
@@ -38,6 +45,7 @@ function normalizeFeed(raw: Feed): Feed {
     ...raw,
     use_proxy: raw.use_proxy ?? 0,
     nsfw: raw.nsfw ?? 0,
+    show_only_in_tag: raw.show_only_in_tag ?? 0,
   };
 }
 
@@ -47,10 +55,13 @@ function emptyState(): DbState {
     items: [],
     savedPosts: [],
     readLaterPosts: [],
+    tags: [],
+    feedTags: [],
     nextFeedId: 1,
     nextItemId: 1,
     nextSavedPostId: 1,
     nextReadLaterPostId: 1,
+    nextTagId: 1,
   };
 }
 
@@ -93,11 +104,19 @@ function loadState(): DbState {
         parsed && Array.isArray(parsed.readLaterPosts)
           ? (parsed.readLaterPosts as ReadLaterPost[])
           : [];
+      const tags =
+        parsed && Array.isArray(parsed.tags) ? (parsed.tags as Tag[]) : [];
+      const feedTags =
+        parsed && Array.isArray(parsed.feedTags)
+          ? (parsed.feedTags as FeedTagRow[])
+          : [];
       cachedState = {
         feeds,
         items,
         savedPosts,
         readLaterPosts,
+        tags,
+        feedTags,
         nextFeedId:
           typeof parsed?.nextFeedId === "number" && parsed.nextFeedId > 0
             ? parsed.nextFeedId
@@ -116,6 +135,10 @@ function loadState(): DbState {
           parsed.nextReadLaterPostId > 0
             ? parsed.nextReadLaterPostId
             : 1,
+        nextTagId:
+          typeof parsed?.nextTagId === "number" && parsed.nextTagId > 0
+            ? parsed.nextTagId
+            : Math.max(1, ...tags.map((t) => t.id + 1)),
       };
       return cachedState;
     }
@@ -166,9 +189,15 @@ export async function addFeed({
   description,
   use_proxy,
   nsfw,
+  show_only_in_tag,
 }: Pick<
   Feed,
-  "title" | "url" | "description" | "use_proxy" | "nsfw"
+  | "title"
+  | "url"
+  | "description"
+  | "use_proxy"
+  | "nsfw"
+  | "show_only_in_tag"
 >): Promise<number> {
   const state = loadState();
   if (state.feeds.some((f) => f.url === url)) {
@@ -185,6 +214,7 @@ export async function addFeed({
     error: null,
     use_proxy: use_proxy ?? 0,
     nsfw: nsfw ?? 0,
+    show_only_in_tag: show_only_in_tag ?? 0,
   };
   state.feeds.push(feed);
   state.nextFeedId = id + 1;
@@ -197,6 +227,7 @@ export async function deleteFeed(feedId: number): Promise<void> {
   state.feeds = state.feeds.filter((f) => f.id !== feedId);
   // ON DELETE CASCADE: drop matching items too.
   state.items = state.items.filter((i) => i.feed_id !== feedId);
+  state.feedTags = state.feedTags.filter((ft) => ft.feed_id !== feedId);
   saveState(state);
 }
 
@@ -211,7 +242,7 @@ export async function updateFeedLastFetched(feedId: number): Promise<void> {
 
 export async function updateFeed(
   feedId: number,
-  fields: Pick<Feed, "title" | "url" | "use_proxy" | "nsfw">
+  fields: Pick<Feed, "title" | "url" | "use_proxy" | "nsfw" | "show_only_in_tag">
 ): Promise<void> {
   const state = loadState();
   const feed = state.feeds.find((f) => f.id === feedId);
@@ -220,6 +251,7 @@ export async function updateFeed(
     feed.url = fields.url;
     feed.use_proxy = fields.use_proxy ?? 0;
     feed.nsfw = fields.nsfw ?? 0;
+    feed.show_only_in_tag = fields.show_only_in_tag ?? 0;
     saveState(state);
   }
 }
@@ -422,4 +454,151 @@ export async function getReadLaterItemIds(): Promise<Set<number>> {
       .filter((p) => p.item_id !== null)
       .map((p) => p.item_id as number)
   );
+}
+
+// ── Tags ───────────────────────────────────────────────────────────────────
+
+function findTagByName(state: DbState, name: string): Tag | undefined {
+  const lower = name.trim().toLowerCase();
+  return state.tags.find((t) => t.name.toLowerCase() === lower);
+}
+
+export async function getTags(): Promise<Tag[]> {
+  const state = loadState();
+  return [...state.tags].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+  );
+}
+
+export async function getTagsWithFeedCounts(): Promise<TagWithFeedCount[]> {
+  const state = loadState();
+  return [...state.tags]
+    .map((t) => ({
+      ...t,
+      feed_count: state.feedTags.reduce(
+        (n, ft) => (ft.tag_id === t.id ? n + 1 : n),
+        0
+      ),
+    }))
+    .sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+}
+
+export async function addTag(name: string): Promise<number> {
+  const state = loadState();
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Tag name cannot be empty.");
+  }
+  if (findTagByName(state, trimmed)) {
+    throw new Error(`Tag "${trimmed}" already exists`);
+  }
+  const id = state.nextTagId;
+  state.tags.push({ id, name: trimmed });
+  state.nextTagId = id + 1;
+  saveState(state);
+  return id;
+}
+
+export async function getOrCreateTag(name: string): Promise<Tag> {
+  const state = loadState();
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Tag name cannot be empty.");
+  }
+  const existing = findTagByName(state, trimmed);
+  if (existing) return existing;
+  const id = state.nextTagId;
+  const tag: Tag = { id, name: trimmed };
+  state.tags.push(tag);
+  state.nextTagId = id + 1;
+  saveState(state);
+  return tag;
+}
+
+export async function updateTag(tagId: number, name: string): Promise<void> {
+  const state = loadState();
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Tag name cannot be empty.");
+  }
+  const tag = state.tags.find((t) => t.id === tagId);
+  if (tag) {
+    tag.name = trimmed;
+    saveState(state);
+  }
+}
+
+export async function deleteTag(tagId: number): Promise<void> {
+  const state = loadState();
+  state.tags = state.tags.filter((t) => t.id !== tagId);
+  state.feedTags = state.feedTags.filter((ft) => ft.tag_id !== tagId);
+  saveState(state);
+}
+
+export async function getTagsForFeed(feedId: number): Promise<Tag[]> {
+  const state = loadState();
+  const tagIds = new Set(
+    state.feedTags.filter((ft) => ft.feed_id === feedId).map((ft) => ft.tag_id)
+  );
+  return state.tags
+    .filter((t) => tagIds.has(t.id))
+    .sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+}
+
+export async function getFeedsForTag(tagId: number): Promise<Feed[]> {
+  const state = loadState();
+  const feedIds = new Set(
+    state.feedTags.filter((ft) => ft.tag_id === tagId).map((ft) => ft.feed_id)
+  );
+  return state.feeds
+    .filter((f) => feedIds.has(f.id))
+    .map(normalizeFeed)
+    .sort((a, b) =>
+      a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+    );
+}
+
+export async function getFeedTagMap(): Promise<Map<number, number[]>> {
+  const state = loadState();
+  const map = new Map<number, number[]>();
+  for (const ft of state.feedTags) {
+    const list = map.get(ft.feed_id);
+    if (list) list.push(ft.tag_id);
+    else map.set(ft.feed_id, [ft.tag_id]);
+  }
+  return map;
+}
+
+export async function setFeedTags(
+  feedId: number,
+  tagIds: number[]
+): Promise<void> {
+  const state = loadState();
+  const unique = Array.from(new Set(tagIds));
+  state.feedTags = state.feedTags.filter((ft) => ft.feed_id !== feedId);
+  for (const tagId of unique) {
+    if (state.tags.some((t) => t.id === tagId)) {
+      state.feedTags.push({ feed_id: feedId, tag_id: tagId });
+    }
+  }
+  saveState(state);
+}
+
+export async function setTagFeeds(
+  tagId: number,
+  feedIds: number[]
+): Promise<void> {
+  const state = loadState();
+  const unique = Array.from(new Set(feedIds));
+  state.feedTags = state.feedTags.filter((ft) => ft.tag_id !== tagId);
+  for (const feedId of unique) {
+    if (state.feeds.some((f) => f.id === feedId)) {
+      state.feedTags.push({ feed_id: feedId, tag_id: tagId });
+    }
+  }
+  saveState(state);
 }

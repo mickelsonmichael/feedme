@@ -25,11 +25,16 @@ import {
   updateFeedLastFetched,
   setFeedError,
   upsertItems,
+  getTags,
+  getTagsForFeed,
+  getOrCreateTag,
+  setFeedTags,
 } from "../database";
 import { fetchFeedWithMeta } from "../feedParser";
-import { Feed, RootStackParamList, TabParamList } from "../types";
+import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { SelectedTag, TagMultiSelect } from "../components/TagMultiSelect";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "FeedDetail">,
@@ -65,24 +70,49 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
   const [url, setUrl] = useState("");
   const [useProxy, setUseProxy] = useState(false);
   const [isNsfw, setIsNsfw] = useState(false);
+  const [showOnlyInTag, setShowOnlyInTag] = useState(false);
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
+  const [originalTagIds, setOriginalTagIds] = useState<number[]>([]);
+
+  const tagsChanged = (() => {
+    if (selectedTags.some((t) => t.id === null)) return true;
+    const current = selectedTags
+      .map((t) => t.id)
+      .filter((id): id is number => id !== null)
+      .sort();
+    const original = [...originalTagIds].sort();
+    if (current.length !== original.length) return true;
+    for (let i = 0; i < current.length; i++) {
+      if (current[i] !== original[i]) return true;
+    }
+    return false;
+  })();
 
   const hasChanges =
     feed !== null &&
     (title.trim() !== feed.title ||
       url.trim() !== feed.url ||
       useProxy !== (feed.use_proxy === 1) ||
-      isNsfw !== (feed.nsfw === 1));
+      isNsfw !== (feed.nsfw === 1) ||
+      showOnlyInTag !== (feed.show_only_in_tag === 1) ||
+      tagsChanged);
 
   const loadFeed = useCallback(async () => {
     try {
-      const all = await getFeeds();
+      const [all, allTags] = await Promise.all([getFeeds(), getTags()]);
       const found = all.find((f) => f.id === feedId) ?? null;
       setFeed(found);
+      setAvailableTags(allTags);
       if (found) {
         setTitle(found.title);
         setUrl(found.url);
         setUseProxy(found.use_proxy === 1);
         setIsNsfw(found.nsfw === 1);
+        setShowOnlyInTag(found.show_only_in_tag === 1);
+        const feedTags = await getTagsForFeed(found.id);
+        setSelectedTags(feedTags.map((t) => ({ id: t.id, name: t.name })));
+        setOriginalTagIds(feedTags.map((t) => t.id));
       }
     } finally {
       setLoading(false);
@@ -128,7 +158,20 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         url: trimmedUrl,
         use_proxy: useProxy ? 1 : 0,
         nsfw: isNsfw ? 1 : 0,
+        show_only_in_tag: showOnlyInTag ? 1 : 0,
       });
+
+      // Resolve any newly-created tags and persist the membership list.
+      const tagIds: number[] = [];
+      for (const tag of selectedTags) {
+        if (tag.id !== null) {
+          tagIds.push(tag.id);
+        } else {
+          const created = await getOrCreateTag(tag.name);
+          tagIds.push(created.id);
+        }
+      }
+      await setFeedTags(feedId, tagIds);
 
       // Refetch feed after save
       try {
@@ -429,6 +472,32 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             <Switch
               value={isNsfw}
               onValueChange={setIsNsfw}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.paper}
+            />
+          </View>
+
+          <Text style={[styles.label, { color: colors.inkSoft }]}>tags</Text>
+          <TagMultiSelect
+            value={selectedTags}
+            onChange={setSelectedTags}
+            availableTags={availableTags}
+            testID="feed-detail-tags"
+          />
+
+          <View style={styles.proxyRow}>
+            <View style={styles.proxyLabelGroup}>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                show only on tag feeds
+              </Text>
+              <Text style={[styles.proxyHint, { color: colors.inkFaint }]}>
+                Hide this feed&apos;s posts from the main feed. Posts will only
+                appear when viewing this feed directly or any of its tags.
+              </Text>
+            </View>
+            <Switch
+              value={showOnlyInTag}
+              onValueChange={setShowOnlyInTag}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.paper}
             />

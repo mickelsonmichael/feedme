@@ -20,6 +20,8 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDLIST-006 | The user shall be able to save or unsave any item from the list. |
 | REQ-FEEDLIST-007 | The user shall be able to mark any item as read or unread from the list. |
 | REQ-FEEDLIST-008 | Pull-to-refresh shall trigger a background refresh of all feeds. |
+| REQ-FEEDLIST-009 | When viewing a tag-scoped feed list (`selectedTagId`), the list shall show only items from feeds that have that tag, and refresh shall be limited to those feeds. |
+| REQ-FEEDLIST-010 | The default "all feeds" view shall exclude items from feeds flagged `show_only_in_tag`; such items appear only in tag-scoped views. |
 
 ---
 
@@ -32,6 +34,8 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDS-003 | Tapping a feed shall navigate to FeedItemsScreen for that feed. |
 | REQ-FEEDS-004 | The user shall be able to access feed detail/edit via long-press or a detail button. |
 | REQ-FEEDS-005 | The feeds screen shall provide a navigation entry point to ImportExportScreen. |
+| REQ-FEEDS-006 | The feeds screen shall display a list of user-defined tags. Tapping a tag opens the tag-scoped feed view; an edit (pencil) icon opens `TagDetailScreen` for that tag. |
+| REQ-FEEDS-007 | The feeds screen shall provide an "Add Tag" entry that opens `TagDetailScreen` in add mode. |
 
 ---
 
@@ -70,6 +74,8 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDDETAIL-005 | The user shall be able to manually refresh (re-fetch) the feed from this screen. |
 | REQ-FEEDDETAIL-006 | The user shall be able to delete the feed with a confirmation step. |
 | REQ-FEEDDETAIL-007 | The screen shall display the feed's last-fetched timestamp and any fetch error. |
+| REQ-FEEDDETAIL-008 | The user shall be able to assign up to 25 tags to a feed via a multi-select picker, including creating new tags inline. |
+| REQ-FEEDDETAIL-009 | The user shall be able to toggle "Show only on tag feeds" so the feed's items are hidden from the default home view and only appear in tag-scoped views. |
 
 ---
 
@@ -84,6 +90,20 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-ADDFEED-005 | The app shall prevent adding a duplicate feed URL. |
 | REQ-ADDFEED-006 | The app shall validate that the URL field contains a valid URL before saving. |
 | REQ-ADDFEED-007 | If a direct fetch fails and a proxy was used as fallback, the user shall be notified. |
+| REQ-ADDFEED-008 | The user shall be able to assign up to 25 tags to the new feed via a multi-select picker, including creating new tags inline. |
+| REQ-ADDFEED-009 | The user shall be able to toggle "Show only on tag feeds" when adding a feed. |
+
+---
+
+## TagDetailScreen
+
+| ID | Requirement |
+|----|-------------|
+| REQ-TAGDETAIL-001 | The screen shall support add mode (no `tagId`) and edit mode (existing `tagId`). |
+| REQ-TAGDETAIL-002 | The user shall be able to set or rename the tag's name with case-insensitive uniqueness. |
+| REQ-TAGDETAIL-003 | The user shall be able to associate or disassociate any feed with the tag via a searchable feed list. |
+| REQ-TAGDETAIL-004 | In edit mode, the user shall be able to delete the tag with a confirmation step. |
+| REQ-TAGDETAIL-005 | Saving shall persist the tag and replace its feed associations atomically before returning to the previous screen. |
 
 ---
 

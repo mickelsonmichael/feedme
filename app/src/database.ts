@@ -6,6 +6,8 @@ import {
   ParsedFeedItem,
   ReadLaterPost,
   SavedPost,
+  Tag,
+  TagWithFeedCount,
 } from "./types";
 
 // Serialises all write operations on the shared SQLite connection.
@@ -110,6 +112,19 @@ async function initializeSchema(
       added_at INTEGER NOT NULL,
       UNIQUE (item_id)
     );
+
+    CREATE TABLE IF NOT EXISTS tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE
+    );
+
+    CREATE TABLE IF NOT EXISTS feed_tags (
+      feed_id INTEGER NOT NULL,
+      tag_id INTEGER NOT NULL,
+      PRIMARY KEY (feed_id, tag_id),
+      FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE,
+      FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+    );
   `);
 
   // Migration: add error column to feeds if it doesn't exist yet
@@ -151,6 +166,15 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
+  // Migration: add show_only_in_tag column to feeds if it doesn't exist yet
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN show_only_in_tag INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Indexes: ensure efficient sort/filter for the list screens.
   await database.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_items_published_at ON items(published_at DESC);
@@ -158,6 +182,8 @@ async function initializeSchema(
     CREATE INDEX IF NOT EXISTS idx_items_read ON items(read);
     CREATE INDEX IF NOT EXISTS idx_saved_posts_item_id ON saved_posts(item_id);
     CREATE INDEX IF NOT EXISTS idx_read_later_posts_item_id ON read_later_posts(item_id);
+    CREATE INDEX IF NOT EXISTS idx_feed_tags_tag_id ON feed_tags(tag_id);
+    CREATE INDEX IF NOT EXISTS idx_feed_tags_feed_id ON feed_tags(feed_id);
   `);
 }
 
@@ -174,15 +200,28 @@ export async function addFeed({
   description,
   use_proxy,
   nsfw,
+  show_only_in_tag,
 }: Pick<
   Feed,
-  "title" | "url" | "description" | "use_proxy" | "nsfw"
+  | "title"
+  | "url"
+  | "description"
+  | "use_proxy"
+  | "nsfw"
+  | "show_only_in_tag"
 >): Promise<number> {
   const database = await getDatabase();
   const result = await withWriteLock(() =>
     database.runAsync(
-      "INSERT INTO feeds (title, url, description, use_proxy, nsfw) VALUES (?, ?, ?, ?, ?)",
-      [title, url, description ?? null, use_proxy ?? 0, nsfw ?? 0]
+      "INSERT INTO feeds (title, url, description, use_proxy, nsfw, show_only_in_tag) VALUES (?, ?, ?, ?, ?, ?)",
+      [
+        title,
+        url,
+        description ?? null,
+        use_proxy ?? 0,
+        nsfw ?? 0,
+        show_only_in_tag ?? 0,
+      ]
     )
   );
   return result.lastInsertRowId;
@@ -207,17 +246,18 @@ export async function updateFeedLastFetched(feedId: number): Promise<void> {
 
 export async function updateFeed(
   feedId: number,
-  fields: Pick<Feed, "title" | "url" | "use_proxy" | "nsfw">
+  fields: Pick<Feed, "title" | "url" | "use_proxy" | "nsfw" | "show_only_in_tag">
 ): Promise<void> {
   const database = await getDatabase();
   await withWriteLock(() =>
     database.runAsync(
-      "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ? WHERE id = ?",
+      "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ?, show_only_in_tag = ? WHERE id = ?",
       [
         fields.title,
         fields.url,
         fields.use_proxy ?? 0,
         fields.nsfw ?? 0,
+        fields.show_only_in_tag ?? 0,
         feedId,
       ]
     )
@@ -446,4 +486,143 @@ export async function getReadLaterItemIds(): Promise<Set<number>> {
     "SELECT item_id FROM read_later_posts WHERE item_id IS NOT NULL"
   );
   return new Set(rows.map((r) => r.item_id));
+}
+
+// ── Tags ───────────────────────────────────────────────────────────────────
+
+export async function getTags(): Promise<Tag[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<Tag>(
+    "SELECT id, name FROM tags ORDER BY name COLLATE NOCASE ASC"
+  );
+}
+
+export async function getTagsWithFeedCounts(): Promise<TagWithFeedCount[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<TagWithFeedCount>(
+    `SELECT tags.id, tags.name, COUNT(feed_tags.feed_id) AS feed_count
+     FROM tags
+     LEFT JOIN feed_tags ON feed_tags.tag_id = tags.id
+     GROUP BY tags.id
+     ORDER BY tags.name COLLATE NOCASE ASC`
+  );
+}
+
+export async function addTag(name: string): Promise<number> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Tag name cannot be empty.");
+  }
+  const database = await getDatabase();
+  const result = await withWriteLock(() =>
+    database.runAsync("INSERT INTO tags (name) VALUES (?)", [trimmed])
+  );
+  return result.lastInsertRowId;
+}
+
+export async function getOrCreateTag(name: string): Promise<Tag> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Tag name cannot be empty.");
+  }
+  const database = await getDatabase();
+  const existing = await database.getFirstAsync<Tag>(
+    "SELECT id, name FROM tags WHERE name = ? COLLATE NOCASE",
+    [trimmed]
+  );
+  if (existing) return existing;
+  const id = await addTag(trimmed);
+  return { id, name: trimmed };
+}
+
+export async function updateTag(tagId: number, name: string): Promise<void> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    throw new Error("Tag name cannot be empty.");
+  }
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync("UPDATE tags SET name = ? WHERE id = ?", [trimmed, tagId])
+  );
+}
+
+export async function deleteTag(tagId: number): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync("DELETE FROM tags WHERE id = ?", [tagId])
+  );
+}
+
+export async function getTagsForFeed(feedId: number): Promise<Tag[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<Tag>(
+    `SELECT tags.id, tags.name
+     FROM tags
+     JOIN feed_tags ON feed_tags.tag_id = tags.id
+     WHERE feed_tags.feed_id = ?
+     ORDER BY tags.name COLLATE NOCASE ASC`,
+    [feedId]
+  );
+}
+
+export async function getFeedsForTag(tagId: number): Promise<Feed[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<Feed>(
+    `SELECT feeds.* FROM feeds
+     JOIN feed_tags ON feed_tags.feed_id = feeds.id
+     WHERE feed_tags.tag_id = ?
+     ORDER BY feeds.title COLLATE NOCASE ASC`,
+    [tagId]
+  );
+}
+
+export async function getFeedTagMap(): Promise<Map<number, number[]>> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{
+    feed_id: number;
+    tag_id: number;
+  }>("SELECT feed_id, tag_id FROM feed_tags");
+  const map = new Map<number, number[]>();
+  for (const row of rows) {
+    const list = map.get(row.feed_id);
+    if (list) list.push(row.tag_id);
+    else map.set(row.feed_id, [row.tag_id]);
+  }
+  return map;
+}
+
+export async function setFeedTags(
+  feedId: number,
+  tagIds: number[]
+): Promise<void> {
+  const database = await getDatabase();
+  const unique = Array.from(new Set(tagIds));
+  await withWriteLock(async () => {
+    await database.runAsync("DELETE FROM feed_tags WHERE feed_id = ?", [
+      feedId,
+    ]);
+    for (const tagId of unique) {
+      await database.runAsync(
+        "INSERT OR IGNORE INTO feed_tags (feed_id, tag_id) VALUES (?, ?)",
+        [feedId, tagId]
+      );
+    }
+  });
+}
+
+export async function setTagFeeds(
+  tagId: number,
+  feedIds: number[]
+): Promise<void> {
+  const database = await getDatabase();
+  const unique = Array.from(new Set(feedIds));
+  await withWriteLock(async () => {
+    await database.runAsync("DELETE FROM feed_tags WHERE tag_id = ?", [tagId]);
+    for (const feedId of unique) {
+      await database.runAsync(
+        "INSERT OR IGNORE INTO feed_tags (feed_id, tag_id) VALUES (?, ?)",
+        [feedId, tagId]
+      );
+    }
+  });
 }

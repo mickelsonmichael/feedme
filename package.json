@@ -1,0 +1,14 @@
+{
+  "name": "feedme-root",
+  "private": true,
+  "scripts": {
+    "start": "concurrently \"npm run start --prefix app\" \"npm run dev --prefix worker\"",
+    "test": "npm run test --prefix app && npm run test --prefix worker",
+    "typecheck": "npm run typecheck --prefix app && cd worker && npx tsc --noEmit",
+    "format": "npm run format --prefix app",
+    "format:check": "npm run format:check --prefix app"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

@@ -25,6 +25,9 @@ jest.mock("../proxyFetch", () => ({
 
 jest.mock("../database", () => ({
   addFeed: jest.fn(),
+  getTags: jest.fn(() => Promise.resolve([])),
+  getOrCreateTag: jest.fn(),
+  setFeedTags: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock("@expo/vector-icons", () => {
@@ -157,6 +160,7 @@ describe("AddFeedScreen web", () => {
       description: null,
       use_proxy: 0,
       nsfw: 1,
+      show_only_in_tag: 0,
     });
   });
 });

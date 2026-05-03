@@ -27,6 +27,8 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   getFeeds,
   getAllItems,
+  getFeedTagMap,
+  getFeedsForTag,
   markItemRead,
   markItemUnread,
   savePost,
@@ -100,7 +102,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
   const [refreshProgress, setRefreshProgress] =
     useState<FeedRefreshProgress | null>(null);
+  const [feedTagMap, setFeedTagMap] = useState<Map<number, number[]>>(
+    new Map()
+  );
   const selectedFeedId = route.params?.selectedFeedId;
+  const selectedTagId = route.params?.selectedTagId;
   const scrollToTopParam = route.params?.scrollToTop;
 
   const flatListRef = useRef<FlashListRef<FeedItemWithFeed>>(null);
@@ -160,53 +166,75 @@ export default function FeedListScreen({ navigation, route }: Props) {
     }
   }, [scrollToTopParam]);
 
-  const loadData = useCallback(async (refreshRemote: boolean) => {
-    try {
-      const feedData = await getFeeds();
-      setFeeds(feedData);
+  const loadData = useCallback(
+    async (refreshRemote: boolean) => {
+      try {
+        const feedData = await getFeeds();
+        setFeeds(feedData);
 
-      if (!refreshRemote) {
-        setRefreshProgress(null);
-      } else if (feedData.length > 0) {
-        setRefreshProgress({
-          total: feedData.length,
-          completed: 0,
-          loading: feedData.length,
-          succeeded: 0,
-          failed: 0,
-        });
-        const errors = await refreshFeeds(feedData, {
-          onProgress: setRefreshProgress,
-        });
-        if (errors > 0) {
-          Alert.alert("Refresh", `${errors} feed(s) could not be refreshed.`);
+        // Determine which feeds to refresh based on the current scope.
+        // Selected single feed -> just that feed.
+        // Selected tag -> only feeds tagged with it.
+        // Otherwise -> all feeds (excluding nothing; the hide-from-main-feed
+        // filter is applied client-side at render time).
+        let feedsToRefresh: Feed[] = feedData;
+        if (selectedFeedId !== undefined) {
+          feedsToRefresh = feedData.filter((f) => f.id === selectedFeedId);
+        } else if (selectedTagId !== undefined) {
+          const tagged = await getFeedsForTag(selectedTagId);
+          const taggedIds = new Set(tagged.map((f) => f.id));
+          feedsToRefresh = feedData.filter((f) => taggedIds.has(f.id));
         }
-      } else {
-        setRefreshProgress({
-          total: 0,
-          completed: 0,
-          loading: 0,
-          succeeded: 0,
-          failed: 0,
-        });
-      }
 
-      const [itemData, ids] = await Promise.all([
-        getAllItems(),
-        getSavedItemIds(),
-      ]);
-      const readLaterIdsLoaded = await getReadLaterItemIds();
-      setItems(itemData);
-      setSavedIds(ids);
-      setReadLaterIds(readLaterIdsLoaded);
-    } catch (err) {
-      Alert.alert("Error", "Failed to load: " + (err as Error).message);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-      setRefreshProgress(null);
-    }
-  }, []);
+        if (!refreshRemote) {
+          setRefreshProgress(null);
+        } else if (feedsToRefresh.length > 0) {
+          setRefreshProgress({
+            total: feedsToRefresh.length,
+            completed: 0,
+            loading: feedsToRefresh.length,
+            succeeded: 0,
+            failed: 0,
+          });
+          const errors = await refreshFeeds(feedsToRefresh, {
+            onProgress: setRefreshProgress,
+          });
+          if (errors > 0) {
+            Alert.alert(
+              "Refresh",
+              `${errors} feed(s) could not be refreshed.`
+            );
+          }
+        } else {
+          setRefreshProgress({
+            total: 0,
+            completed: 0,
+            loading: 0,
+            succeeded: 0,
+            failed: 0,
+          });
+        }
+
+        const [itemData, ids, tagMap] = await Promise.all([
+          getAllItems(),
+          getSavedItemIds(),
+          getFeedTagMap(),
+        ]);
+        const readLaterIdsLoaded = await getReadLaterItemIds();
+        setItems(itemData);
+        setSavedIds(ids);
+        setReadLaterIds(readLaterIdsLoaded);
+        setFeedTagMap(tagMap);
+      } catch (err) {
+        Alert.alert("Error", "Failed to load: " + (err as Error).message);
+      } finally {
+        setLoading(false);
+        setRefreshing(false);
+        setRefreshProgress(null);
+      }
+    },
+    [selectedFeedId, selectedTagId]
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -402,10 +430,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
   };
 
   useEffect(() => {
-    if (selectedFeedId !== undefined && sort === "stacked") {
+    if (
+      (selectedFeedId !== undefined || selectedTagId !== undefined) &&
+      sort === "stacked"
+    ) {
       setSort("newest");
     }
-  }, [selectedFeedId, sort]);
+  }, [selectedFeedId, selectedTagId, sort]);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const hasSearch = normalizedSearch.length > 0;
@@ -416,6 +447,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   }, [filter]);
 
   const selectedFeedTitle = useMemo(() => {
+    if (selectedTagId !== undefined) {
+      return route.params?.selectedTagName ?? null;
+    }
     if (selectedFeedId === undefined) {
       return null;
     }
@@ -424,7 +458,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
       route.params?.selectedFeedTitle ??
       feedDetailsById.get(selectedFeedId)?.title
     );
-  }, [feedDetailsById, route.params?.selectedFeedTitle, selectedFeedId]);
+  }, [
+    feedDetailsById,
+    route.params?.selectedFeedTitle,
+    route.params?.selectedTagName,
+    selectedFeedId,
+    selectedTagId,
+  ]);
 
   const searchField = useMemo(
     () => (
@@ -483,9 +523,28 @@ export default function FeedListScreen({ navigation, route }: Props) {
       return items;
     }
 
-    if (selectedFeedId === undefined) return items;
-    return items.filter((item) => item.feed_id === selectedFeedId);
-  }, [items, selectedFeedId, hasSearch]);
+    if (selectedFeedId !== undefined) {
+      return items.filter((item) => item.feed_id === selectedFeedId);
+    }
+
+    if (selectedTagId !== undefined) {
+      const taggedFeedIds = new Set<number>();
+      for (const [feedId, tagIds] of feedTagMap.entries()) {
+        if (tagIds.includes(selectedTagId)) {
+          taggedFeedIds.add(feedId);
+        }
+      }
+      return items.filter((item) => taggedFeedIds.has(item.feed_id));
+    }
+
+    // Default "all feeds" view: hide items belonging to feeds flagged
+    // "show only on tag feeds".
+    const hiddenFeedIds = new Set(
+      feeds.filter((f) => f.show_only_in_tag === 1).map((f) => f.id)
+    );
+    if (hiddenFeedIds.size === 0) return items;
+    return items.filter((item) => !hiddenFeedIds.has(item.feed_id));
+  }, [items, selectedFeedId, selectedTagId, feedTagMap, feeds, hasSearch]);
 
   const searchHaystacks = useMemo(() => {
     const map = new Map<number, string>();
@@ -597,7 +656,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
       {selectedFeedTitle ? (
         <View style={[styles.scopeRow, { borderBottomColor: colors.inkFaint }]}>
-          <Feather name="rss" size={14} color={colors.inkSoft} />
+          <Feather
+            name={selectedTagId !== undefined ? "tag" : "rss"}
+            size={14}
+            color={colors.inkSoft}
+          />
           <Text style={[styles.scopeText, { color: colors.ink }]}>
             {selectedFeedTitle}
           </Text>
@@ -648,7 +711,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
               variant={sort === "newest" ? "accent" : "soft"}
             />
           </TouchableOpacity>
-          {selectedFeedId === undefined ? (
+          {selectedFeedId === undefined && selectedTagId === undefined ? (
             <TouchableOpacity
               onPress={() => setSort("stacked")}
               activeOpacity={0.7}

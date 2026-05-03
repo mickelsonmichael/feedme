@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -17,9 +17,9 @@ import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
-import { addFeed } from "../database";
+import { addFeed, getOrCreateTag, getTags, setFeedTags } from "../database";
 import { extractFeedTitle } from "../feedParser";
-import { RootStackParamList, TabParamList } from "../types";
+import { RootStackParamList, Tag, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { buildRedditFeedUrl, getSubreddit } from "../redditUtils";
@@ -28,6 +28,7 @@ import {
   getYouTubeChannelUrl,
 } from "../youtubeUtils";
 import { fetchWithProxyFallback } from "../proxyFetch";
+import { SelectedTag, TagMultiSelect } from "../components/TagMultiSelect";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "AddFeed">,
@@ -55,6 +56,21 @@ export default function AddFeedScreen({ navigation, route }: Props) {
   const [feedError, setFeedError] = useState<string | null>(null);
   const [useProxy, setUseProxy] = useState(false);
   const [isNsfw, setIsNsfw] = useState(false);
+  const [showOnlyInTag, setShowOnlyInTag] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    getTags()
+      .then((tags) => {
+        if (mounted) setAvailableTags(tags);
+      })
+      .catch(() => {});
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const resetForm = () => {
     setUrl("");
@@ -65,6 +81,8 @@ export default function AddFeedScreen({ navigation, route }: Props) {
     setFeedError(null);
     setUseProxy(false);
     setIsNsfw(false);
+    setShowOnlyInTag(false);
+    setSelectedTags([]);
   };
 
   const handleSourceChange = (newSource: FeedSource) => {
@@ -116,6 +134,20 @@ export default function AddFeedScreen({ navigation, route }: Props) {
   const handleAdd = async () => {
     setFeedError(null);
 
+    const persistTagsForFeed = async (feedId: number) => {
+      if (selectedTags.length === 0) return;
+      const tagIds: number[] = [];
+      for (const tag of selectedTags) {
+        if (tag.id !== null) {
+          tagIds.push(tag.id);
+        } else {
+          const created = await getOrCreateTag(tag.name);
+          tagIds.push(created.id);
+        }
+      }
+      await setFeedTags(feedId, tagIds);
+    };
+
     if (source === "reddit") {
       const cleanedSubreddit = getSubreddit(subreddit);
       if (!cleanedSubreddit) {
@@ -142,13 +174,15 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           }
           return;
         }
-        await addFeed({
+        const newFeedId = await addFeed({
           title: feedTitle,
           url: redditUrl,
           description: null,
           use_proxy: usedProxy ? 1 : 0,
           nsfw: isNsfw ? 1 : 0,
+          show_only_in_tag: showOnlyInTag ? 1 : 0,
         });
+        await persistTagsForFeed(newFeedId);
         resetForm();
         navigation.navigate(from as "Feeds");
       } catch (err) {
@@ -201,13 +235,15 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           );
           return;
         }
-        await addFeed({
+        const newFeedId = await addFeed({
           title: feedTitle,
           url: feedUrl,
           description: null,
           use_proxy: usedProxy ? 1 : 0,
           nsfw: isNsfw ? 1 : 0,
+          show_only_in_tag: showOnlyInTag ? 1 : 0,
         });
+        await persistTagsForFeed(newFeedId);
         resetForm();
         navigation.navigate(from as "Feeds");
       } catch (err) {
@@ -245,13 +281,15 @@ export default function AddFeedScreen({ navigation, route }: Props) {
 
     setLoading(true);
     try {
-      await addFeed({
+      const newFeedId = await addFeed({
         title: feedTitle,
         url: trimmedUrl,
         description: null,
         use_proxy: useProxy ? 1 : 0,
         nsfw: isNsfw ? 1 : 0,
+        show_only_in_tag: showOnlyInTag ? 1 : 0,
       });
+      await persistTagsForFeed(newFeedId);
       resetForm();
       navigation.navigate(from as "Feeds");
     } catch (err) {
@@ -495,6 +533,32 @@ export default function AddFeedScreen({ navigation, route }: Props) {
             <Switch
               value={isNsfw}
               onValueChange={setIsNsfw}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.paper}
+            />
+          </View>
+
+          <Text style={[styles.label, { color: colors.inkSoft }]}>tags</Text>
+          <TagMultiSelect
+            value={selectedTags}
+            onChange={setSelectedTags}
+            availableTags={availableTags}
+            testID="add-feed-tags"
+          />
+
+          <View style={styles.toggleRow}>
+            <View style={styles.toggleLabelGroup}>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                show only on tag feeds
+              </Text>
+              <Text style={[styles.hintText, { color: colors.inkFaint }]}>
+                Hide this feed&apos;s posts from the main feed. Posts will only
+                appear when viewing this feed directly or any of its tags.
+              </Text>
+            </View>
+            <Switch
+              value={showOnlyInTag}
+              onValueChange={setShowOnlyInTag}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.paper}
             />

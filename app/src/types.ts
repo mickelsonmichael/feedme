@@ -7,7 +7,18 @@ export type Feed = {
   error: string | null;
   use_proxy?: number;
   nsfw?: number;
+  show_only_in_tag?: number;
 };
+
+export type Tag = {
+  id: number;
+  name: string;
+};
+
+export type TagWithFeedCount = Tag & { feed_count: number };
+
+/** Maximum number of tags that can be attached to a single feed. */
+export const MAX_TAGS_PER_FEED = 25;
 
 export type FeedItem = {
   id: number;
@@ -73,6 +84,7 @@ export type RootStackParamList = {
     };
   };
   FeedDetail: { feedId: number };
+  TagDetail: { tagId?: number; from?: string } | undefined;
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
 };
@@ -82,6 +94,8 @@ export type TabParamList = {
     | {
         selectedFeedId?: number;
         selectedFeedTitle?: string;
+        selectedTagId?: number;
+        selectedTagName?: string;
         scrollToTop?: number;
       }
     | undefined;
@@ -105,6 +119,7 @@ export type TabParamList = {
     };
   };
   FeedDetail: { feedId: number };
+  TagDetail: { tagId?: number; from?: string } | undefined;
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
 };

@@ -14,8 +14,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { getFeeds } from "../database";
-import { Feed, RootStackParamList, TabParamList } from "../types";
+import { getFeeds, getTagsWithFeedCounts } from "../database";
+import { Feed, RootStackParamList, TabParamList, TagWithFeedCount } from "../types";
 import { DashedDivider } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -40,14 +40,19 @@ function fuzzyMatch(query: string, text: string): boolean {
 export default function FeedsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [tags, setTags] = useState<TagWithFeedCount[]>([]);
   const [failedIconUris, setFailedIconUris] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
-  const loadFeeds = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
-      const data = await getFeeds();
-      setFeeds(data);
+      const [feedData, tagData] = await Promise.all([
+        getFeeds(),
+        getTagsWithFeedCounts(),
+      ]);
+      setFeeds(feedData);
+      setTags(tagData);
     } finally {
       setLoading(false);
     }
@@ -55,8 +60,8 @@ export default function FeedsScreen({ navigation }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      loadFeeds();
-    }, [loadFeeds])
+      loadData();
+    }, [loadData])
   );
 
   const visibleFeeds = useMemo(() => {
@@ -157,6 +162,76 @@ export default function FeedsScreen({ navigation }: Props) {
             Read Later
           </Text>
         </TouchableOpacity>
+      </View>
+
+      <View
+        style={[
+          styles.tagsSection,
+          { borderBottomColor: colors.inkFaint },
+        ]}
+      >
+        <View style={styles.tagsHeader}>
+          <Text style={[styles.sectionLabel, { color: colors.inkFaint }]}>
+            TAGS
+          </Text>
+          <TouchableOpacity
+            onPress={() =>
+              navigation.navigate("TagDetail", { from: "Feeds" })
+            }
+            hitSlop={8}
+            accessibilityLabel="Add tag"
+            activeOpacity={0.7}
+            style={styles.tagAddBtn}
+          >
+            <Feather name="plus" size={14} color={colors.inkSoft} />
+          </TouchableOpacity>
+        </View>
+        {tags.length === 0 ? (
+          <Text style={[styles.tagEmpty, { color: colors.inkFaint }]}>
+            No tags yet. Tap + to add one.
+          </Text>
+        ) : (
+          tags.map((tag) => (
+            <View key={tag.id} style={styles.tagRow}>
+              <TouchableOpacity
+                style={styles.tagRowMain}
+                onPress={() =>
+                  navigation.navigate("Feed", {
+                    selectedTagId: tag.id,
+                    selectedTagName: tag.name,
+                  })
+                }
+                accessibilityLabel={`Open tag ${tag.name}`}
+                activeOpacity={0.7}
+              >
+                <Feather name="tag" size={14} color={colors.inkSoft} />
+                <Text style={[styles.tagText, { color: colors.ink }]}>
+                  {tag.name}
+                </Text>
+                <Text style={[styles.tagCount, { color: colors.inkFaint }]}>
+                  {tag.feed_count}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.editBtn,
+                  { borderColor: colors.border, marginRight: 0 },
+                ]}
+                onPress={() =>
+                  navigation.navigate("TagDetail", {
+                    tagId: tag.id,
+                    from: "Feeds",
+                  })
+                }
+                hitSlop={8}
+                accessibilityLabel={`Edit ${tag.name}`}
+                activeOpacity={0.8}
+              >
+                <Feather name="edit-2" size={16} color={colors.inkSoft} />
+              </TouchableOpacity>
+            </View>
+          ))
+        )}
       </View>
 
       {feeds.length === 0 ? (
@@ -364,6 +439,62 @@ const styles = StyleSheet.create({
     marginRight: spacing.lg,
     alignItems: "center",
     justifyContent: "center",
+  },
+  tagsSection: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
+  },
+  tagsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  sectionLabel: {
+    fontSize: fontSize.xs,
+    fontFamily: fonts.sans,
+    fontWeight: "700",
+    letterSpacing: 0.7,
+  },
+  tagAddBtn: {
+    marginLeft: "auto",
+    width: 24,
+    height: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  tagEmpty: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+    fontStyle: "italic",
+    paddingVertical: spacing.xs,
+  },
+  tagRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  tagRowMain: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    minHeight: 40,
+  },
+  tagText: {
+    flex: 1,
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+  },
+  tagCount: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+    paddingHorizontal: spacing.sm,
   },
   emptyTitle: {
     fontSize: fontSize.h2,

@@ -28,15 +28,16 @@ import SavedScreen from "./src/screens/SavedScreen";
 import ReadLaterScreen from "./src/screens/ReadLaterScreen";
 import FeedsScreen from "./src/screens/FeedsScreen";
 import FeedDetailScreen from "./src/screens/FeedDetailScreen";
+import TagDetailScreen from "./src/screens/TagDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
 import InAppBrowserScreen from "./src/screens/InAppBrowserScreen";
-import { Feed, TabParamList } from "./src/types";
+import { Feed, Tag, TabParamList } from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { AppHeader } from "./src/components/AppHeader";
 import { HeaderContentProvider } from "./src/context/HeaderContentContext";
-import { getFeeds } from "./src/database";
+import { getFeeds, getTags } from "./src/database";
 import { getFeedIconUrl } from "./src/feedIcon";
 
 const Tab = createBottomTabNavigator<TabParamList>();
@@ -91,30 +92,39 @@ const HIDDEN_TAB_OPTIONS = {
 function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = React.useState<Feed[]>([]);
+  const [tags, setTags] = React.useState<Tag[]>([]);
   const [failedIconUris, setFailedIconUris] = React.useState<Set<string>>(
     new Set()
   );
   const currentRoute = state.routes[state.index]?.name;
   const feedRoute = state.routes.find((route) => route.name === "Feed");
+  const feedRouteParams = (feedRoute?.params ?? {}) as {
+    selectedFeedId?: number;
+    selectedTagId?: number;
+  };
   const selectedFeedId =
-    feedRoute?.params &&
-    typeof (feedRoute.params as { selectedFeedId?: unknown }).selectedFeedId ===
-      "number"
-      ? (feedRoute.params as { selectedFeedId?: number }).selectedFeedId
+    typeof feedRouteParams.selectedFeedId === "number"
+      ? feedRouteParams.selectedFeedId
+      : undefined;
+  const selectedTagId =
+    typeof feedRouteParams.selectedTagId === "number"
+      ? feedRouteParams.selectedTagId
       : undefined;
 
-  const loadFeeds = React.useCallback(async () => {
+  const loadData = React.useCallback(async () => {
     try {
-      const data = await getFeeds();
-      setFeeds(data);
+      const [feedData, tagData] = await Promise.all([getFeeds(), getTags()]);
+      setFeeds(feedData);
+      setTags(tagData);
     } catch {
       setFeeds([]);
+      setTags([]);
     }
   }, []);
 
   React.useEffect(() => {
-    loadFeeds();
-  }, [loadFeeds, currentRoute]);
+    loadData();
+  }, [loadData, currentRoute]);
 
   const renderItem = (
     { name, icon, label }: (typeof TAB_CONFIG)[number],
@@ -122,7 +132,10 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
   ) => {
     const focused =
       currentRoute === name &&
-      !(name === "Feed" && selectedFeedId !== undefined);
+      !(
+        name === "Feed" &&
+        (selectedFeedId !== undefined || selectedTagId !== undefined)
+      );
     return (
       <TouchableOpacity
         key={name}
@@ -174,6 +187,72 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
         </Text>
         <View style={styles.sidebarTop}>
           {MAIN_NAV.map((item) => renderItem(item, 16))}
+        </View>
+        <View style={styles.sidebarFeedSpacer} />
+        <View style={styles.sidebarSectionRow}>
+          <Text
+            style={[styles.sidebarSectionHeader, { color: colors.inkFaint }]}
+          >
+            TAGS
+          </Text>
+          <TouchableOpacity
+            style={styles.sidebarSectionAddButton}
+            onPress={() =>
+              navigation.navigate("TagDetail", {
+                from: currentRoute as string,
+              })
+            }
+            accessibilityLabel="Add tag"
+            activeOpacity={0.7}
+          >
+            <Feather name="plus" size={14} color={colors.inkSoft} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.tagList}>
+          {tags.length === 0 ? (
+            <Text style={[styles.tagEmpty, { color: colors.inkFaint }]}>
+              No tags yet
+            </Text>
+          ) : (
+            tags.map((tag) => {
+              const focused =
+                currentRoute === "Feed" && selectedTagId === tag.id;
+              return (
+                <TouchableOpacity
+                  key={tag.id}
+                  style={[
+                    styles.feedItem,
+                    focused && { backgroundColor: colors.paperWarm },
+                  ]}
+                  onPress={() =>
+                    navigation.navigate("Feed", {
+                      selectedTagId: tag.id,
+                      selectedTagName: tag.name,
+                    })
+                  }
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.feedItemRow}>
+                    <Feather
+                      name="tag"
+                      size={12}
+                      color={focused ? colors.ink : colors.inkSoft}
+                    />
+                    <Text
+                      style={[
+                        styles.feedItemLabel,
+                        { color: focused ? colors.ink : colors.inkSoft },
+                        focused && { fontWeight: "600" },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {tag.name}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
         <View style={styles.sidebarFeedSpacer} />
         <View style={styles.sidebarSectionRow}>
@@ -387,6 +466,11 @@ function Tabs() {
         options={HIDDEN_TAB_OPTIONS}
       />
       <Tab.Screen
+        name="TagDetail"
+        component={TagDetailScreen}
+        options={HIDDEN_TAB_OPTIONS}
+      />
+      <Tab.Screen
         name="ImportExport"
         component={ImportExportScreen}
         options={HIDDEN_TAB_OPTIONS}
@@ -495,6 +579,17 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.sm,
     borderRadius: 4,
+  },
+  tagList: {
+    gap: 2,
+    paddingBottom: spacing.sm,
+  },
+  tagEmpty: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+    fontStyle: "italic",
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
   feedItemRow: {
     flexDirection: "row",

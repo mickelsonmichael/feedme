@@ -28,6 +28,8 @@ const mockExpandedFeedMedia = jest.fn(
 jest.mock("../database", () => ({
   getFeeds: jest.fn(),
   getAllItems: jest.fn(),
+  getFeedTagMap: jest.fn(() => Promise.resolve(new Map())),
+  getFeedsForTag: jest.fn(() => Promise.resolve([])),
   markItemRead: jest.fn(),
   markItemUnread: jest.fn(),
   savePost: jest.fn(),

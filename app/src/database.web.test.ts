@@ -10,25 +10,36 @@
 import {
   __resetForTests,
   addFeed,
+  addTag,
   addToReadLater,
   deleteFeed,
+  deleteTag,
   getAllItems,
   getFeeds,
+  getFeedTagMap,
+  getFeedsForTag,
   getItemCountForFeed,
   getItemsForFeed,
+  getOrCreateTag,
   getReadLaterItemIds,
   getReadLaterPosts,
   getSavedItemIds,
   getSavedPosts,
+  getTags,
+  getTagsForFeed,
+  getTagsWithFeedCounts,
   getUnreadCount,
   markItemRead,
   markItemUnread,
   removeFromReadLater,
   savePost,
   setFeedError,
+  setFeedTags,
+  setTagFeeds,
   unsavePost,
   updateFeed,
   updateFeedLastFetched,
+  updateTag,
   upsertItems,
 } from "./database.web";
 
@@ -630,5 +641,184 @@ describe("database.web — read later posts", () => {
     // Assert
     expect(posts[0].title).toBe("Newer");
     expect(posts[1].title).toBe("Older");
+  });
+});
+
+
+
+describe("database.web — tags", () => {
+  it("creates and lists tags", async () => {
+    // Arrange & Act
+    const id = await addTag("News");
+
+    // Assert
+    const tags = await getTags();
+    expect(tags).toEqual([{ id, name: "News" }]);
+  });
+
+  it("getOrCreateTag returns existing id (case-insensitive)", async () => {
+    // Arrange
+    const id = await addTag("News");
+
+    // Act
+    const sameId = await getOrCreateTag("news");
+
+    // Assert
+    expect(sameId.id).toBe(id);
+    expect(await getTags()).toHaveLength(1);
+  });
+
+  it("rejects duplicate tag names case-insensitively", async () => {
+    // Arrange
+    await addTag("News");
+
+    // Act + Assert
+    await expect(addTag("news")).rejects.toThrow();
+  });
+
+  it("updates and deletes tags", async () => {
+    // Arrange
+    const id = await addTag("Old");
+
+    // Act
+    await updateTag(id, "Renamed");
+
+    // Assert
+    expect((await getTags())[0].name).toBe("Renamed");
+
+    // Act
+    await deleteTag(id);
+
+    // Assert
+    expect(await getTags()).toEqual([]);
+  });
+
+  it("links feeds to tags via setFeedTags and reads them back", async () => {
+    // Arrange
+    const feedId = await addFeed({
+      title: "F",
+      url: "https://example.com/f",
+      description: null,
+    });
+    const tagA = await addTag("A");
+    const tagB = await addTag("B");
+
+    // Act
+    await setFeedTags(feedId, [tagA, tagB]);
+
+    // Assert
+    const tagsForFeed = await getTagsForFeed(feedId);
+    expect(tagsForFeed.map((t) => t.id).sort()).toEqual([tagA, tagB].sort());
+
+    const map = await getFeedTagMap();
+    expect(map.get(feedId)?.sort()).toEqual([tagA, tagB].sort());
+
+    const feedsForTag = await getFeedsForTag(tagA);
+    expect(feedsForTag.map((f) => f.id)).toEqual([feedId]);
+  });
+
+  it("setTagFeeds replaces a tag's feed associations", async () => {
+    // Arrange
+    const f1 = await addFeed({
+      title: "F1",
+      url: "https://example.com/f1",
+      description: null,
+    });
+    const f2 = await addFeed({
+      title: "F2",
+      url: "https://example.com/f2",
+      description: null,
+    });
+    const tagId = await addTag("T");
+    await setFeedTags(f1, [tagId]);
+
+    // Act
+    await setTagFeeds(tagId, [f2]);
+
+    // Assert
+    const feedsForTag = await getFeedsForTag(tagId);
+    expect(feedsForTag.map((f) => f.id)).toEqual([f2]);
+  });
+
+  it("getTagsWithFeedCounts reports number of feeds per tag", async () => {
+    // Arrange
+    const f1 = await addFeed({
+      title: "F1",
+      url: "https://example.com/f1",
+      description: null,
+    });
+    const f2 = await addFeed({
+      title: "F2",
+      url: "https://example.com/f2",
+      description: null,
+    });
+    const tagId = await addTag("News");
+    await setFeedTags(f1, [tagId]);
+    await setFeedTags(f2, [tagId]);
+
+    // Act
+    const result = await getTagsWithFeedCounts();
+
+    // Assert
+    expect(result).toEqual([{ id: tagId, name: "News", feed_count: 2 }]);
+  });
+
+  it("deleting a feed removes its tag associations", async () => {
+    // Arrange
+    const feedId = await addFeed({
+      title: "F",
+      url: "https://example.com/f",
+      description: null,
+    });
+    const tagId = await addTag("T");
+    await setFeedTags(feedId, [tagId]);
+
+    // Act
+    await deleteFeed(feedId);
+
+    // Assert
+    expect(await getFeedsForTag(tagId)).toEqual([]);
+  });
+
+  it("deleting a tag unlinks it from feeds", async () => {
+    // Arrange
+    const feedId = await addFeed({
+      title: "F",
+      url: "https://example.com/f",
+      description: null,
+    });
+    const tagId = await addTag("T");
+    await setFeedTags(feedId, [tagId]);
+
+    // Act
+    await deleteTag(tagId);
+
+    // Assert
+    expect(await getTagsForFeed(feedId)).toEqual([]);
+  });
+
+  it("persists show_only_in_tag flag on feeds", async () => {
+    // Arrange & Act
+    const feedId = await addFeed({
+      title: "F",
+      url: "https://example.com/f",
+      description: null,
+      show_only_in_tag: 1,
+    });
+
+    // Assert
+    expect((await getFeeds())[0].show_only_in_tag).toBe(1);
+
+    // Act
+    await updateFeed(feedId, {
+      title: "F",
+      url: "https://example.com/f",
+      use_proxy: 0,
+      nsfw: 0,
+      show_only_in_tag: 0,
+    });
+
+    // Assert
+    expect((await getFeeds())[0].show_only_in_tag).toBe(0);
   });
 });

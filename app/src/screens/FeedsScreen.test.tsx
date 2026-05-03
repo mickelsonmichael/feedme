@@ -10,6 +10,7 @@ import { getFeeds } from "../database";
 
 jest.mock("../database", () => ({
   getFeeds: jest.fn(),
+  getTagsWithFeedCounts: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock("../context/ThemeContext", () => ({
