@@ -121,211 +121,226 @@ export default function FeedsScreen({ navigation }: Props) {
         </TouchableOpacity>
       </View>
 
-      <View
-        style={[
-          styles.quickLinksSection,
-          { borderBottomColor: colors.inkFaint },
-        ]}
-      >
-        <TouchableOpacity
-          style={styles.quickLinkRow}
-          onPress={() => navigation.navigate("Feed", {})}
-          accessibilityLabel="Go to all feeds"
-          activeOpacity={0.8}
-        >
-          <Feather name="home" size={16} color={colors.inkSoft} />
-          <Text style={[styles.quickLinkText, { color: colors.ink }]}>
-            All Feeds
-          </Text>
-        </TouchableOpacity>
-        <DashedDivider />
-        <TouchableOpacity
-          style={styles.quickLinkRow}
-          onPress={() => navigation.navigate("Saved")}
-          accessibilityLabel="Go to saved"
-          activeOpacity={0.8}
-        >
-          <Feather name="bookmark" size={16} color={colors.inkSoft} />
-          <Text style={[styles.quickLinkText, { color: colors.ink }]}>
-            Saved
-          </Text>
-        </TouchableOpacity>
-        <DashedDivider />
-        <TouchableOpacity
-          style={styles.quickLinkRow}
-          onPress={() => navigation.navigate("ReadLater")}
-          accessibilityLabel="Go to read later"
-          activeOpacity={0.8}
-        >
-          <Feather name="clock" size={16} color={colors.inkSoft} />
-          <Text style={[styles.quickLinkText, { color: colors.ink }]}>
-            Read Later
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View
-        style={[
-          styles.tagsSection,
-          { borderBottomColor: colors.inkFaint },
-        ]}
-      >
-        <View style={styles.tagsHeader}>
-          <Text style={[styles.sectionLabel, { color: colors.inkFaint }]}>
-            TAGS
-          </Text>
-          <TouchableOpacity
-            onPress={() =>
-              navigation.navigate("TagDetail", { from: "Feeds" })
-            }
-            hitSlop={8}
-            accessibilityLabel="Add tag"
-            activeOpacity={0.7}
-            style={styles.tagAddBtn}
-          >
-            <Feather name="plus" size={14} color={colors.inkSoft} />
-          </TouchableOpacity>
-        </View>
-        {tags.length === 0 ? (
-          <Text style={[styles.tagEmpty, { color: colors.inkFaint }]}>
-            No tags yet. Tap + to add one.
-          </Text>
-        ) : (
-          tags.map((tag) => (
-            <View key={tag.id} style={styles.tagRow}>
+      <FlatList
+        data={visibleFeeds}
+        keyExtractor={(item) => String(item.id)}
+        contentContainerStyle={styles.list}
+        ItemSeparatorComponent={() => <DashedDivider />}
+        ListHeaderComponent={() => (
+          <>
+            <View
+              style={[
+                styles.quickLinksSection,
+                { borderBottomColor: colors.inkFaint },
+              ]}
+            >
               <TouchableOpacity
-                style={styles.tagRowMain}
-                onPress={() =>
-                  navigation.navigate("Feed", {
-                    selectedTagId: tag.id,
-                    selectedTagName: tag.name,
-                  })
-                }
-                accessibilityLabel={`Open tag ${tag.name}`}
-                activeOpacity={0.7}
+                style={styles.quickLinkRow}
+                onPress={() => navigation.navigate("Feed", {})}
+                accessibilityLabel="Go to all feeds"
+                activeOpacity={0.8}
               >
-                <Feather name="tag" size={14} color={colors.inkSoft} />
-                <Text style={[styles.tagText, { color: colors.ink }]}>
-                  {tag.name}
-                </Text>
-                <Text style={[styles.tagCount, { color: colors.inkFaint }]}>
-                  {tag.feed_count}
+                <Feather name="home" size={16} color={colors.inkSoft} />
+                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+                  All Feeds
                 </Text>
               </TouchableOpacity>
+              <DashedDivider />
               <TouchableOpacity
-                style={[
-                  styles.editBtn,
-                  { borderColor: colors.border, marginRight: 0 },
-                ]}
+                style={styles.quickLinkRow}
+                onPress={() => navigation.navigate("Saved")}
+                accessibilityLabel="Go to saved"
+                activeOpacity={0.8}
+              >
+                <Feather name="bookmark" size={16} color={colors.inkSoft} />
+                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+                  Saved
+                </Text>
+              </TouchableOpacity>
+              <DashedDivider />
+              <TouchableOpacity
+                style={styles.quickLinkRow}
+                onPress={() => navigation.navigate("ReadLater")}
+                accessibilityLabel="Go to read later"
+                activeOpacity={0.8}
+              >
+                <Feather name="clock" size={16} color={colors.inkSoft} />
+                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+                  Read Later
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            <View
+              style={[
+                styles.tagsSection,
+                { borderBottomColor: colors.inkFaint },
+              ]}
+            >
+              <View style={styles.tagsHeader}>
+                <Text style={[styles.sectionLabel, { color: colors.inkFaint }]}>
+                  TAGS
+                </Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation.navigate("TagDetail", { from: "Feeds" })
+                  }
+                  hitSlop={8}
+                  accessibilityLabel="Add tag"
+                  activeOpacity={0.7}
+                  style={styles.tagAddBtn}
+                >
+                  <Feather name="plus" size={14} color={colors.inkSoft} />
+                </TouchableOpacity>
+              </View>
+              {tags.length === 0 ? (
+                <Text style={[styles.tagEmpty, { color: colors.inkFaint }]}>
+                  No tags yet. Tap + to add one.
+                </Text>
+              ) : (
+                tags.map((tag) => (
+                  <View key={tag.id} style={styles.tagRow}>
+                    <TouchableOpacity
+                      style={styles.tagRowMain}
+                      onPress={() =>
+                        navigation.navigate("Feed", {
+                          selectedTagId: tag.id,
+                          selectedTagName: tag.name,
+                        })
+                      }
+                      accessibilityLabel={`Open tag ${tag.name}`}
+                      activeOpacity={0.7}
+                    >
+                      <Feather name="tag" size={14} color={colors.inkSoft} />
+                      <Text style={[styles.tagText, { color: colors.ink }]}>
+                        {tag.name}
+                      </Text>
+                      <Text style={[styles.tagCount, { color: colors.inkFaint }]}>
+                        {tag.feed_count}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.editBtn,
+                        { borderColor: colors.border, marginRight: 0 },
+                      ]}
+                      onPress={() =>
+                        navigation.navigate("TagDetail", {
+                          tagId: tag.id,
+                          from: "Feeds",
+                        })
+                      }
+                      hitSlop={8}
+                      accessibilityLabel={`Edit ${tag.name}`}
+                      activeOpacity={0.8}
+                    >
+                      <Feather name="edit-2" size={16} color={colors.inkSoft} />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
+            </View>
+
+            <View
+              style={[
+                styles.feedsHeader,
+                { borderBottomColor: colors.inkFaint },
+              ]}
+            >
+              <Text style={[styles.sectionLabel, { color: colors.inkFaint }]}>
+                FEEDS
+              </Text>
+            </View>
+          </>
+        )}
+        ListEmptyComponent={() =>
+          feeds.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+                No feeds yet.
+              </Text>
+              <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
+                Tap Add Feed + above to add your first feed.
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.emptyState}>
+              <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+                No matches.
+              </Text>
+              <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
+                Try a different search term.
+              </Text>
+            </View>
+          )
+        }
+        renderItem={({ item }) => {
+          const iconUri = getFeedIconUrl(item.url);
+          const showIcon = Boolean(iconUri && !failedIconUris.has(iconUri));
+
+          return (
+            <View style={styles.row}>
+              <TouchableOpacity
+                style={styles.rowMain}
                 onPress={() =>
-                  navigation.navigate("TagDetail", {
-                    tagId: tag.id,
-                    from: "Feeds",
+                  navigation.navigate("Feed", {
+                    selectedFeedId: item.id,
+                    selectedFeedTitle: item.title,
                   })
                 }
+                accessibilityLabel={`Open ${item.title}`}
+                activeOpacity={0.7}
+              >
+                {showIcon ? (
+                  <Image
+                    source={{ uri: iconUri ?? undefined }}
+                    style={styles.feedIcon}
+                    cachePolicy="memory-disk"
+                    transition={80}
+                    onError={() => {
+                      if (!iconUri) {
+                        return;
+                      }
+                      setFailedIconUris((prev) => new Set(prev).add(iconUri));
+                    }}
+                  />
+                ) : null}
+                <View style={styles.rowBody}>
+                  <Text style={[styles.feedTitle, { color: colors.ink }]}>
+                    {item.title}
+                  </Text>
+                </View>
+                {item.error ? (
+                  <View
+                    style={[
+                      styles.badge,
+                      {
+                        backgroundColor: colors.danger,
+                        borderColor: colors.danger,
+                      },
+                    ]}
+                  >
+                    <Text style={[styles.badgeText, { color: colors.paper }]}>
+                      Error
+                    </Text>
+                  </View>
+                ) : null}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.editBtn, { borderColor: colors.border }]}
+                onPress={() =>
+                  navigation.navigate("FeedDetail", { feedId: item.id })
+                }
                 hitSlop={8}
-                accessibilityLabel={`Edit ${tag.name}`}
+                accessibilityLabel={`Edit ${item.title}`}
                 activeOpacity={0.8}
               >
                 <Feather name="edit-2" size={16} color={colors.inkSoft} />
               </TouchableOpacity>
             </View>
-          ))
-        )}
-      </View>
-
-      {feeds.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-            No feeds yet.
-          </Text>
-          <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            Tap Add Feed + above to add your first feed.
-          </Text>
-        </View>
-      ) : visibleFeeds.length === 0 ? (
-        <View style={styles.center}>
-          <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-            No matches.
-          </Text>
-          <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            Try a different search term.
-          </Text>
-        </View>
-      ) : (
-        <FlatList
-          data={visibleFeeds}
-          keyExtractor={(item) => String(item.id)}
-          contentContainerStyle={styles.list}
-          ItemSeparatorComponent={() => <DashedDivider />}
-          renderItem={({ item }) => {
-            const iconUri = getFeedIconUrl(item.url);
-            const showIcon = Boolean(iconUri && !failedIconUris.has(iconUri));
-
-            return (
-              <View style={styles.row}>
-                <TouchableOpacity
-                  style={styles.rowMain}
-                  onPress={() =>
-                    navigation.navigate("Feed", {
-                      selectedFeedId: item.id,
-                      selectedFeedTitle: item.title,
-                    })
-                  }
-                  accessibilityLabel={`Open ${item.title}`}
-                  activeOpacity={0.7}
-                >
-                  {showIcon ? (
-                    <Image
-                      source={{ uri: iconUri ?? undefined }}
-                      style={styles.feedIcon}
-                      cachePolicy="memory-disk"
-                      transition={80}
-                      onError={() => {
-                        if (!iconUri) {
-                          return;
-                        }
-                        setFailedIconUris((prev) => new Set(prev).add(iconUri));
-                      }}
-                    />
-                  ) : null}
-                  <View style={styles.rowBody}>
-                    <Text style={[styles.feedTitle, { color: colors.ink }]}>
-                      {item.title}
-                    </Text>
-                  </View>
-                  {item.error ? (
-                    <View
-                      style={[
-                        styles.badge,
-                        {
-                          backgroundColor: colors.danger,
-                          borderColor: colors.danger,
-                        },
-                      ]}
-                    >
-                      <Text style={[styles.badgeText, { color: colors.paper }]}>
-                        Error
-                      </Text>
-                    </View>
-                  ) : null}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.editBtn, { borderColor: colors.border }]}
-                  onPress={() =>
-                    navigation.navigate("FeedDetail", { feedId: item.id })
-                  }
-                  hitSlop={8}
-                  accessibilityLabel={`Edit ${item.title}`}
-                  activeOpacity={0.8}
-                >
-                  <Feather name="edit-2" size={16} color={colors.inkSoft} />
-                </TouchableOpacity>
-              </View>
-            );
-          }}
-        />
-      )}
+          );
+        }}
+      />
     </View>
   );
 }
@@ -394,7 +409,18 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     paddingVertical: 0,
   },
-  list: { paddingVertical: spacing.sm },
+  list: { paddingBottom: spacing.sm },
+  feedsHeader: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.xs,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
+  },
+  emptyState: {
+    alignItems: "center",
+    padding: spacing.xl,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
