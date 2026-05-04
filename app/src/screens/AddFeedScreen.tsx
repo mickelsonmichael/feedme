@@ -27,10 +27,7 @@ import {
   extractYouTubeRssFeedUrl,
   getYouTubeChannelUrl,
 } from "../youtubeUtils";
-import {
-  buildGitHubReleaseFeedUrl,
-  getGitHubRepo,
-} from "../githubUtils";
+import { buildGitHubReleaseFeedUrl, getGitHubRepo } from "../githubUtils";
 import { fetchWithProxyFallback } from "../proxyFetch";
 import { SelectedTag, TagMultiSelect } from "../components/TagMultiSelect";
 

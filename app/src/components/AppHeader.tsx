@@ -2,7 +2,13 @@
 // Handles top safe-area insets so the header stays below device notches/cameras.
 
 import React from "react";
-import { View, Text, StyleSheet, Platform, useWindowDimensions } from "react-native";
+import {
+  View,
+  Text,
+  StyleSheet,
+  Platform,
+  useWindowDimensions,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { fonts, fontSize, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";

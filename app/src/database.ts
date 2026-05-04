@@ -203,12 +203,7 @@ export async function addFeed({
   show_only_in_tag,
 }: Pick<
   Feed,
-  | "title"
-  | "url"
-  | "description"
-  | "use_proxy"
-  | "nsfw"
-  | "show_only_in_tag"
+  "title" | "url" | "description" | "use_proxy" | "nsfw" | "show_only_in_tag"
 >): Promise<number> {
   const database = await getDatabase();
   const result = await withWriteLock(() =>
@@ -246,7 +241,10 @@ export async function updateFeedLastFetched(feedId: number): Promise<void> {
 
 export async function updateFeed(
   feedId: number,
-  fields: Pick<Feed, "title" | "url" | "use_proxy" | "nsfw" | "show_only_in_tag">
+  fields: Pick<
+    Feed,
+    "title" | "url" | "use_proxy" | "nsfw" | "show_only_in_tag"
+  >
 ): Promise<void> {
   const database = await getDatabase();
   await withWriteLock(() =>
@@ -364,14 +362,11 @@ export async function markItemRead(itemId: number): Promise<void> {
   // inside withWriteLock can leave the connection in a bad state when the
   // task throws (e.g. ROLLBACK failing on an interrupted transaction).
   await withWriteLock(async () => {
-    await database.runAsync("UPDATE items SET read = 1 WHERE id = ?", [
+    await database.runAsync("UPDATE items SET read = 1 WHERE id = ?", [itemId]);
+    // Read Later items are auto-removed once they've been read.
+    await database.runAsync("DELETE FROM read_later_posts WHERE item_id = ?", [
       itemId,
     ]);
-    // Read Later items are auto-removed once they've been read.
-    await database.runAsync(
-      "DELETE FROM read_later_posts WHERE item_id = ?",
-      [itemId]
-    );
   });
 }
 

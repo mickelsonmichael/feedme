@@ -15,7 +15,12 @@ import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { getFeeds, getTagsWithFeedCounts } from "../database";
-import { Feed, RootStackParamList, TabParamList, TagWithFeedCount } from "../types";
+import {
+  Feed,
+  RootStackParamList,
+  TabParamList,
+  TagWithFeedCount,
+} from "../types";
 import { DashedDivider } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -215,7 +220,9 @@ export default function FeedsScreen({ navigation }: Props) {
                       <Text style={[styles.tagText, { color: colors.ink }]}>
                         {tag.name}
                       </Text>
-                      <Text style={[styles.tagCount, { color: colors.inkFaint }]}>
+                      <Text
+                        style={[styles.tagCount, { color: colors.inkFaint }]}
+                      >
                         {tag.feed_count}
                       </Text>
                     </TouchableOpacity>

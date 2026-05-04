@@ -1,4 +1,9 @@
-import { parseFeed, extractFeedTitle, extractImageUrl, fetchFeedWithMeta } from "./feedParser";
+import {
+  parseFeed,
+  extractFeedTitle,
+  extractImageUrl,
+  fetchFeedWithMeta,
+} from "./feedParser";
 import { ParsedFeedItem } from "./types";
 
 const RSS_FEED = `<?xml version="1.0" encoding="UTF-8"?>
@@ -450,7 +455,8 @@ describe("fetchFeedWithMeta", () => {
     mockXhr.onload?.();
 
     // Assert
-    await expect(promise).rejects.toThrow("Failed to fetch feed: 404 Not Found");
+    await expect(promise).rejects.toThrow(
+      "Failed to fetch feed: 404 Not Found"
+    );
   });
 });
-
