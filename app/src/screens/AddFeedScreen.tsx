@@ -28,6 +28,7 @@ import {
   getYouTubeChannelUrl,
 } from "../youtubeUtils";
 import { buildGitHubReleaseFeedUrl, getGitHubRepo } from "../githubUtils";
+import { buildSubstackFeedUrl, getSubstackName } from "../substackUtils";
 import { fetchWithProxyFallback } from "../proxyFetch";
 import { SelectedTag, TagMultiSelect } from "../components/TagMultiSelect";
 
@@ -36,13 +37,14 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
-type FeedSource = "url" | "reddit" | "youtube" | "github";
+type FeedSource = "url" | "reddit" | "youtube" | "github" | "substack";
 
 const SOURCE_OPTIONS: { value: FeedSource; label: string }[] = [
   { value: "url", label: "URL" },
   { value: "reddit", label: "Reddit" },
   { value: "youtube", label: "YouTube" },
   { value: "github", label: "GitHub" },
+  { value: "substack", label: "Substack" },
 ];
 
 const PROXY_ALERT_TITLE = "Using Feed Proxy";
@@ -59,6 +61,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
   const [subreddit, setSubreddit] = useState("");
   const [youtubeChannel, setYoutubeChannel] = useState("");
   const [githubRepo, setGithubRepo] = useState("");
+  const [substackName, setSubstackName] = useState("");
   const [title, setTitle] = useState("");
   const [titleManuallyEdited, setTitleManuallyEdited] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -86,6 +89,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
     setSubreddit("");
     setYoutubeChannel("");
     setGithubRepo("");
+    setSubstackName("");
     setTitle("");
     setTitleManuallyEdited(false);
     setFeedError(null);
@@ -121,6 +125,14 @@ export default function AddFeedScreen({ navigation, route }: Props) {
     if (!titleManuallyEdited) {
       const parsed = getGitHubRepo(value);
       setTitle(parsed ? `GitHub - ${parsed.owner}/${parsed.repo}` : "");
+    }
+  };
+
+  const handleSubstackNameChange = (value: string) => {
+    setSubstackName(value);
+    if (!titleManuallyEdited) {
+      const name = getSubstackName(value);
+      setTitle(name ? `Substack - ${name}` : "");
     }
   };
 
@@ -340,6 +352,67 @@ export default function AddFeedScreen({ navigation, route }: Props) {
       return;
     }
 
+    if (source === "substack") {
+      const parsedName = getSubstackName(substackName);
+      if (!parsedName) {
+        Alert.alert(
+          "Validation",
+          "Please enter a valid Substack name or URL (e.g. @natesilver or https://substack.com/@natesilver)."
+        );
+        return;
+      }
+      const feedUrl = buildSubstackFeedUrl(substackName);
+      if (!feedUrl) {
+        Alert.alert(
+          "Validation",
+          "Please enter a valid Substack name or URL (e.g. @natesilver or https://substack.com/@natesilver)."
+        );
+        return;
+      }
+      const feedTitle = title.trim() || `Substack - ${parsedName}`;
+      setLoading(true);
+      try {
+        const { response, usedProxy } = await fetchWithProxyFallback(feedUrl);
+        if (usedProxy) {
+          Alert.alert(PROXY_ALERT_TITLE, PROXY_ALERT_MESSAGE);
+        }
+        if (!response.ok) {
+          if (response.status === 404) {
+            setFeedError(
+              `The Substack publication "${parsedName}" was not found. Check the name and try again.`
+            );
+          } else {
+            setFeedError(
+              `Failed to connect to ${feedUrl}. Please check your connection and try again.`
+            );
+          }
+          return;
+        }
+        const newFeedId = await addFeed({
+          title: feedTitle,
+          url: feedUrl,
+          description: null,
+          use_proxy: usedProxy ? 1 : 0,
+          nsfw: isNsfw ? 1 : 0,
+          show_only_in_tag: showOnlyInTag ? 1 : 0,
+        });
+        await persistTagsForFeed(newFeedId);
+        resetForm();
+        navigation.navigate(from as "Feeds");
+      } catch (err) {
+        if ((err as Error).message?.includes("UNIQUE")) {
+          Alert.alert("Duplicate", "This feed is already in your list.");
+        } else {
+          setFeedError(
+            `Failed to connect to ${feedUrl}. Please check your connection and try again.`
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     // URL mode
     const trimmedUrl = url.trim();
     const trimmedTitle = title.trim();
@@ -466,7 +539,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                   ? "Enter a YouTube channel name or URL to subscribe to its RSS feed."
                   : source === "github"
                     ? "Enter a GitHub repository (e.g. owner/repo or a full GitHub URL) to subscribe to its releases feed."
-                    : "Paste an RSS/Atom feed URL or a site URL - we'll try to find the feed."}
+                    : source === "substack"
+                      ? "Enter a Substack name (e.g. @natesilver or natesilver) or a Substack URL to subscribe to its feed."
+                      : "Paste an RSS/Atom feed URL or a site URL - we'll try to find the feed."}
             </Text>
           </View>
 
@@ -541,7 +616,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                 returnKeyType="next"
               />
             </>
-          ) : (
+          ) : source === "github" ? (
             <>
               <Text style={[styles.label, { color: colors.inkSoft }]}>
                 Repository *
@@ -559,6 +634,29 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                 placeholderTextColor={colors.inkFaint}
                 value={githubRepo}
                 onChangeText={handleGithubRepoChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+            </>
+          ) : (
+            <>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                Substack *
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: colors.border,
+                    color: colors.ink,
+                  },
+                ]}
+                placeholder="@natesilver"
+                placeholderTextColor={colors.inkFaint}
+                value={substackName}
+                onChangeText={handleSubstackNameChange}
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="next"
@@ -585,7 +683,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                   ? "YouTube - ChannelName"
                   : source === "github"
                     ? "GitHub - owner/repo"
-                    : "My Favourite Blog"
+                    : source === "substack"
+                      ? "Substack - publicationname"
+                      : "My Favourite Blog"
             }
             placeholderTextColor={colors.inkFaint}
             value={title}
