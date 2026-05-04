@@ -22,7 +22,9 @@ export function openUrlWithPreference({
   if (Platform.OS === "android" && mode === "embedded") {
     // On Android, use Chrome Custom Tabs so existing browser session/cookies
     // are available while keeping the app context.
-    WebBrowser.openBrowserAsync(url).catch(() =>
+    // createTask: false prevents Chrome Custom Tabs from appearing as a
+    // separate app entry in the Android task switcher / app drawer.
+    WebBrowser.openBrowserAsync(url, { createTask: false }).catch(() =>
       Alert.alert("Error", "Cannot open this URL.")
     );
     return;
