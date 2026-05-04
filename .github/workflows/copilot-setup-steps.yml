@@ -12,27 +12,101 @@ on:
 jobs:
   copilot-setup-steps:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
 
+    env:
+      ANDROID_API_LEVEL: 34
+      ANDROID_TARGET: google_apis
+      ANDROID_ARCH: x86_64
+      AVD_NAME: copilot_avd
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version: '22'
           cache: npm
-          cache-dependency-path: |
-            app/package-lock.json
-            worker/package-lock.json
 
-      - name: Install app dependencies
-        working-directory: app
+      - name: Install npm dependencies
+        if: hashFiles('package-lock.json') != ''
         run: npm ci
 
-      - name: Install worker dependencies
-        working-directory: worker
-        run: npm ci
+      - name: Enable KVM (hardware acceleration for emulator)
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: >-
+            platform-tools
+            platforms;android-${{ env.ANDROID_API_LEVEL }}
+            build-tools;34.0.0
+            emulator
+            system-images;android-${{ env.ANDROID_API_LEVEL }};${{ env.ANDROID_TARGET }};${{ env.ANDROID_ARCH }}
+
+      - name: Set up Gradle (with caching)
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Make Gradle wrapper executable
+        if: hashFiles('gradlew') != ''
+        run: chmod +x ./gradlew
+
+      - name: Cache AVD snapshot
+        uses: actions/cache@v5
+        id: avd-cache
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-${{ env.ANDROID_API_LEVEL }}-${{ env.ANDROID_TARGET }}-${{ env.ANDROID_ARCH }}-v1
+
+      - name: Create AVD and generate boot snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ env.ANDROID_API_LEVEL }}
+          target: ${{ env.ANDROID_TARGET }}
+          arch: ${{ env.ANDROID_ARCH }}
+          profile: pixel_6
+          avd-name: ${{ env.AVD_NAME }}
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
+          disable-animations: true
+          script: echo "AVD snapshot generated for caching"
+
+      - name: Install emulator helper script
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          cat > "$HOME/.local/bin/start-emulator" <<'EOF'
+          #!/usr/bin/env bash
+          set -e
+          AVD="${AVD_NAME:-copilot_avd}"
+          nohup "$ANDROID_HOME/emulator/emulator" -avd "$AVD" \
+            -no-window -no-audio -no-boot-anim \
+            -no-snapshot-save -snapshot default_boot \
+            -gpu swiftshader_indirect \
+            > /tmp/emulator.log 2>&1 &
+          adb wait-for-device
+          until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+            sleep 2
+          done
+          adb shell input keyevent 82 || true
+          echo "Emulator booted: $AVD"
+          EOF
+          chmod +x "$HOME/.local/bin/start-emulator"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "AVD_NAME=${{ env.AVD_NAME }}" >> "$GITHUB_ENV"
