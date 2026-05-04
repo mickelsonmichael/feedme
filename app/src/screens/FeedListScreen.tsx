@@ -200,10 +200,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             onProgress: setRefreshProgress,
           });
           if (errors > 0) {
-            Alert.alert(
-              "Refresh",
-              `${errors} feed(s) could not be refreshed.`
-            );
+            Alert.alert("Refresh", `${errors} feed(s) could not be refreshed.`);
           }
         } else {
           setRefreshProgress({
@@ -723,7 +720,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           ) : null}
         </ScrollView>
-
       </View>
 
       {refreshing && refreshProgress && refreshProgress.total > 0 ? (

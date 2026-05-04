@@ -192,12 +192,7 @@ export async function addFeed({
   show_only_in_tag,
 }: Pick<
   Feed,
-  | "title"
-  | "url"
-  | "description"
-  | "use_proxy"
-  | "nsfw"
-  | "show_only_in_tag"
+  "title" | "url" | "description" | "use_proxy" | "nsfw" | "show_only_in_tag"
 >): Promise<number> {
   const state = loadState();
   if (state.feeds.some((f) => f.url === url)) {
@@ -242,7 +237,10 @@ export async function updateFeedLastFetched(feedId: number): Promise<void> {
 
 export async function updateFeed(
   feedId: number,
-  fields: Pick<Feed, "title" | "url" | "use_proxy" | "nsfw" | "show_only_in_tag">
+  fields: Pick<
+    Feed,
+    "title" | "url" | "use_proxy" | "nsfw" | "show_only_in_tag"
+  >
 ): Promise<void> {
   const state = loadState();
   const feed = state.feeds.find((f) => f.id === feedId);

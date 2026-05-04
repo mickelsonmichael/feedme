@@ -201,7 +201,7 @@ describe("refreshFeeds", () => {
 
   it("truncates items to MAX_ITEMS_PER_FEED before upserting", async () => {
     // Arrange — return more items than the per-feed cap
-    const lotsOfItems: typeof parsedItem[] = Array.from(
+    const lotsOfItems: (typeof parsedItem)[] = Array.from(
       { length: 200 },
       (_, i) => ({ ...parsedItem, url: `https://example.com/article${i}` })
     );
@@ -213,7 +213,8 @@ describe("refreshFeeds", () => {
 
     // Assert — upsertItems should receive at most 100 items
     expect(mockUpsertItems).toHaveBeenCalledTimes(1);
-    const upsertedItems = mockUpsertItems.mock.calls[0][1] as typeof parsedItem[];
+    const upsertedItems = mockUpsertItems.mock
+      .calls[0][1] as (typeof parsedItem)[];
     expect(upsertedItems.length).toBeLessThanOrEqual(100);
     expect(upsertedItems[0]).toEqual(lotsOfItems[0]);
   });

@@ -143,9 +143,7 @@ export default function DiscoverScreen({ navigation }: Props) {
                     cachePolicy="memory-disk"
                     transition={80}
                     onError={() =>
-                      setFailedIcons((prev) =>
-                        new Set(prev).add(feed.iconUrl)
-                      )
+                      setFailedIcons((prev) => new Set(prev).add(feed.iconUrl))
                     }
                   />
                 ) : (

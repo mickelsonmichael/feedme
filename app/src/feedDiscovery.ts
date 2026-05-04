@@ -106,7 +106,10 @@ export function parseHtmlForFeedLinks(
 }
 
 function matchAttribute(tag: string, attr: string): string | null {
-  const re = new RegExp(`\\b${attr}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, "i");
+  const re = new RegExp(
+    `\\b${attr}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`,
+    "i"
+  );
   const m = tag.match(re);
   if (!m) return null;
   return m[2] ?? m[3] ?? m[4] ?? null;
@@ -205,10 +208,7 @@ export async function discoverFeeds(
         if (!response.ok) return null;
         const candidateBody = await response.text();
         const ct = response.headers.get("content-type");
-        if (
-          !isFeedContentType(ct) &&
-          !looksLikeFeedBody(candidateBody)
-        ) {
+        if (!isFeedContentType(ct) && !looksLikeFeedBody(candidateBody)) {
           return null;
         }
         return {

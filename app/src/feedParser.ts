@@ -1,8 +1,5 @@
 import { ParsedFeedItem } from "./types";
-import {
-  buildProxyRequestUrl,
-  isLikelyCorsBlockedError,
-} from "./proxyFetch";
+import { buildProxyRequestUrl, isLikelyCorsBlockedError } from "./proxyFetch";
 
 export type FetchFeedResult = {
   items: ParsedFeedItem[];
@@ -45,9 +42,7 @@ export async function fetchFeedWithMeta(
           resolve(xhr.responseText);
         } else {
           reject(
-            new Error(
-              `Failed to fetch feed: ${xhr.status} ${xhr.statusText}`
-            )
+            new Error(`Failed to fetch feed: ${xhr.status} ${xhr.statusText}`)
           );
         }
       };

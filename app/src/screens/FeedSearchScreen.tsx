@@ -20,10 +20,7 @@ import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { addFeed } from "../database";
-import {
-  DiscoveredFeed,
-  discoverFeeds,
-} from "../feedDiscovery";
+import { DiscoveredFeed, discoverFeeds } from "../feedDiscovery";
 import { RootStackParamList, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -247,7 +244,8 @@ function FeedResultRow({
         : state === "duplicate"
           ? "Already added"
           : "Add";
-  const disabled = state === "adding" || state === "added" || state === "duplicate";
+  const disabled =
+    state === "adding" || state === "added" || state === "duplicate";
   return (
     <View style={[styles.resultRow, { borderColor: colors.inkFaint }]}>
       <View style={styles.resultBody}>

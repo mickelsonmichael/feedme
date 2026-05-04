@@ -57,7 +57,9 @@ const TAB_CONFIG: {
   { name: "Feed", icon: "inbox", label: "All Feeds" },
   { name: "Saved", icon: "bookmark", label: "Saved" },
   { name: "ReadLater", icon: "clock", label: "Read Later" },
-  { name: "Feeds", icon: "rss", label: "Manage Feeds" },  { name: "Discover", icon: "compass", label: "Discover" },  { name: "Settings", icon: "settings", label: "Settings" },
+  { name: "Feeds", icon: "rss", label: "Manage Feeds" },
+  { name: "Discover", icon: "compass", label: "Discover" },
+  { name: "Settings", icon: "settings", label: "Settings" },
 ];
 
 function FeatherTabIcon({

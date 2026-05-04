@@ -286,69 +286,72 @@ function FeedPostCardComponent({
           </TouchableOpacity>
         </View>
       </View>
-      <View style={[styles.actionRow, { borderTopColor: colors.inkFaint, paddingHorizontal: spacing.md, paddingBottom: spacing.sm, justifyContent: "space-evenly" }]}>
-            {showExpand && onToggleExpand ? (
-              <TouchableOpacity
-                onPress={onToggleExpand}
-                activeOpacity={0.6}
-                hitSlop={8}
-                accessibilityLabel={expanded ? "Collapse post" : "Expand post"}
-              >
-                <Feather
-                  name={expanded ? "chevron-up" : "chevron-down"}
-                  size={18}
-                  color={expanded ? colors.accent : colors.inkSoft}
-                />
-              </TouchableOpacity>
-            ) : null}
-            <ReadToggleButton read={item.read} onPress={onToggleRead} />
-            <SaveButton saved={saved} onPress={onToggleSave} />
-            {onToggleReadLater ? (
-              <ReadLaterButton
-                readLater={readLater}
-                onPress={onToggleReadLater}
-              />
-            ) : null}
-            <TouchableOpacity
-              style={styles.iconActionBtn}
-              onPress={onOpenOriginalLink}
-              activeOpacity={0.6}
-              hitSlop={8}
-              disabled={!item.url}
-              accessibilityLabel="Open original link"
-            >
-              <Feather
-                name="external-link"
-                size={18}
-                color={item.url ? colors.inkSoft : colors.inkFaint}
-              />
-            </TouchableOpacity>
-            {redditCommentsLink ? (
-              <TouchableOpacity
-                style={styles.iconActionBtn}
-                onPress={() => onOpenContentLink(redditCommentsLink.url)}
-                activeOpacity={0.6}
-                hitSlop={8}
-                accessibilityLabel="Open Reddit comments"
-              >
-                <Feather
-                  name="message-circle"
-                  size={18}
-                  color={colors.inkSoft}
-                />
-              </TouchableOpacity>
-            ) : null}
-            {showRawXml && onOpenRawXml ? (
-              <TouchableOpacity
-                style={styles.iconActionBtn}
-                onPress={onOpenRawXml}
-                activeOpacity={0.6}
-                hitSlop={8}
-                accessibilityLabel="View raw XML"
-              >
-                <Feather name="terminal" size={18} color={colors.inkSoft} />
-              </TouchableOpacity>
-            ) : null}
+      <View
+        style={[
+          styles.actionRow,
+          {
+            borderTopColor: colors.inkFaint,
+            paddingHorizontal: spacing.md,
+            paddingBottom: spacing.sm,
+            justifyContent: "space-evenly",
+          },
+        ]}
+      >
+        {showExpand && onToggleExpand ? (
+          <TouchableOpacity
+            onPress={onToggleExpand}
+            activeOpacity={0.6}
+            hitSlop={8}
+            accessibilityLabel={expanded ? "Collapse post" : "Expand post"}
+          >
+            <Feather
+              name={expanded ? "chevron-up" : "chevron-down"}
+              size={18}
+              color={expanded ? colors.accent : colors.inkSoft}
+            />
+          </TouchableOpacity>
+        ) : null}
+        <ReadToggleButton read={item.read} onPress={onToggleRead} />
+        <SaveButton saved={saved} onPress={onToggleSave} />
+        {onToggleReadLater ? (
+          <ReadLaterButton readLater={readLater} onPress={onToggleReadLater} />
+        ) : null}
+        <TouchableOpacity
+          style={styles.iconActionBtn}
+          onPress={onOpenOriginalLink}
+          activeOpacity={0.6}
+          hitSlop={8}
+          disabled={!item.url}
+          accessibilityLabel="Open original link"
+        >
+          <Feather
+            name="external-link"
+            size={18}
+            color={item.url ? colors.inkSoft : colors.inkFaint}
+          />
+        </TouchableOpacity>
+        {redditCommentsLink ? (
+          <TouchableOpacity
+            style={styles.iconActionBtn}
+            onPress={() => onOpenContentLink(redditCommentsLink.url)}
+            activeOpacity={0.6}
+            hitSlop={8}
+            accessibilityLabel="Open Reddit comments"
+          >
+            <Feather name="message-circle" size={18} color={colors.inkSoft} />
+          </TouchableOpacity>
+        ) : null}
+        {showRawXml && onOpenRawXml ? (
+          <TouchableOpacity
+            style={styles.iconActionBtn}
+            onPress={onOpenRawXml}
+            activeOpacity={0.6}
+            hitSlop={8}
+            accessibilityLabel="View raw XML"
+          >
+            <Feather name="terminal" size={18} color={colors.inkSoft} />
+          </TouchableOpacity>
+        ) : null}
       </View>
       {showExpand && expanded ? (
         <View

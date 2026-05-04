@@ -52,19 +52,25 @@ describe("isFeedContentType", () => {
 describe("looksLikeFeedBody", () => {
   it("recognises RSS markup", () => {
     // Arrange + Act + Assert
-    expect(looksLikeFeedBody("<?xml version='1.0'?><rss><channel></channel></rss>")).toBe(true);
+    expect(
+      looksLikeFeedBody("<?xml version='1.0'?><rss><channel></channel></rss>")
+    ).toBe(true);
   });
 
   it("recognises Atom markup", () => {
     // Arrange + Act + Assert
     expect(
-      looksLikeFeedBody('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>')
+      looksLikeFeedBody(
+        '<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"></feed>'
+      )
     ).toBe(true);
   });
 
   it("rejects HTML markup", () => {
     // Arrange + Act + Assert
-    expect(looksLikeFeedBody("<!doctype html><html><body></body></html>")).toBe(false);
+    expect(looksLikeFeedBody("<!doctype html><html><body></body></html>")).toBe(
+      false
+    );
   });
 });
 
@@ -218,9 +224,7 @@ describe("discoverFeeds", () => {
   it("rejects invalid URLs", async () => {
     // Arrange + Act + Assert
     await expect(discoverFeeds("   ")).rejects.toThrow(/URL/);
-    await expect(discoverFeeds("ftp://example.com")).rejects.toThrow(
-      /http/
-    );
+    await expect(discoverFeeds("ftp://example.com")).rejects.toThrow(/http/);
   });
 
   it("prefixes https:// when no scheme is supplied", async () => {

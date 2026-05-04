@@ -27,12 +27,7 @@ import {
   setTagFeeds,
   updateTag,
 } from "../database";
-import {
-  Feed,
-  RootStackParamList,
-  Tag,
-  TabParamList,
-} from "../types";
+import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { getFeedIconUrl } from "../feedIcon";
