@@ -92,6 +92,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-ADDFEED-007 | If a direct fetch fails and a proxy was used as fallback, the user shall be notified. |
 | REQ-ADDFEED-008 | The user shall be able to assign up to 25 tags to the new feed via a multi-select picker, including creating new tags inline. |
 | REQ-ADDFEED-009 | The user shall be able to toggle "Show only on tag feeds" when adding a feed. |
+| REQ-ADDFEED-010 | The user shall be able to subscribe to a GitHub repository's releases feed by entering a repository path (e.g. `owner/repo`) or a full GitHub URL (with or without a `.git` suffix). |
 
 ---
 

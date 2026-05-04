@@ -27,6 +27,10 @@ import {
   extractYouTubeRssFeedUrl,
   getYouTubeChannelUrl,
 } from "../youtubeUtils";
+import {
+  buildGitHubReleaseFeedUrl,
+  getGitHubRepo,
+} from "../githubUtils";
 import { fetchWithProxyFallback } from "../proxyFetch";
 import { SelectedTag, TagMultiSelect } from "../components/TagMultiSelect";
 
@@ -35,7 +39,14 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
-type FeedSource = "url" | "reddit" | "youtube";
+type FeedSource = "url" | "reddit" | "youtube" | "github";
+
+const SOURCE_OPTIONS: { value: FeedSource; label: string }[] = [
+  { value: "url", label: "URL" },
+  { value: "reddit", label: "Reddit" },
+  { value: "youtube", label: "YouTube" },
+  { value: "github", label: "GitHub" },
+];
 
 const PROXY_ALERT_TITLE = "Using Feed Proxy";
 const PROXY_ALERT_MESSAGE =
@@ -50,6 +61,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
   const [url, setUrl] = useState("");
   const [subreddit, setSubreddit] = useState("");
   const [youtubeChannel, setYoutubeChannel] = useState("");
+  const [githubRepo, setGithubRepo] = useState("");
   const [title, setTitle] = useState("");
   const [titleManuallyEdited, setTitleManuallyEdited] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -76,6 +88,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
     setUrl("");
     setSubreddit("");
     setYoutubeChannel("");
+    setGithubRepo("");
     setTitle("");
     setTitleManuallyEdited(false);
     setFeedError(null);
@@ -103,6 +116,14 @@ export default function AddFeedScreen({ navigation, route }: Props) {
     if (!titleManuallyEdited) {
       const trimmed = value.trim();
       setTitle(trimmed ? `YouTube - ${trimmed.replace(/^@/, "")}` : "");
+    }
+  };
+
+  const handleGithubRepoChange = (value: string) => {
+    setGithubRepo(value);
+    if (!titleManuallyEdited) {
+      const parsed = getGitHubRepo(value);
+      setTitle(parsed ? `GitHub - ${parsed.owner}/${parsed.repo}` : "");
     }
   };
 
@@ -260,6 +281,61 @@ export default function AddFeedScreen({ navigation, route }: Props) {
       return;
     }
 
+    if (source === "github") {
+      const parsedRepo = getGitHubRepo(githubRepo);
+      if (!parsedRepo) {
+        Alert.alert(
+          "Validation",
+          "Please enter a valid GitHub repository (e.g. owner/repo or https://github.com/owner/repo)."
+        );
+        return;
+      }
+      const feedUrl = buildGitHubReleaseFeedUrl(githubRepo)!;
+      const feedTitle =
+        title.trim() || `GitHub - ${parsedRepo.owner}/${parsedRepo.repo}`;
+      setLoading(true);
+      try {
+        const { response, usedProxy } = await fetchWithProxyFallback(feedUrl);
+        if (usedProxy) {
+          Alert.alert(PROXY_ALERT_TITLE, PROXY_ALERT_MESSAGE);
+        }
+        if (!response.ok) {
+          if (response.status === 404) {
+            setFeedError(
+              `The repository https://github.com/${parsedRepo.owner}/${parsedRepo.repo} was not found. Check the owner and repository name and try again.`
+            );
+          } else {
+            setFeedError(
+              `Failed to connect to ${feedUrl}. Please check your connection and try again.`
+            );
+          }
+          return;
+        }
+        const newFeedId = await addFeed({
+          title: feedTitle,
+          url: feedUrl,
+          description: null,
+          use_proxy: usedProxy ? 1 : 0,
+          nsfw: isNsfw ? 1 : 0,
+          show_only_in_tag: showOnlyInTag ? 1 : 0,
+        });
+        await persistTagsForFeed(newFeedId);
+        resetForm();
+        navigation.navigate(from as "Feeds");
+      } catch (err) {
+        if ((err as Error).message?.includes("UNIQUE")) {
+          Alert.alert("Duplicate", "This feed is already in your list.");
+        } else {
+          setFeedError(
+            `Failed to connect to ${feedUrl}. Please check your connection and try again.`
+          );
+        }
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     // URL mode
     const trimmedUrl = url.trim();
     const trimmedTitle = title.trim();
@@ -346,66 +422,31 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           ) : null}
 
           <Text style={[styles.label, { color: colors.inkSoft }]}>Source</Text>
-          <View
-            style={[styles.segmentedControl, { borderColor: colors.border }]}
-          >
-            <TouchableOpacity
-              style={[
-                styles.segmentBtn,
-                source === "url" && {
-                  backgroundColor: colors.accent,
-                },
-              ]}
-              onPress={() => handleSourceChange("url")}
-              activeOpacity={0.8}
-            >
-              <Text
+          <View style={styles.sourceGrid}>
+            {SOURCE_OPTIONS.map(({ value, label }) => (
+              <TouchableOpacity
+                key={value}
                 style={[
-                  styles.segmentBtnText,
-                  { color: source === "url" ? colors.paper : colors.ink },
+                  styles.sourceChip,
+                  { borderColor: colors.border },
+                  source === value && {
+                    backgroundColor: colors.accent,
+                    borderColor: colors.accent,
+                  },
                 ]}
+                onPress={() => handleSourceChange(value)}
+                activeOpacity={0.8}
               >
-                URL
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.segmentBtn,
-                source === "reddit" && {
-                  backgroundColor: colors.accent,
-                },
-              ]}
-              onPress={() => handleSourceChange("reddit")}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.segmentBtnText,
-                  { color: source === "reddit" ? colors.paper : colors.ink },
-                ]}
-              >
-                Reddit
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.segmentBtn,
-                source === "youtube" && {
-                  backgroundColor: colors.accent,
-                },
-              ]}
-              onPress={() => handleSourceChange("youtube")}
-              activeOpacity={0.8}
-            >
-              <Text
-                style={[
-                  styles.segmentBtnText,
-                  { color: source === "youtube" ? colors.paper : colors.ink },
-                ]}
-              >
-                YouTube
-              </Text>
-            </TouchableOpacity>
+                <Text
+                  style={[
+                    styles.sourceChipText,
+                    { color: source === value ? colors.paper : colors.ink },
+                  ]}
+                >
+                  {label}
+                </Text>
+              </TouchableOpacity>
+            ))}
           </View>
 
           <View
@@ -419,7 +460,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                 ? "Enter a subreddit name to subscribe to its RSS feed."
                 : source === "youtube"
                   ? "Enter a YouTube channel name or URL to subscribe to its RSS feed."
-                  : "Paste an RSS/Atom feed URL or a site URL - we'll try to find the feed."}
+                  : source === "github"
+                    ? "Enter a GitHub repository (e.g. owner/repo or a full GitHub URL) to subscribe to its releases feed."
+                    : "Paste an RSS/Atom feed URL or a site URL - we'll try to find the feed."}
             </Text>
           </View>
 
@@ -471,7 +514,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                 returnKeyType="next"
               />
             </>
-          ) : (
+          ) : source === "youtube" ? (
             <>
               <Text style={[styles.label, { color: colors.inkSoft }]}>
                 Channel *
@@ -489,6 +532,29 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                 placeholderTextColor={colors.inkFaint}
                 value={youtubeChannel}
                 onChangeText={handleYoutubeChannelChange}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+            </>
+          ) : (
+            <>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                Repository *
+              </Text>
+              <TextInput
+                style={[
+                  styles.input,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: colors.border,
+                    color: colors.ink,
+                  },
+                ]}
+                placeholder="owner/repo"
+                placeholderTextColor={colors.inkFaint}
+                value={githubRepo}
+                onChangeText={handleGithubRepoChange}
                 autoCapitalize="none"
                 autoCorrect={false}
                 returnKeyType="next"
@@ -513,7 +579,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                 ? "Reddit - r/subreddit"
                 : source === "youtube"
                   ? "YouTube - ChannelName"
-                  : "My Favourite Blog"
+                  : source === "github"
+                    ? "GitHub - owner/repo"
+                    : "My Favourite Blog"
             }
             placeholderTextColor={colors.inkFaint}
             value={title}
@@ -670,6 +738,26 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontFamily: fonts.sans,
     fontWeight: "600",
+  },
+  sourceGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  sourceChip: {
+    flexBasis: "48%",
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingVertical: spacing.sm,
+    alignItems: "center",
+  },
+  sourceChipText: {
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+    textAlign: "center",
   },
   hintBox: {
     borderWidth: 1,

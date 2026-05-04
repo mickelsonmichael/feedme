@@ -120,10 +120,10 @@ The set of bottom tabs depends on screen size:
 ### AddFeedScreen
 **File:** `app/src/screens/AddFeedScreen.tsx`  
 **Tab:** AddFeed  
-**Purpose:** Subscribe to a new feed by URL, subreddit name, or YouTube channel.
+**Purpose:** Subscribe to a new feed by URL, subreddit name, YouTube channel, or GitHub repository releases.
 
 **Primary features:**
-- Three source modes (segmented control): URL, Reddit, YouTube
+- Four source modes (2-column chip grid): URL, Reddit, YouTube, GitHub
 - Auto-fetches and pre-fills feed title from the feed's XML on URL blur
 - Toggle switches: Use proxy, NSFW, Show only on tag feeds
 - Multi-select tag picker (max 25 tags per feed) with inline create-new
