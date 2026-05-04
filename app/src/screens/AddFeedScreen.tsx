@@ -851,7 +851,8 @@ const styles = StyleSheet.create({
   },
   sourceChip: {
     flexBasis: "48%",
-    flex: 1,
+    flexGrow: 0,
+    flexShrink: 0,
     borderWidth: 1,
     borderRadius: radii.md,
     paddingVertical: spacing.sm,
