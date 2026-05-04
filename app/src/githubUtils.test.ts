@@ -67,7 +67,7 @@ describe("getGitHubRepo", () => {
     expect(result).toEqual({ owner: "mickelsonmichael", repo: "feedme" });
   });
 
-  it("upgrades an http:// GitHub URL to https://", () => {
+  it("parses an http:// GitHub URL", () => {
     // Arrange
     const raw = "http://github.com/mickelsonmichael/feedme";
 

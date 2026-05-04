@@ -290,7 +290,14 @@ export default function AddFeedScreen({ navigation, route }: Props) {
         );
         return;
       }
-      const feedUrl = buildGitHubReleaseFeedUrl(githubRepo)!;
+      const feedUrl = buildGitHubReleaseFeedUrl(githubRepo);
+      if (!feedUrl) {
+        Alert.alert(
+          "Validation",
+          "Please enter a valid GitHub repository (e.g. owner/repo or https://github.com/owner/repo)."
+        );
+        return;
+      }
       const feedTitle =
         title.trim() || `GitHub - ${parsedRepo.owner}/${parsedRepo.repo}`;
       setLoading(true);
