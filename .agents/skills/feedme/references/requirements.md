@@ -178,3 +178,16 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDSEARCH-004 | Search results shall display each feed's title, URL, and how it was discovered. |
 | REQ-FEEDSEARCH-005 | The user shall be able to subscribe to any result with a single tap; duplicate subscriptions shall be reported inline rather than via an error dialog. |
 | REQ-FEEDSEARCH-006 | When discovery fails (network error or no feeds found), the screen shall display an inline error/empty-state message. |
+
+---
+
+## Crash Reporting
+
+| ID | Requirement |
+|----|-------------|
+| REQ-CRASH-001 | On Android, the app shall install a global JS error handler that captures fatal errors (message, stack trace, and timestamp) and persists them to disk before the app terminates. |
+| REQ-CRASH-002 | On next launch after a crash, the app shall detect the persisted crash report and display a dialog offering to report the issue or dismiss it. |
+| REQ-CRASH-003 | Choosing "Report Issue" shall open the GitHub new-issue page with the title and body pre-filled from the crash report (including the full stack trace). |
+| REQ-CRASH-004 | Choosing "Dismiss" shall delete the crash report without opening the browser. |
+| REQ-CRASH-005 | Once the user acts on the crash dialog (report or dismiss), the crash report shall be deleted so the dialog does not appear again on subsequent launches. |
+| REQ-CRASH-006 | Crash detection and reporting shall be Android-only; no crash dialog shall appear on other platforms. |

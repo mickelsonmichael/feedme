@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -8,6 +9,16 @@ import {
   ScrollView,
   useWindowDimensions,
 } from "react-native";
+import {
+  installCrashHandler,
+  checkForCrashReport,
+  clearCrashReport,
+  openCrashIssueOnGitHub,
+} from "./src/crashReporter";
+
+// Install the JS crash handler at module-load time so it is active for the
+// entire app lifetime, including during initial render.
+installCrashHandler();
 import { Image } from "expo-image";
 import { CommonActions, NavigationContainer } from "@react-navigation/native";
 import {
@@ -509,6 +520,38 @@ function Tabs() {
 
 function AppContent() {
   const { colors, isDark } = useTheme();
+
+  React.useEffect(() => {
+    checkForCrashReport()
+      .then((report) => {
+        if (!report) return;
+
+        Alert.alert(
+          "App Crashed",
+          "The app crashed during your last session. Would you like to report this issue on GitHub?",
+          [
+            {
+              text: "Dismiss",
+              style: "cancel",
+              onPress: () => clearCrashReport(),
+            },
+            {
+              text: "Report Issue",
+              onPress: async () => {
+                try {
+                  await openCrashIssueOnGitHub(report);
+                } finally {
+                  await clearCrashReport();
+                }
+              },
+            },
+          ]
+        );
+      })
+      .catch(() => {
+        // Best effort — if crash report check fails, continue normally.
+      });
+  }, []);
   return (
     <View style={[styles.root, { backgroundColor: colors.paper }]}>
       <NavigationContainer>
