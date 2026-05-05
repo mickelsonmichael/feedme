@@ -22,7 +22,7 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import {
   extractRedditGalleryUrl,
-  fetchRedditGalleryImageUrls,
+  fetchRedditGalleryImageUrlsCached,
 } from "../redditGallery";
 import { extractGifEmbedUrl } from "../gifUtils";
 import { proxiedImageUrl } from "../proxyFetch";
@@ -95,6 +95,14 @@ export function ExpandedFeedMedia({
   const gifEmbedUrl = useMemo(() => extractGifEmbedUrl(itemUrl), [itemUrl]);
   const shouldLoadGallery =
     Boolean(redditGalleryUrl) && hasRequestedGalleryLoad;
+  // Whether we should fetch only the first image (used as the preview shown
+  // beneath the NSFW reveal overlay before the full gallery is requested).
+  const shouldPreloadGalleryPreview =
+    Boolean(redditGalleryUrl) && !hasRequestedGalleryLoad;
+  const [galleryPreviewImageUrl, setGalleryPreviewImageUrl] = useState<
+    string | null
+  >(null);
+  const [isLoadingGalleryPreview, setIsLoadingGalleryPreview] = useState(false);
 
   useEffect(() => {
     setHasRequestedGalleryLoad(!deferGalleryLoad);
@@ -121,7 +129,7 @@ export function ExpandedFeedMedia({
     setIsLoadingGallery(true);
     setActiveGalleryIndex(0);
 
-    fetchRedditGalleryImageUrls(redditGalleryUrl, useProxy)
+    fetchRedditGalleryImageUrlsCached(redditGalleryUrl, useProxy)
       .then((urls) => {
         if (!active) {
           return;
@@ -147,13 +155,55 @@ export function ExpandedFeedMedia({
     };
   }, [redditGalleryUrl, shouldLoadGallery, useProxy]);
 
+  // Lazily fetch just the first gallery image so we can show it as a preview
+  // (e.g. behind a NSFW reveal overlay) before the user opts into the full
+  // gallery. Reuses the cached fetcher so this work is shared with the full
+  // gallery load that happens on reveal.
   useEffect(() => {
-    if (!galleryImageUrls?.length) {
+    let active = true;
+
+    if (!redditGalleryUrl || !shouldPreloadGalleryPreview) {
+      setGalleryPreviewImageUrl(null);
+      setIsLoadingGalleryPreview(false);
+      return () => {
+        active = false;
+      };
+    }
+
+    setIsLoadingGalleryPreview(true);
+
+    fetchRedditGalleryImageUrlsCached(redditGalleryUrl, useProxy)
+      .then((urls) => {
+        if (!active) {
+          return;
+        }
+        const firstProxied = urls
+          .map((url) => proxiedImageUrl(url, useProxy))
+          .find((url): url is string => Boolean(url));
+        setGalleryPreviewImageUrl(firstProxied ?? null);
+        setIsLoadingGalleryPreview(false);
+      })
+      .catch(() => {
+        if (!active) {
+          return;
+        }
+        setGalleryPreviewImageUrl(null);
+        setIsLoadingGalleryPreview(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [redditGalleryUrl, shouldPreloadGalleryPreview, useProxy]);
+
+  useEffect(() => {
+    const sizingUrl = galleryImageUrls?.[0] ?? galleryPreviewImageUrl;
+    if (!sizingUrl) {
       return;
     }
 
     let active = true;
-    const url = galleryImageUrls[0];
+    const url = sizingUrl;
 
     const apply = (width: number, height: number) => {
       if (!active) return;
@@ -195,7 +245,7 @@ export function ExpandedFeedMedia({
     return () => {
       active = false;
     };
-  }, [galleryImageUrls, maxGalleryWidth]);
+  }, [galleryImageUrls, galleryPreviewImageUrl, maxGalleryWidth]);
 
   const handleGalleryMomentumEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -345,6 +395,47 @@ export function ExpandedFeedMedia({
   }
 
   if (redditGalleryUrl && !shouldLoadGallery) {
+    // Show a preview of the first gallery image once it's loaded; this lets
+    // callers (e.g. the NSFW reveal overlay in card layout) place an overlay
+    // on top of a real blurred image rather than a generic placeholder.
+    if (galleryPreviewImageUrl && galleryContainerSize) {
+      const { width: previewW, height: previewH } = galleryContainerSize;
+      return (
+        <TouchableOpacity
+          style={[
+            styles.galleryContainer,
+            { width: previewW, height: previewH, alignSelf: imageAlignment },
+          ]}
+          onPress={() => setHasRequestedGalleryLoad(true)}
+          activeOpacity={0.8}
+          accessibilityLabel="Load Images"
+          testID={testID}
+        >
+          <Image
+            source={{ uri: galleryPreviewImageUrl }}
+            style={styles.galleryImage}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            blurRadius={blur ? 24 : 0}
+            transition={120}
+            testID={testID ? `${testID}-preview` : undefined}
+          />
+        </TouchableOpacity>
+      );
+    }
+
+    if (isLoadingGalleryPreview) {
+      return (
+        <View
+          style={styles.galleryLoadingState}
+          testID={testID}
+          accessibilityLabel="Loading Reddit gallery"
+        >
+          <ActivityIndicator />
+        </View>
+      );
+    }
+
     return (
       <TouchableOpacity
         style={[
@@ -357,6 +448,7 @@ export function ExpandedFeedMedia({
         onPress={() => setHasRequestedGalleryLoad(true)}
         activeOpacity={0.8}
         accessibilityLabel="Load Images"
+        testID={testID}
       >
         <Feather name="image" size={18} color={colors.inkSoft} />
         <Text style={[styles.galleryPlaceholderTitle, { color: colors.ink }]}>

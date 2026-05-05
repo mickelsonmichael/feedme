@@ -271,6 +271,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
           feedTitle: item.feed_title,
           read: item.read,
           useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
+          nsfw: feedDetailsById.get(item.feed_id)?.nsfw === 1,
         },
       });
     },

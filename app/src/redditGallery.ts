@@ -134,6 +134,36 @@ export function extractRedditGalleryUrl(
     : null;
 }
 
+// Process-level cache to avoid duplicate Reddit API calls when the same
+// gallery is requested by multiple components (e.g. compact thumbnail +
+// expanded carousel). Cached promises are reused once resolved.
+const galleryUrlsCache = new Map<string, Promise<string[]>>();
+
+export function clearRedditGalleryCache(): void {
+  galleryUrlsCache.clear();
+}
+
+export function fetchRedditGalleryImageUrlsCached(
+  galleryUrl: string,
+  forceProxy?: boolean
+): Promise<string[]> {
+  const cacheKey = `${galleryUrl}|${forceProxy ? "1" : "0"}`;
+  const cached = galleryUrlsCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
+
+  const promise = fetchRedditGalleryImageUrls(galleryUrl, forceProxy).catch(
+    (error) => {
+      // Do not cache failures so a future attempt can retry.
+      galleryUrlsCache.delete(cacheKey);
+      throw error;
+    }
+  );
+  galleryUrlsCache.set(cacheKey, promise);
+  return promise;
+}
+
 export async function fetchRedditGalleryImageUrls(
   galleryUrl: string,
   forceProxy?: boolean

@@ -288,6 +288,7 @@ describe("FeedItemsScreen – View Raw", () => {
         feedTitle: "Test Feed",
         read: 0,
         useProxy: false,
+        nsfw: false,
       },
     });
 

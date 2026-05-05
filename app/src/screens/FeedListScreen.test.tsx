@@ -372,6 +372,7 @@ describe("FeedListScreen", () => {
         feedTitle: "Alpha",
         read: 0,
         useProxy: false,
+        nsfw: false,
       },
     });
 

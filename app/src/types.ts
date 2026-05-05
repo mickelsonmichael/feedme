@@ -81,6 +81,7 @@ export type RootStackParamList = {
       feedTitle: string;
       read: number;
       useProxy?: boolean;
+      nsfw?: boolean;
     };
   };
   FeedDetail: { feedId: number };
@@ -118,6 +119,7 @@ export type TabParamList = {
       feedTitle: string;
       read: number;
       useProxy?: boolean;
+      nsfw?: boolean;
     };
   };
   FeedDetail: { feedId: number };

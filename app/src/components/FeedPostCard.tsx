@@ -1,11 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import { parseContentAndLinks } from "../utils/contentActions";
 import { proxiedImageUrl } from "../proxyFetch";
-import { extractRedditGalleryUrl } from "../redditGallery";
+import {
+  extractRedditGalleryUrl,
+  fetchRedditGalleryImageUrlsCached,
+} from "../redditGallery";
 import { extractGifEmbedUrl } from "../gifUtils";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { MetaText } from "./ui";
@@ -96,15 +99,31 @@ function FeedPostCardComponent({
     [contentLinks]
   );
   const isCardMediaBlurred = layout === "card" && nsfw && !cardMediaRevealed;
-  const isRedditGallery = useMemo(
-    () => Boolean(extractRedditGalleryUrl(item.url, item.content)),
+  const redditGalleryUrl = useMemo(
+    () => extractRedditGalleryUrl(item.url, item.content),
     [item.content, item.url]
   );
+  const isRedditGallery = Boolean(redditGalleryUrl);
   const isGif = useMemo(
     () => Boolean(extractGifEmbedUrl(item.url)),
     [item.url]
   );
-  const showCardRevealOverlay = isCardMediaBlurred && !isRedditGallery;
+  const showCardRevealOverlay = isCardMediaBlurred;
+  // For card NSFW galleries we want to show the first image (blurred) under
+  // the reveal overlay rather than auto-loading the entire carousel. Once the
+  // user taps reveal, we also auto-load the rest of the gallery.
+  const cardGalleryDeferred =
+    layout === "card" &&
+    isRedditGallery &&
+    nsfw &&
+    !cardMediaRevealed;
+  // In compact rows we only ever render the small thumbnail; for Reddit
+  // galleries the parsed feed item rarely includes an `image_url`, so we
+  // resolve the first gallery image lazily and use it as the thumbnail.
+  const galleryThumbnailUrl = useRedditGalleryThumbnail(
+    layout === "compact" && !item.image_url ? redditGalleryUrl : null,
+    useProxy
+  );
 
   if (layout === "card") {
     return (
@@ -129,7 +148,7 @@ function FeedPostCardComponent({
               testID={cardMediaTestID}
               blur={showCardRevealOverlay}
               nsfw={nsfw}
-              deferGalleryLoad={isRedditGallery}
+              deferGalleryLoad={cardGalleryDeferred}
               deferGifLoad={isGif && (!nsfw || !cardMediaRevealed)}
               useProxy={useProxy}
             />
@@ -242,9 +261,14 @@ function FeedPostCardComponent({
       ]}
     >
       <View style={styles.cardRow}>
-        {item.image_url ? (
+        {item.image_url || galleryThumbnailUrl ? (
           <Image
-            source={{ uri: proxiedImageUrl(item.image_url, useProxy) }}
+            source={{
+              uri:
+                item.image_url
+                  ? proxiedImageUrl(item.image_url, useProxy)
+                  : (galleryThumbnailUrl as string),
+            }}
             blurRadius={nsfw ? 24 : 0}
             style={styles.cardImage}
             contentFit="cover"
@@ -532,6 +556,40 @@ function ReadLaterButton({
       />
     </TouchableOpacity>
   );
+}
+
+function useRedditGalleryThumbnail(
+  galleryUrl: string | null,
+  useProxy?: boolean
+): string | null {
+  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!galleryUrl) {
+      setThumbnailUrl(null);
+      return;
+    }
+
+    let active = true;
+    fetchRedditGalleryImageUrlsCached(galleryUrl, useProxy)
+      .then((urls) => {
+        if (!active) return;
+        const first = urls
+          .map((url) => proxiedImageUrl(url, useProxy))
+          .find((url): url is string => Boolean(url));
+        setThumbnailUrl(first ?? null);
+      })
+      .catch(() => {
+        if (!active) return;
+        setThumbnailUrl(null);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [galleryUrl, useProxy]);
+
+  return thumbnailUrl;
 }
 
 function formatDate(ts: number | null): string {

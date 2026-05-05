@@ -12,6 +12,8 @@ jest.mock("../redditGallery", () => ({
     mockExtractRedditGalleryUrl(...args),
   fetchRedditGalleryImageUrls: (...args: unknown[]) =>
     mockFetchRedditGalleryImageUrls(...args),
+  fetchRedditGalleryImageUrlsCached: (...args: unknown[]) =>
+    mockFetchRedditGalleryImageUrls(...args),
 }));
 
 jest.mock("../gifUtils", () => ({
@@ -294,8 +296,23 @@ describe("ExpandedFeedMedia", () => {
       );
     });
 
-    // Assert pre-load state
-    expect(mockFetchRedditGalleryImageUrls).not.toHaveBeenCalled();
+    // Assert pre-load state — fetch is invoked (via cached helper) so the
+    // preview image can be rendered behind the reveal overlay, but the full
+    // gallery carousel is not yet shown.
+    expect(mockFetchRedditGalleryImageUrls).toHaveBeenCalledWith(
+      "https://www.reddit.com/gallery/1sw5l42",
+      false
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const previewImage = tree!.root.findByProps({
+      testID: "expanded-media-preview",
+    });
+    expect(previewImage.props.source.uri).toBe(
+      "https://preview.redd.it/full-1.jpg"
+    );
     const loadButton = tree!.root.findByProps({
       accessibilityLabel: "Load Images",
     });
@@ -308,10 +325,6 @@ describe("ExpandedFeedMedia", () => {
     });
 
     // Assert post-load state
-    expect(mockFetchRedditGalleryImageUrls).toHaveBeenCalledWith(
-      "https://www.reddit.com/gallery/1sw5l42",
-      false
-    );
     expect(
       tree!.root.findByProps({ testID: "expanded-media-image-0" }).props.source
         .uri
