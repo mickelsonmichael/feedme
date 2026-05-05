@@ -51,7 +51,9 @@ describe("openUrlWithPreference on native (embedded mode)", () => {
     openUrlWithPreference({ url, navigation: mockNavigation });
 
     // Assert
-    expect(mockOpenBrowserAsync).toHaveBeenCalledWith(url);
+    expect(mockOpenBrowserAsync).toHaveBeenCalledWith(url, {
+      createTask: false,
+    });
     expect(mockNavigation.navigate).not.toHaveBeenCalled();
     expect(Linking.openURL).not.toHaveBeenCalled();
   });

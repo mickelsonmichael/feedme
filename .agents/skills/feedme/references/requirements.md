@@ -155,6 +155,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-BROWSER-002 | On web, the screen shall show a fallback UI with the URL since embedding a webview is not supported. |
 | REQ-BROWSER-003 | The toolbar shall provide a Close button to return to the previous screen. |
 | REQ-BROWSER-004 | The toolbar shall provide an "Open in External Browser" button that opens the URL in the system browser. |
+| REQ-BROWSER-005 | On Android, the embedded browser (Chrome Custom Tab) shall not appear as a separate app entry in the task switcher or app drawer. |
 
 ---
 
