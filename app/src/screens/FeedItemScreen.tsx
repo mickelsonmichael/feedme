@@ -356,6 +356,7 @@ export default function FeedItemScreen({ route, navigation }: Props) {
               itemUrl={item.url}
               content={item.content}
               useProxy={item.useProxy ?? false}
+              deferGalleryLoad={false}
             />
           ) : null}
 

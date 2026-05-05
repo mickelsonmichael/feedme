@@ -61,6 +61,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDITEM-003 | The user shall be able to save/unsave the item from this screen. |
 | REQ-FEEDITEM-004 | The user shall be able to open the item's link in the browser (using their preferred link-open mode). |
 | REQ-FEEDITEM-005 | Reddit posts shall show a dedicated "Comments" link to the Reddit thread. |
+| REQ-FEEDITEM-006 | Reddit gallery posts shall automatically load and display the full gallery without requiring the user to tap a "Load Images" prompt. |
 
 ---
 

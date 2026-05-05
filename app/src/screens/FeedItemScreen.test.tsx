@@ -55,8 +55,12 @@ jest.mock("@expo/vector-icons", () => {
 jest.mock("../components/ExpandedFeedMedia", () => {
   const React = require("react");
   const { View } = require("react-native");
+  const mockFn = jest.fn((props: Record<string, unknown>) =>
+    React.createElement(View, { testID: "expanded-feed-media", ...props })
+  );
   return {
-    ExpandedFeedMedia: () => React.createElement(View, null),
+    ExpandedFeedMedia: mockFn,
+    __getMock: () => mockFn,
   };
 });
 
@@ -119,6 +123,9 @@ describe("FeedItemScreen", () => {
     (addToReadLater as jest.Mock).mockResolvedValue(undefined);
     (removeFromReadLater as jest.Mock).mockResolvedValue(undefined);
     (openUrlWithPreference as jest.Mock).mockClear();
+    (
+      require("../components/ExpandedFeedMedia").__getMock() as jest.Mock
+    ).mockClear();
   });
 
   afterEach(() => {
@@ -272,5 +279,23 @@ describe("FeedItemScreen", () => {
     await act(async () => {
       tree!.unmount();
     });
+  });
+
+  it("passes deferGalleryLoad={false} to ExpandedFeedMedia so gallery auto-loads on open", async () => {
+    // Arrange
+    const props = buildProps();
+    const mockMedia = require("../components/ExpandedFeedMedia").__getMock() as jest.Mock;
+
+    // Act
+    await act(async () => {
+      renderer.create(<FeedItemScreen {...props} />);
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(mockMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ deferGalleryLoad: false }),
+      undefined
+    );
   });
 });
