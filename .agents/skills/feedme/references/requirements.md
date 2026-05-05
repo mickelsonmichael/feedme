@@ -22,6 +22,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDLIST-008 | Pull-to-refresh shall trigger a background refresh of all feeds. |
 | REQ-FEEDLIST-009 | When viewing a tag-scoped feed list (`selectedTagId`), the list shall show only items from feeds that have that tag, and refresh shall be limited to those feeds. |
 | REQ-FEEDLIST-010 | The default "all feeds" view shall exclude items from feeds flagged `show_only_in_tag`; such items appear only in tag-scoped views. |
+| REQ-FEEDLIST-011 | In card layout, items from NSFW feeds shall show a "Reveal images" overlay instead of unblurred media (images or GIFs); tapping the overlay reveals the media. For GIF posts, tapping reveal also auto-loads the GIF. Reddit galleries use a separate deferred-load mechanism and are excluded from this overlay. |
 
 ---
 

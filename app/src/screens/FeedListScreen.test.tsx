@@ -21,8 +21,12 @@ import { refreshFeeds } from "../feedRefresher";
 import { openUrlWithPreference } from "../linkOpening";
 
 const mockExpandedFeedMedia = jest.fn(
-  (_props: { imageAlignment?: string; testID?: string; blur?: boolean }) =>
-    undefined
+  (_props: {
+    imageAlignment?: string;
+    testID?: string;
+    blur?: boolean;
+    deferGifLoad?: boolean;
+  }) => undefined
 );
 
 jest.mock("../database", () => ({
@@ -924,6 +928,90 @@ describe("FeedListScreen", () => {
           thumb.props.blurRadius === 24
         );
       })
+    ).toBe(true);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows reveal overlay for NSFW GIFs in card layout and auto-loads GIF after reveal", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "card" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+        nsfw: 1,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 701,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "NSFW GIF post",
+        url: "https://www.redgifs.com/watch/TightGif",
+        content: null,
+        image_url: "https://alpha.example/thumb.jpg",
+        published_at: Date.now(),
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-nsfw-gif-card",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert: reveal overlay is shown and GIF is deferred
+    expect(
+      mockExpandedFeedMedia.mock.calls.some(
+        ([props]) =>
+          props.testID === "card-media-701" &&
+          props.blur === true &&
+          props.deferGifLoad === true
+      )
+    ).toBe(true);
+
+    const revealButton = tree!.root.findByProps({
+      accessibilityLabel: "Reveal NSFW media",
+    });
+    expect(revealButton).toBeTruthy();
+
+    // Act — tap reveal
+    await act(async () => {
+      await revealButton.props.onPress();
+    });
+
+    // Assert: overlay is gone and GIF is no longer deferred
+    expect(
+      mockExpandedFeedMedia.mock.calls.some(
+        ([props]) =>
+          props.testID === "card-media-701" &&
+          props.blur === false &&
+          props.deferGifLoad === false
+      )
     ).toBe(true);
 
     await act(async () => {
