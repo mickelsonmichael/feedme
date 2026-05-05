@@ -104,8 +104,7 @@ function FeedPostCardComponent({
     () => Boolean(extractGifEmbedUrl(item.url)),
     [item.url]
   );
-  const showCardRevealOverlay =
-    isCardMediaBlurred && !isRedditGallery && !isGif;
+  const showCardRevealOverlay = isCardMediaBlurred && !isRedditGallery;
 
   if (layout === "card") {
     return (
@@ -131,7 +130,7 @@ function FeedPostCardComponent({
               blur={showCardRevealOverlay}
               nsfw={nsfw}
               deferGalleryLoad={isRedditGallery}
-              deferGifLoad={isGif}
+              deferGifLoad={isGif && (!nsfw || !cardMediaRevealed)}
               useProxy={useProxy}
             />
             {showCardRevealOverlay ? (
