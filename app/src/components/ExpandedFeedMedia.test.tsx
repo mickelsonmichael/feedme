@@ -1,6 +1,7 @@
 import React from "react";
 import { Image as RNImage, Platform, StyleSheet, View } from "react-native";
 import renderer, { act } from "react-test-renderer";
+import { NSFW_BLUR_RADIUS } from "../theme";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 
 const mockExtractRedditGalleryUrl = jest.fn();
@@ -421,5 +422,82 @@ describe("ExpandedFeedMedia", () => {
       children: "NSFW GIF. Tap to load.",
     });
     expect(subtleTexts.length).toBeGreaterThan(0);
+  });
+
+  it("renders a blurred first-frame preview for deferred NSFW GIFs when imageUrl is provided", async () => {
+    // Arrange
+    mockExtractRedditGalleryUrl.mockReturnValue(null);
+    mockExtractGifEmbedUrl.mockReturnValue(
+      "https://www.redgifs.com/ifr/NsfwGif"
+    );
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://www.redgifs.com/watch/NsfwGif"
+          imageUrl="https://preview.redd.it/poster.jpg"
+          testID="expanded-media"
+          deferGifLoad
+          nsfw
+          blur
+        />
+      );
+    });
+
+    // Assert — preview image is rendered, frozen on the first frame and blurred.
+    const preview = tree!.root.findByProps({
+      testID: "expanded-media-preview",
+    });
+    expect(preview.props.source.uri).toBe(
+      "https://preview.redd.it/poster.jpg"
+    );
+    expect(preview.props.blurRadius).toBe(NSFW_BLUR_RADIUS);
+    expect(preview.props.autoplay).toBe(false);
+
+    // The tap target is still present so the user can opt into loading the GIF.
+    const loadButton = tree!.root.findByProps({
+      accessibilityLabel: "Load GIF",
+    });
+    await act(async () => {
+      loadButton.props.onPress();
+    });
+
+    // Assert — embed is now shown.
+    const container = tree!.root.findByProps({
+      accessibilityLabel: "Embedded GIF",
+    });
+    expect(container).toBeTruthy();
+  });
+
+  it("renders a non-blurred first-frame preview for deferred non-NSFW GIFs", async () => {
+    // Arrange
+    mockExtractRedditGalleryUrl.mockReturnValue(null);
+    mockExtractGifEmbedUrl.mockReturnValue(
+      "https://giphy.com/embed/cat-jumping"
+    );
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://giphy.com/gifs/cat-jumping"
+          imageUrl="https://media.giphy.com/cat.gif"
+          testID="expanded-media"
+          deferGifLoad
+        />
+      );
+    });
+
+    // Assert — preview is rendered with first frame frozen but not blurred.
+    const preview = tree!.root.findByProps({
+      testID: "expanded-media-preview",
+    });
+    expect(preview.props.blurRadius).toBe(0);
+    expect(preview.props.autoplay).toBe(false);
   });
 });

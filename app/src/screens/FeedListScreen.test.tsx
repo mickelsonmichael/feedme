@@ -4,6 +4,7 @@ import { Image } from "expo-image";
 import { FlashList } from "@shopify/flash-list";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { NSFW_BLUR_RADIUS } from "../theme";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedListScreen from "../screens/FeedListScreen";
@@ -926,7 +927,7 @@ describe("FeedListScreen", () => {
             : undefined;
         return (
           sourceUri === "https://alpha.example/sensitive.jpg" &&
-          thumb.props.blurRadius === 24
+          thumb.props.blurRadius === NSFW_BLUR_RADIUS
         );
       })
     ).toBe(true);

@@ -33,7 +33,7 @@ import {
   getYouTubeEmbedUrl,
 } from "../youtubeUtils";
 import { MAX_EXPANDED_IMAGE_EDGE } from "../expandedImageSize";
-import { fontSize, fonts, radii, spacing } from "../theme";
+import { fontSize, fonts, NSFW_BLUR_RADIUS, radii, spacing } from "../theme";
 import { ExpandedFeedImage } from "./ExpandedFeedImage";
 
 type Props = {
@@ -287,6 +287,51 @@ export function ExpandedFeedMedia({
   );
 
   if (gifEmbedUrl && !hasRequestedGifLoad) {
+    // When a poster/preview image is available for the GIF post, render it
+    // (frozen on the first frame via autoplay=false) behind the placeholder
+    // overlay so NSFW GIFs can be blurred and non-NSFW GIFs get a real
+    // preview before the user opts into loading the embed.
+    const proxiedPreviewUrl = imageUrl
+      ? proxiedImageUrl(imageUrl, useProxy)
+      : null;
+    if (proxiedPreviewUrl) {
+      return (
+        <TouchableOpacity
+          style={[
+            styles.gifPreviewContainer,
+            {
+              borderColor: colors.border,
+              backgroundColor: colors.paperWarm,
+            },
+          ]}
+          onPress={() => setHasRequestedGifLoad(true)}
+          activeOpacity={0.8}
+          accessibilityLabel="Load GIF"
+          testID={testID}
+        >
+          <View
+            style={[
+              styles.gifPreviewInner,
+              (blur || nsfw) && Platform.OS !== "web"
+                ? (styles.gifPreviewNsfwFilter as object)
+                : null,
+            ]}
+          >
+            <Image
+              source={{ uri: proxiedPreviewUrl }}
+              style={styles.gifPreviewImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              blurRadius={(blur || nsfw) ? NSFW_BLUR_RADIUS : 0}
+              autoplay={false}
+              transition={120}
+              testID={testID ? `${testID}-preview` : undefined}
+            />
+          </View>
+        </TouchableOpacity>
+      );
+    }
+
     return (
       <TouchableOpacity
         style={[
@@ -416,7 +461,7 @@ export function ExpandedFeedMedia({
             style={styles.galleryImage}
             contentFit="contain"
             cachePolicy="memory-disk"
-            blurRadius={blur ? 24 : 0}
+            blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
             transition={120}
             testID={testID ? `${testID}-preview` : undefined}
           />
@@ -514,7 +559,7 @@ export function ExpandedFeedMedia({
               style={styles.galleryImage}
               contentFit="contain"
               cachePolicy="memory-disk"
-              blurRadius={blur ? 24 : 0}
+              blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
               transition={120}
               testID={
                 testID ? `${testID}-image-${activeGalleryIndex}` : undefined
@@ -594,7 +639,7 @@ export function ExpandedFeedMedia({
                 style={styles.galleryImage}
                 contentFit="contain"
                 cachePolicy="memory-disk"
-                blurRadius={blur ? 24 : 0}
+                blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
                 transition={120}
                 testID={testID ? `${testID}-image-${index}` : undefined}
               />
@@ -764,6 +809,26 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: spacing.md,
     gap: spacing.xs,
+  },
+  gifPreviewContainer: {
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: MAX_EXPANDED_IMAGE_EDGE,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    minHeight: 200,
+    aspectRatio: 1,
+    overflow: "hidden",
+    position: "relative",
+  },
+  gifPreviewImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gifPreviewInner: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  gifPreviewNsfwFilter: {
+    filter: [{ blur: 30 }],
   },
   galleryPlaceholderTitle: {
     fontFamily: fonts.sans,

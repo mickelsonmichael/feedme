@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
@@ -12,7 +12,7 @@ import {
 import { extractGifEmbedUrl } from "../gifUtils";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { MetaText } from "./ui";
-import { fonts, fontSize, radii, spacing } from "../theme";
+import { fonts, fontSize, NSFW_BLUR_RADIUS, radii, spacing } from "../theme";
 
 const CARD_IMAGE_WIDTH = 100;
 
@@ -156,7 +156,7 @@ function FeedPostCardComponent({
               <TouchableOpacity
                 style={[
                   styles.mediaBlurOverlay,
-                  { backgroundColor: `${colors.paper}cc` },
+                  { backgroundColor: `${colors.paper}f2` },
                 ]}
                 onPress={() => onRevealCardMedia?.()}
                 activeOpacity={0.9}
@@ -262,20 +262,32 @@ function FeedPostCardComponent({
     >
       <View style={styles.cardRow}>
         {item.image_url || galleryThumbnailUrl ? (
-          <Image
-            source={{
-              uri:
-                item.image_url
-                  ? proxiedImageUrl(item.image_url, useProxy)
-                  : (galleryThumbnailUrl as string),
-            }}
-            blurRadius={nsfw ? 24 : 0}
-            style={styles.cardImage}
-            contentFit="cover"
-            cachePolicy="memory-disk"
-            recyclingKey={`thumb-${item.id}`}
-            transition={120}
-          />
+          <View style={styles.cardImage}>
+            <View
+              style={[
+                styles.cardImageFill,
+                nsfw && Platform.OS !== "web"
+                  ? styles.cardImageNsfwFilter
+                  : null,
+              ]}
+            >
+              <Image
+                source={{
+                  uri:
+                    item.image_url
+                      ? proxiedImageUrl(item.image_url, useProxy)
+                      : (galleryThumbnailUrl as string),
+                }}
+                blurRadius={nsfw ? NSFW_BLUR_RADIUS : 0}
+                autoplay={!nsfw}
+                style={styles.cardImageFill}
+                contentFit="cover"
+                cachePolicy="memory-disk"
+                recyclingKey={`thumb-${item.id}`}
+                transition={120}
+              />
+            </View>
+          </View>
         ) : null}
         <View style={styles.cardContent}>
           <FeedPostMeta
@@ -395,6 +407,7 @@ function FeedPostCardComponent({
               useProxy={useProxy}
               nsfw={nsfw}
               deferGalleryLoad={false}
+              deferGifLoad={nsfw && isGif}
             />
           ) : null}
           {item.content ? (
@@ -703,7 +716,14 @@ const styles = StyleSheet.create({
   cardImage: {
     width: CARD_IMAGE_WIDTH,
     alignSelf: "stretch",
+    overflow: "hidden",
   },
+  cardImageFill: {
+    flex: 1,
+  },
+  cardImageNsfwFilter: {
+    filter: [{ blur: 20 }],
+  } as object,
   cardContent: {
     flex: 1,
     padding: spacing.md,

@@ -12,7 +12,7 @@ import {
   MAX_EXPANDED_IMAGE_EDGE,
 } from "../expandedImageSize";
 import { proxiedImageUrl } from "../proxyFetch";
-import { radii } from "../theme";
+import { NSFW_BLUR_RADIUS, radii } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
 const PLACEHOLDER_HEIGHT = 200;
@@ -144,7 +144,7 @@ export function ExpandedFeedImage({
       ) : (
         <Image
           source={{ uri: resolvedImageUrl }}
-          blurRadius={blur ? 24 : 0}
+          blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
           style={[
             styles.image,
             alignment === "center"
@@ -160,6 +160,7 @@ export function ExpandedFeedImage({
           ]}
           contentFit="contain"
           cachePolicy="memory-disk"
+          autoplay={blur ? false : undefined}
           transition={120}
           testID={testID}
         />

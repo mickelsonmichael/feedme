@@ -2,6 +2,8 @@
 // Colors, spacing, and typography translated from wireframes.html /
 // sketch-primitives.jsx into a single source of truth for the app.
 
+import { Platform } from "react-native";
+
 export const colors = {
   // Paper / ink palette (light)
   paper: "#faf8f3",
@@ -82,6 +84,19 @@ export const fontSize = {
   h1: 22,
   wordmark: 28,
 } as const;
+
+/**
+ * Blur radius for NSFW media obscuring.
+ *
+ * `expo-image` maps `blurRadius` to CSS `filter: blur()` on web, where 24 px
+ * already produces a strong Gaussian blur. On Android the same value goes
+ * through a native algorithm (RenderScript / Skia) that is far less intense at
+ * the same numeric value, so we use a much larger radius there.
+ */
+export const NSFW_BLUR_RADIUS: number = Platform.select({
+  web: 24,
+  default: 120,
+});
 
 export type Theme = {
   colors: typeof colors;
