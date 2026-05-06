@@ -403,14 +403,37 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
 
   const handleOpenOriginalLink = useCallback(
-    (url: string | null) => {
-      if (!url) {
+    async (item: FeedItemWithFeed) => {
+      if (!item.url) {
         return;
       }
 
-      openUrlWithPreference({ url, navigation });
+      openUrlWithPreference({ url: item.url, navigation });
+
+      if (!item.read) {
+        if (filter === "unread") {
+          setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+        }
+
+        try {
+          await markItemRead(item.id);
+          setItems((prev) =>
+            prev.map((current) =>
+              current.id === item.id ? { ...current, read: 1 } : current
+            )
+          );
+          setReadLaterIds((prev) => {
+            if (!prev.has(item.id)) return prev;
+            const next = new Set(prev);
+            next.delete(item.id);
+            return next;
+          });
+        } catch {
+          // Link was opened; silently ignore read-status update failure.
+        }
+      }
     },
-    [navigation]
+    [filter, navigation]
   );
 
   const formatDate = (ts: number | null): string => {
@@ -841,7 +864,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   onToggleRead={() => toggleRead(item)}
                   onToggleSave={() => toggleSave(item)}
                   onToggleReadLater={() => toggleReadLater(item)}
-                  onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
+                  onOpenOriginalLink={() => handleOpenOriginalLink(item)}
                   onOpenContentLink={handleOpenContentLink}
                 />
               );
@@ -864,7 +887,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 onToggleRead={() => toggleRead(item)}
                 onToggleSave={() => toggleSave(item)}
                 onToggleReadLater={() => toggleReadLater(item)}
-                onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
+                onOpenOriginalLink={() => handleOpenOriginalLink(item)}
                 onOpenContentLink={handleOpenContentLink}
               />
             );

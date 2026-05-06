@@ -121,12 +121,23 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   );
 
   const handleOpenOriginalLink = useCallback(
-    (url: string | null) => {
-      if (!url) {
+    async (item: FeedItem) => {
+      if (!item.url) {
         return;
       }
 
-      openUrlWithPreference({ url, navigation });
+      openUrlWithPreference({ url: item.url, navigation });
+
+      if (!item.read) {
+        try {
+          await markItemRead(item.id);
+          setItems((prev) =>
+            prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
+          );
+        } catch {
+          // Link was opened; silently ignore read-status update failure.
+        }
+      }
     },
     [navigation]
   );
@@ -281,7 +292,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
               onToggleExpand={() => handleToggleExpand(item)}
               onToggleRead={() => toggleRead(item)}
               onToggleSave={() => toggleSave(item)}
-              onOpenOriginalLink={() => handleOpenOriginalLink(item.url)}
+              onOpenOriginalLink={() => handleOpenOriginalLink(item)}
               onOpenContentLink={handleOpenContentLink}
               onOpenRawXml={() => setRawXmlItem(item)}
             />

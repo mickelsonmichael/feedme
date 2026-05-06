@@ -23,6 +23,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDLIST-009 | When viewing a tag-scoped feed list (`selectedTagId`), the list shall show only items from feeds that have that tag, and refresh shall be limited to those feeds. |
 | REQ-FEEDLIST-010 | The default "all feeds" view shall exclude items from feeds flagged `show_only_in_tag`; such items appear only in tag-scoped views. |
 | REQ-FEEDLIST-011 | In card layout, items from NSFW feeds shall show a "Reveal images" overlay instead of unblurred media (images or GIFs); tapping the overlay reveals the media. For GIF posts, tapping reveal also auto-loads the GIF. Reddit galleries use a separate deferred-load mechanism and are excluded from this overlay. |
+| REQ-FEEDLIST-012 | Opening an item's original link via the external-link button shall mark the item as read if it is not already read. |
 
 ---
 
@@ -49,6 +50,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDITEMS-003 | The user shall be able to expand items inline to view media and content. |
 | REQ-FEEDITEMS-004 | The user shall be able to save/unsave and mark items as read/unread. |
 | REQ-FEEDITEMS-005 | The screen title shall display the feed's title. |
+| REQ-FEEDITEMS-006 | Opening an item's original link via the external-link button shall mark the item as read if it is not already read. |
 
 ---
 

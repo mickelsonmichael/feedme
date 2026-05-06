@@ -378,6 +378,69 @@ describe("FeedItemsScreen – View Raw", () => {
     });
   });
 
+  it("marks an unread post as read when the external link is opened", async () => {
+    // Arrange
+    jest.useFakeTimers();
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedItemsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const openOriginalLinkButton = tree!.root.findByProps({
+      accessibilityLabel: "Open original link",
+    });
+
+    // Act
+    await act(async () => {
+      await openOriginalLinkButton.props.onPress();
+    });
+
+    // Assert
+    expect(markItemRead).toHaveBeenCalledWith(mockItem.id);
+
+    await act(async () => {
+      tree!.unmount();
+      jest.runOnlyPendingTimers();
+    });
+  });
+
+  it("does not call markItemRead when the external link is opened for an already-read post", async () => {
+    // Arrange
+    jest.useFakeTimers();
+    (getItemsForFeed as jest.Mock).mockResolvedValue([
+      { ...mockItem, read: 1 },
+    ]);
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedItemsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const openOriginalLinkButton = tree!.root.findByProps({
+      accessibilityLabel: "Open original link",
+    });
+
+    // Act
+    await act(async () => {
+      await openOriginalLinkButton.props.onPress();
+    });
+
+    // Assert
+    expect(markItemRead).not.toHaveBeenCalled();
+
+    await act(async () => {
+      tree!.unmount();
+      jest.runOnlyPendingTimers();
+    });
+  });
+
   it("marks a read post as unread from the row action", async () => {
     // Arrange
     jest.useFakeTimers();
