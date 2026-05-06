@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
@@ -78,6 +78,8 @@ function FeedPostCardComponent({
   onOpenRawXml,
 }: Props) {
   const { colors } = useTheme();
+  const { width } = useWindowDimensions();
+  const isLargeScreen = Platform.OS === "web" && width >= 768;
   const { text: contentText, links: contentLinks } = useMemo(
     () => parseContentAndLinks(item.content),
     [item.content]
@@ -328,7 +330,7 @@ function FeedPostCardComponent({
             borderTopColor: colors.inkFaint,
             paddingHorizontal: spacing.md,
             paddingBottom: spacing.sm,
-            justifyContent: "space-evenly",
+            justifyContent: isLargeScreen ? "flex-start" : "space-evenly",
           },
         ]}
       >
