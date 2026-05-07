@@ -22,6 +22,7 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import {
   extractRedditGalleryUrl,
+  fetchRedditGalleryImageUrls,
   fetchRedditGalleryImageUrlsCached,
 } from "../redditGallery";
 import { extractGifEmbedUrl } from "../gifUtils";
@@ -33,7 +34,7 @@ import {
   getYouTubeEmbedUrl,
 } from "../youtubeUtils";
 import { MAX_EXPANDED_IMAGE_EDGE } from "../expandedImageSize";
-import { fontSize, fonts, NSFW_BLUR_RADIUS, radii, spacing } from "../theme";
+import { fontSize, fonts, NSFW_BLUR_FILTER_STYLE, NSFW_BLUR_RADIUS, radii, spacing } from "../theme";
 import { ExpandedFeedImage } from "./ExpandedFeedImage";
 
 type Props = {
@@ -95,14 +96,6 @@ export function ExpandedFeedMedia({
   const gifEmbedUrl = useMemo(() => extractGifEmbedUrl(itemUrl), [itemUrl]);
   const shouldLoadGallery =
     Boolean(redditGalleryUrl) && hasRequestedGalleryLoad;
-  // Whether we should fetch only the first image (used as the preview shown
-  // beneath the NSFW reveal overlay before the full gallery is requested).
-  const shouldPreloadGalleryPreview =
-    Boolean(redditGalleryUrl) && !hasRequestedGalleryLoad;
-  const [galleryPreviewImageUrl, setGalleryPreviewImageUrl] = useState<
-    string | null
-  >(null);
-  const [isLoadingGalleryPreview, setIsLoadingGalleryPreview] = useState(false);
 
   useEffect(() => {
     setHasRequestedGalleryLoad(!deferGalleryLoad);
@@ -115,7 +108,7 @@ export function ExpandedFeedMedia({
   useEffect(() => {
     let active = true;
 
-    if (!redditGalleryUrl || !shouldLoadGallery) {
+    if (!redditGalleryUrl) {
       setGalleryImageUrls(null);
       setGalleryContainerSize(null);
       setIsLoadingGallery(false);
@@ -126,10 +119,16 @@ export function ExpandedFeedMedia({
 
     setGalleryImageUrls(null);
     setGalleryContainerSize(null);
-    setIsLoadingGallery(true);
+    // Only show the loading spinner when the user has actually requested
+    // the carousel; otherwise the placeholder owns the visible UI and the
+    // fetch is just resolving the preview image.
+    setIsLoadingGallery(shouldLoadGallery);
     setActiveGalleryIndex(0);
 
-    fetchRedditGalleryImageUrlsCached(redditGalleryUrl, useProxy)
+    const fetcher = shouldLoadGallery
+      ? fetchRedditGalleryImageUrls
+      : fetchRedditGalleryImageUrlsCached;
+    fetcher(redditGalleryUrl, useProxy)
       .then((urls) => {
         if (!active) {
           return;
@@ -155,55 +154,13 @@ export function ExpandedFeedMedia({
     };
   }, [redditGalleryUrl, shouldLoadGallery, useProxy]);
 
-  // Lazily fetch just the first gallery image so we can show it as a preview
-  // (e.g. behind a NSFW reveal overlay) before the user opts into the full
-  // gallery. Reuses the cached fetcher so this work is shared with the full
-  // gallery load that happens on reveal.
   useEffect(() => {
-    let active = true;
-
-    if (!redditGalleryUrl || !shouldPreloadGalleryPreview) {
-      setGalleryPreviewImageUrl(null);
-      setIsLoadingGalleryPreview(false);
-      return () => {
-        active = false;
-      };
-    }
-
-    setIsLoadingGalleryPreview(true);
-
-    fetchRedditGalleryImageUrlsCached(redditGalleryUrl, useProxy)
-      .then((urls) => {
-        if (!active) {
-          return;
-        }
-        const firstProxied = urls
-          .map((url) => proxiedImageUrl(url, useProxy))
-          .find((url): url is string => Boolean(url));
-        setGalleryPreviewImageUrl(firstProxied ?? null);
-        setIsLoadingGalleryPreview(false);
-      })
-      .catch(() => {
-        if (!active) {
-          return;
-        }
-        setGalleryPreviewImageUrl(null);
-        setIsLoadingGalleryPreview(false);
-      });
-
-    return () => {
-      active = false;
-    };
-  }, [redditGalleryUrl, shouldPreloadGalleryPreview, useProxy]);
-
-  useEffect(() => {
-    const sizingUrl = galleryImageUrls?.[0] ?? galleryPreviewImageUrl;
-    if (!sizingUrl) {
+    if (!galleryImageUrls?.length) {
       return;
     }
 
     let active = true;
-    const url = sizingUrl;
+    const url = galleryImageUrls[0];
 
     const apply = (width: number, height: number) => {
       if (!active) return;
@@ -245,7 +202,7 @@ export function ExpandedFeedMedia({
     return () => {
       active = false;
     };
-  }, [galleryImageUrls, galleryPreviewImageUrl, maxGalleryWidth]);
+  }, [galleryImageUrls, maxGalleryWidth]);
 
   const handleGalleryMomentumEnd = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -287,75 +244,69 @@ export function ExpandedFeedMedia({
   );
 
   if (gifEmbedUrl && !hasRequestedGifLoad) {
-    // When a poster/preview image is available for the GIF post, render it
-    // (frozen on the first frame via autoplay=false) behind the placeholder
-    // overlay so NSFW GIFs can be blurred and non-NSFW GIFs get a real
-    // preview before the user opts into loading the embed.
-    const proxiedPreviewUrl = imageUrl
-      ? proxiedImageUrl(imageUrl, useProxy)
-      : null;
-    if (proxiedPreviewUrl) {
-      return (
-        <TouchableOpacity
-          style={[
-            styles.gifPreviewContainer,
-            {
-              borderColor: colors.border,
-              backgroundColor: colors.paperWarm,
-            },
-          ]}
-          onPress={() => setHasRequestedGifLoad(true)}
-          activeOpacity={0.8}
-          accessibilityLabel="Load GIF"
-          testID={testID}
-        >
+    const previewUri = imageUrl ? proxiedImageUrl(imageUrl, useProxy) : null;
+    // When the parent is rendering its own reveal overlay (blur=true), skip
+    // the placeholder pill so we don't stack two redundant CTAs.
+    const showPlaceholderPill = !blur;
+    return (
+      <View style={styles.previewWrap}>
+        {previewUri ? (
           <View
             style={[
-              styles.gifPreviewInner,
-              (blur || nsfw) && Platform.OS !== "web"
-                ? (styles.gifPreviewNsfwFilter as object)
-                : null,
+              styles.previewBlurClip,
+              nsfw && blur ? NSFW_BLUR_FILTER_STYLE : null,
             ]}
           >
             <Image
-              source={{ uri: proxiedPreviewUrl }}
-              style={styles.gifPreviewImage}
+              source={{ uri: previewUri }}
+              style={styles.previewImage}
               contentFit="cover"
               cachePolicy="memory-disk"
-              blurRadius={(blur || nsfw) ? NSFW_BLUR_RADIUS : 0}
+              blurRadius={nsfw && blur ? NSFW_BLUR_RADIUS : 0}
               autoplay={false}
               transition={120}
               testID={testID ? `${testID}-preview` : undefined}
             />
           </View>
-        </TouchableOpacity>
-      );
-    }
-
-    return (
-      <TouchableOpacity
-        style={[
-          styles.galleryPlaceholder,
-          {
-            borderColor: colors.border,
-            backgroundColor: colors.paperWarm,
-          },
-        ]}
-        onPress={() => setHasRequestedGifLoad(true)}
-        activeOpacity={0.8}
-        accessibilityLabel="Load GIF"
-        testID={testID}
-      >
-        <Feather name="film" size={18} color={colors.inkSoft} />
-        <Text style={[styles.galleryPlaceholderTitle, { color: colors.ink }]}>
-          Load GIF
-        </Text>
-        <Text
-          style={[styles.galleryPlaceholderSubtle, { color: colors.inkSoft }]}
+        ) : null}
+        <TouchableOpacity
+          style={[
+            previewUri ? styles.placeholderOverlay : styles.galleryPlaceholder,
+            previewUri || !showPlaceholderPill
+              ? null
+              : {
+                  borderColor: colors.border,
+                  backgroundColor: colors.paperWarm,
+                },
+          ]}
+          onPress={() => setHasRequestedGifLoad(true)}
+          activeOpacity={0.85}
+          accessibilityLabel="Load GIF"
+          testID={testID}
         >
-          {nsfw ? "NSFW GIF. Tap to load." : "Tap to load GIF."}
-        </Text>
-      </TouchableOpacity>
+          {showPlaceholderPill ? (
+            <View
+              style={[
+                styles.placeholderPill,
+                { backgroundColor: `${colors.ink}d9` },
+              ]}
+            >
+              <Feather name="film" size={18} color={colors.paper} />
+              <Text style={[styles.placeholderPillTitle, { color: colors.paper }]}>
+                Load GIF
+              </Text>
+              <Text
+                style={[
+                  styles.placeholderPillSubtle,
+                  { color: colors.paper },
+                ]}
+              >
+                {nsfw ? "NSFW GIF. Tap to load." : "Tap to load GIF."}
+              </Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      </View>
     );
   }
 
@@ -440,71 +391,70 @@ export function ExpandedFeedMedia({
   }
 
   if (redditGalleryUrl && !shouldLoadGallery) {
-    // Show a preview of the first gallery image once it's loaded; this lets
-    // callers (e.g. the NSFW reveal overlay in card layout) place an overlay
-    // on top of a real blurred image rather than a generic placeholder.
-    if (galleryPreviewImageUrl && galleryContainerSize) {
-      const { width: previewW, height: previewH } = galleryContainerSize;
-      return (
+    const previewUri =
+      galleryImageUrls?.[0] ??
+      (imageUrl ? proxiedImageUrl(imageUrl, useProxy) : null);
+    // When the parent is rendering its own reveal overlay (blur=true), skip
+    // the placeholder pill so we don't stack two redundant CTAs.
+    const showPlaceholderPill = !blur;
+    return (
+      <View style={styles.previewWrap}>
+        {previewUri ? (
+          <View
+            style={[
+              styles.previewBlurClip,
+              nsfw && blur ? NSFW_BLUR_FILTER_STYLE : null,
+            ]}
+          >
+            <Image
+              source={{ uri: previewUri }}
+              style={styles.previewImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              blurRadius={nsfw && blur ? NSFW_BLUR_RADIUS : 0}
+              autoplay={false}
+              transition={120}
+              testID={testID ? `${testID}-preview` : undefined}
+            />
+          </View>
+        ) : null}
         <TouchableOpacity
           style={[
-            styles.galleryContainer,
-            { width: previewW, height: previewH, alignSelf: imageAlignment },
+            previewUri ? styles.placeholderOverlay : styles.galleryPlaceholder,
+            previewUri || !showPlaceholderPill
+              ? null
+              : {
+                  borderColor: colors.border,
+                  backgroundColor: colors.paperWarm,
+                },
           ]}
           onPress={() => setHasRequestedGalleryLoad(true)}
-          activeOpacity={0.8}
+          activeOpacity={0.85}
           accessibilityLabel="Load Images"
-          testID={testID}
         >
-          <Image
-            source={{ uri: galleryPreviewImageUrl }}
-            style={styles.galleryImage}
-            contentFit="contain"
-            cachePolicy="memory-disk"
-            blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
-            transition={120}
-            testID={testID ? `${testID}-preview` : undefined}
-          />
+          {showPlaceholderPill ? (
+            <View
+              style={[
+                styles.placeholderPill,
+                { backgroundColor: `${colors.ink}d9` },
+              ]}
+            >
+              <Feather name="image" size={18} color={colors.paper} />
+              <Text style={[styles.placeholderPillTitle, { color: colors.paper }]}>
+                Load Images
+              </Text>
+              <Text
+                style={[
+                  styles.placeholderPillSubtle,
+                  { color: colors.paper },
+                ]}
+              >
+                {nsfw ? "NSFW gallery. Tap to load." : "Tap to load gallery images."}
+              </Text>
+            </View>
+          ) : null}
         </TouchableOpacity>
-      );
-    }
-
-    if (isLoadingGalleryPreview) {
-      return (
-        <View
-          style={styles.galleryLoadingState}
-          testID={testID}
-          accessibilityLabel="Loading Reddit gallery"
-        >
-          <ActivityIndicator />
-        </View>
-      );
-    }
-
-    return (
-      <TouchableOpacity
-        style={[
-          styles.galleryPlaceholder,
-          {
-            borderColor: colors.border,
-            backgroundColor: colors.paperWarm,
-          },
-        ]}
-        onPress={() => setHasRequestedGalleryLoad(true)}
-        activeOpacity={0.8}
-        accessibilityLabel="Load Images"
-        testID={testID}
-      >
-        <Feather name="image" size={18} color={colors.inkSoft} />
-        <Text style={[styles.galleryPlaceholderTitle, { color: colors.ink }]}>
-          Load Images
-        </Text>
-        <Text
-          style={[styles.galleryPlaceholderSubtle, { color: colors.inkSoft }]}
-        >
-          {nsfw ? "NSFW gallery. Tap to load." : "Tap to load gallery images."}
-        </Text>
-      </TouchableOpacity>
+      </View>
     );
   }
 
@@ -553,7 +503,13 @@ export function ExpandedFeedMedia({
           testID={testID}
           accessibilityLabel="Reddit gallery"
         >
-          <View style={{ width: slideW, height: slideH }}>
+          <View
+            style={[
+              { width: slideW, height: slideH },
+              styles.galleryBlurClip,
+              blur ? NSFW_BLUR_FILTER_STYLE : null,
+            ]}
+          >
             <Image
               source={{ uri: galleryImageUrls[activeGalleryIndex] }}
               style={styles.galleryImage}
@@ -632,7 +588,11 @@ export function ExpandedFeedMedia({
           {galleryImageUrls.map((galleryImageUrl, index) => (
             <View
               key={`${galleryImageUrl}:${index}`}
-              style={{ width: slideW, height: slideH }}
+              style={[
+                { width: slideW, height: slideH },
+                styles.galleryBlurClip,
+                blur ? NSFW_BLUR_FILTER_STYLE : null,
+              ]}
             >
               <Image
                 source={{ uri: galleryImageUrl }}
@@ -810,26 +770,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     gap: spacing.xs,
   },
-  gifPreviewContainer: {
-    alignSelf: "center",
-    width: "100%",
-    maxWidth: MAX_EXPANDED_IMAGE_EDGE,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    minHeight: 200,
-    aspectRatio: 1,
-    overflow: "hidden",
-    position: "relative",
-  },
-  gifPreviewImage: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  gifPreviewInner: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  gifPreviewNsfwFilter: {
-    filter: [{ blur: 30 }],
-  },
   galleryPlaceholderTitle: {
     fontFamily: fonts.sans,
     fontSize: fontSize.body,
@@ -839,5 +779,48 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: fontSize.meta,
     textAlign: "center",
+  },
+  previewWrap: {
+    alignSelf: "stretch",
+    width: "100%",
+    maxWidth: MAX_EXPANDED_IMAGE_EDGE,
+    aspectRatio: 16 / 9,
+    overflow: "hidden",
+    borderRadius: radii.md,
+    position: "relative",
+  },
+  previewImage: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  previewBlurClip: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: "hidden",
+  },
+  galleryBlurClip: {
+    overflow: "hidden",
+  },
+  placeholderOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  placeholderPill: {
+    flexDirection: "column",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    gap: spacing.xs,
+  },
+  placeholderPillTitle: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+    fontWeight: "700",
+  },
+  placeholderPillSubtle: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+    textAlign: "center",
+    opacity: 0.85,
   },
 });

@@ -94,9 +94,21 @@ export const fontSize = {
  * the same numeric value, so we use a much larger radius there.
  */
 export const NSFW_BLUR_RADIUS: number = Platform.select({
-  web: 24,
+  web: 60,
   default: 120,
 });
+
+/**
+ * Additional view-level blur style applied to NSFW image wrappers. We layer
+ * this on top of `expo-image`'s `blurRadius` because, on Android, the native
+ * blur isn't reliably applied for every image source (particularly animated
+ * GIF previews). Using React Native's `filter` style as a wrapper guarantees
+ * a heavy, color-based blur on every platform.
+ */
+export const NSFW_BLUR_FILTER_STYLE = Platform.select<object>({
+  web: { filter: "blur(40px)" },
+  default: { filter: [{ blur: 40 }] },
+}) as object;
 
 export type Theme = {
   colors: typeof colors;

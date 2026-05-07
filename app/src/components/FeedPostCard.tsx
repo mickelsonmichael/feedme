@@ -156,18 +156,24 @@ function FeedPostCardComponent({
             />
             {showCardRevealOverlay ? (
               <TouchableOpacity
-                style={[
-                  styles.mediaBlurOverlay,
-                  { backgroundColor: `${colors.paper}f2` },
-                ]}
+                style={styles.mediaBlurOverlay}
                 onPress={() => onRevealCardMedia?.()}
-                activeOpacity={0.9}
+                activeOpacity={0.85}
                 accessibilityLabel="Reveal NSFW media"
               >
-                <Feather name="eye" size={16} color={colors.ink} />
-                <Text style={[styles.mediaBlurText, { color: colors.ink }]}>
-                  Reveal images
-                </Text>
+                <View
+                  style={[
+                    styles.mediaBlurPill,
+                    { backgroundColor: `${colors.ink}d9` },
+                  ]}
+                >
+                  <Feather name="eye" size={16} color={colors.paper} />
+                  <Text
+                    style={[styles.mediaBlurText, { color: colors.paper }]}
+                  >
+                    Reveal media
+                  </Text>
+                </View>
               </TouchableOpacity>
             ) : null}
           </View>
@@ -705,7 +711,14 @@ const styles = StyleSheet.create({
     left: 0,
     alignItems: "center",
     justifyContent: "center",
+  },
+  mediaBlurPill: {
+    flexDirection: "row",
+    alignItems: "center",
     gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.pill,
   },
   mediaBlurText: {
     fontSize: fontSize.meta,

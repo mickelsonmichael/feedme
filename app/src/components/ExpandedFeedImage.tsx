@@ -12,7 +12,7 @@ import {
   MAX_EXPANDED_IMAGE_EDGE,
 } from "../expandedImageSize";
 import { proxiedImageUrl } from "../proxyFetch";
-import { NSFW_BLUR_RADIUS, radii } from "../theme";
+import { NSFW_BLUR_FILTER_STYLE, NSFW_BLUR_RADIUS, radii } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
 const PLACEHOLDER_HEIGHT = 200;
@@ -142,28 +142,32 @@ export function ExpandedFeedImage({
           <ActivityIndicator color={colors.inkSoft} />
         </View>
       ) : (
-        <Image
-          source={{ uri: resolvedImageUrl }}
-          blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
-          style={[
-            styles.image,
-            alignment === "center"
-              ? styles.centeredImage
-              : styles.leftAlignedImage,
-            constrainedSize ??
-              (didMetadataLookupFail && fallbackBoxSize !== null
-                ? {
-                    width: fallbackBoxSize,
-                    height: fallbackBoxSize,
-                  }
-                : styles.pendingImage),
-          ]}
-          contentFit="contain"
-          cachePolicy="memory-disk"
-          autoplay={blur ? false : undefined}
-          transition={120}
-          testID={testID}
-        />
+        <View
+          style={[styles.imageBlurWrap, blur ? NSFW_BLUR_FILTER_STYLE : null]}
+        >
+          <Image
+            source={{ uri: resolvedImageUrl }}
+            blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
+            style={[
+              styles.image,
+              alignment === "center"
+                ? styles.centeredImage
+                : styles.leftAlignedImage,
+              constrainedSize ??
+                (didMetadataLookupFail && fallbackBoxSize !== null
+                  ? {
+                      width: fallbackBoxSize,
+                      height: fallbackBoxSize,
+                    }
+                  : styles.pendingImage),
+            ]}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            autoplay={blur ? false : undefined}
+            transition={120}
+            testID={testID}
+          />
+        </View>
       )}
     </View>
   );
@@ -171,6 +175,11 @@ export function ExpandedFeedImage({
 
 const styles = StyleSheet.create({
   wrapper: {
+    alignSelf: "stretch",
+  },
+  imageBlurWrap: {
+    overflow: "hidden",
+    borderRadius: radii.sm,
     alignSelf: "stretch",
   },
   image: {
