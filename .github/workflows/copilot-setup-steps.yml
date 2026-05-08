@@ -17,9 +17,6 @@ jobs:
       pull-requests: write
 
     env:
-      ANDROID_API_LEVEL: 34
-      ANDROID_TARGET: google_apis
-      ANDROID_ARCH: x86_64
       AVD_NAME: copilot_avd
 
     steps:
@@ -52,12 +49,13 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v4
         with:
+          log-accepted-android-sdk-licenses: false
           packages: >-
             platform-tools
-            platforms;android-${{ env.ANDROID_API_LEVEL }}
+            platforms;android-34
             build-tools;34.0.0
-            emulator
-            system-images;android-${{ env.ANDROID_API_LEVEL }};${{ env.ANDROID_TARGET }};${{ env.ANDROID_ARCH }}
+             emulator
+             system-images;android-34;google_apis;x86_64
 
       - name: Set up Gradle (with caching)
         uses: gradle/actions/setup-gradle@v6

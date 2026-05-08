@@ -58,3 +58,4 @@ Keep the description scannable. No filler, no emoji headers, no "AI-generated" d
 - Modifying CI configuration, the workflow file at `.github/workflows/copilot-setup-steps.yml`, or any file in `.github/agents/` to make checks pass. If checks fail, fix the underlying problem.
 - Force-pushing over commits the human reviewer may have added.
 - Merging the PR yourself. Always leave that to the human.
+- Running `git push`, `git commit`, or any direct git remote operation in bash. Commits must go through the GitHub MCP `create_pull_request` tool. The bash environment cannot push to the remote — server-side restrictions block it regardless of token permissions. If you find yourself debugging credentials, stop and use the MCP tool instead.
