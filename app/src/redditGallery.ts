@@ -3,6 +3,38 @@ import { fetchWithProxyFallback } from "./proxyFetch";
 
 type JsonRecord = Record<string, unknown>;
 
+export type RedditVideoMedia = {
+  // Direct MP4 fallback URL (works in <video> on web and WebView on native).
+  mp4Url: string;
+  // HLS playlist URL (preferred on native; gracefully falls back to mp4).
+  hlsUrl: string | null;
+  // Poster image URL to display before the user taps play.
+  posterUrl: string | null;
+  width: number;
+  height: number;
+};
+
+export type RedditPostMedia = {
+  images: string[];
+  video: RedditVideoMedia | null;
+};
+
+// Use a realistic browser User-Agent on native. Reddit's JSON endpoints return
+// 403/429 to obvious bot UAs (including any UA containing app/library names),
+// so we identify as a recent Chrome build like a normal browser would.
+const NATIVE_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+export class RedditFetchError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message?: string) {
+    super(message ?? `Reddit request failed with HTTP ${status}`);
+    this.name = "RedditFetchError";
+    this.status = status;
+  }
+}
+
 function isRecord(value: unknown): value is JsonRecord {
   return typeof value === "object" && value !== null;
 }
@@ -80,6 +112,85 @@ function getGalleryImageUrl(
   return null;
 }
 
+function getGalleryImages(postData: JsonRecord): string[] {
+  if (!isRecord(postData.media_metadata)) {
+    return [];
+  }
+
+  return getGalleryItemMediaIds(postData)
+    .map((mediaId) =>
+      getGalleryImageUrl(postData.media_metadata as JsonRecord, mediaId)
+    )
+    .filter((imageUrl): imageUrl is string => Boolean(imageUrl));
+}
+
+function getRedditVideoPayload(postData: JsonRecord): JsonRecord | null {
+  for (const key of ["secure_media", "media"]) {
+    const container = postData[key];
+    if (isRecord(container) && isRecord(container.reddit_video)) {
+      return container.reddit_video;
+    }
+  }
+
+  // Crossposted videos live on the parent post.
+  const crosspost = postData.crosspost_parent_list;
+  if (Array.isArray(crosspost) && crosspost.length > 0) {
+    const parent = crosspost[0];
+    if (isRecord(parent)) {
+      return getRedditVideoPayload(parent);
+    }
+  }
+
+  return null;
+}
+
+function getPostThumbnailUrl(postData: JsonRecord): string | null {
+  const preview = postData.preview;
+  if (isRecord(preview) && Array.isArray(preview.images)) {
+    const first = preview.images[0];
+    if (isRecord(first) && isRecord(first.source)) {
+      const url = first.source.url;
+      if (typeof url === "string" && url.trim()) {
+        return decodeRedditImageUrl(url);
+      }
+    }
+  }
+
+  const thumbnail = postData.thumbnail;
+  if (typeof thumbnail === "string" && /^https?:\/\//i.test(thumbnail)) {
+    return thumbnail;
+  }
+
+  return null;
+}
+
+function getVideoMedia(postData: JsonRecord): RedditVideoMedia | null {
+  const payload = getRedditVideoPayload(postData);
+  if (!payload) {
+    return null;
+  }
+
+  const fallbackUrl = payload.fallback_url;
+  if (typeof fallbackUrl !== "string" || !fallbackUrl.trim()) {
+    return null;
+  }
+
+  const hls = typeof payload.hls_url === "string" ? payload.hls_url : null;
+  const width = typeof payload.width === "number" ? payload.width : 0;
+  const height = typeof payload.height === "number" ? payload.height : 0;
+  // The fallback URL often contains a query string `?source=fallback` which
+  // doesn't load reliably in all WebView/<video> contexts — strip it.
+  const cleanMp4 = fallbackUrl.split("?")[0];
+
+  return {
+    mp4Url: cleanMp4,
+    hlsUrl: hls,
+    posterUrl: getPostThumbnailUrl(postData),
+    width,
+    height,
+  };
+}
+
 export function extractRedditPostIdFromUrl(
   url: string | null | undefined
 ): string | null {
@@ -134,52 +245,82 @@ export function extractRedditGalleryUrl(
     : null;
 }
 
-// Process-level cache to avoid duplicate Reddit API calls when the same
-// gallery is requested by multiple components (e.g. compact thumbnail +
-// expanded carousel). Cached promises are reused once resolved.
-const galleryUrlsCache = new Map<string, Promise<string[]>>();
+/**
+ * Returns a canonical `https://www.reddit.com/comments/{id}` URL when the
+ * provided post might host playable Reddit video media. Detection is based on
+ * markers in the feed content (a `v.redd.it` link or an inline `<video>` tag)
+ * combined with a Reddit comments URL on the item. Galleries are excluded —
+ * those are handled by `extractRedditGalleryUrl`.
+ */
+export function extractRedditVideoPostUrl(
+  itemUrl?: string | null,
+  content?: string | null
+): string | null {
+  if (extractRedditGalleryUrl(itemUrl, content)) {
+    return null;
+  }
 
-export function clearRedditGalleryCache(): void {
-  galleryUrlsCache.clear();
+  const hasVideoMarker =
+    typeof content === "string" &&
+    (/v\.redd\.it\//i.test(content) || /<video[\s>]/i.test(content));
+
+  if (!hasVideoMarker) {
+    return null;
+  }
+
+  const postId = extractRedditPostIdFromUrl(itemUrl);
+  if (!postId) {
+    return null;
+  }
+
+  return `https://www.reddit.com/comments/${postId}`;
 }
 
-export function fetchRedditGalleryImageUrlsCached(
-  galleryUrl: string,
+// Process-level cache to avoid duplicate Reddit API calls when the same
+// post is requested by multiple components (e.g. compact thumbnail +
+// expanded carousel/video stage). Cached promises are reused once resolved.
+const postMediaCache = new Map<string, Promise<RedditPostMedia>>();
+
+export function clearRedditGalleryCache(): void {
+  postMediaCache.clear();
+}
+
+export function fetchRedditPostMediaCached(
+  postUrl: string,
   forceProxy?: boolean
-): Promise<string[]> {
-  const cacheKey = `${galleryUrl}|${forceProxy ? "1" : "0"}`;
-  const cached = galleryUrlsCache.get(cacheKey);
+): Promise<RedditPostMedia> {
+  const cacheKey = `${postUrl}|${forceProxy ? "1" : "0"}`;
+  const cached = postMediaCache.get(cacheKey);
   if (cached) {
     return cached;
   }
 
-  const promise = fetchRedditGalleryImageUrls(galleryUrl, forceProxy).catch(
-    (error) => {
-      // Do not cache failures so a future attempt can retry.
-      galleryUrlsCache.delete(cacheKey);
-      throw error;
-    }
-  );
-  galleryUrlsCache.set(cacheKey, promise);
+  const promise = fetchRedditPostMedia(postUrl, forceProxy).catch((error) => {
+    // Do not cache failures so a future attempt can retry.
+    postMediaCache.delete(cacheKey);
+    throw error;
+  });
+  postMediaCache.set(cacheKey, promise);
   return promise;
 }
 
-export async function fetchRedditGalleryImageUrls(
-  galleryUrl: string,
+export async function fetchRedditPostMedia(
+  postUrl: string,
   forceProxy?: boolean
-): Promise<string[]> {
-  const postId = extractRedditPostIdFromUrl(galleryUrl);
+): Promise<RedditPostMedia> {
+  const postId = extractRedditPostIdFromUrl(postUrl);
   if (!postId) {
-    return [];
+    return { images: [], video: null };
   }
 
   // On web, setting a custom User-Agent triggers a CORS preflight (OPTIONS),
-  // which the proxy worker doesn't handle. The worker sets its own UA when it
-  // forwards the request, so we only need this header on native runtimes.
+  // which we skip — the proxy worker sets its own UA when it forwards the
+  // request, and direct browser fetches use the browser's own UA. We only
+  // need this header on native runtimes.
   const init: RequestInit | undefined =
     Platform.OS === "web"
       ? undefined
-      : { headers: { "User-Agent": "Mozilla/5.0 (compatible; feedme/1.0)" } };
+      : { headers: { "User-Agent": NATIVE_USER_AGENT } };
 
   const { response } = await fetchWithProxyFallback(
     `https://www.reddit.com/comments/${postId}.json?raw_json=1`,
@@ -188,18 +329,52 @@ export async function fetchRedditGalleryImageUrls(
   );
 
   if (!response.ok) {
-    return [];
+    // If a direct-from-Reddit request was rejected (e.g. 403/429 from a UA
+    // block), retry once via the proxy which presents a different UA and
+    // origin to Reddit. This keeps web/native happy without surfacing a
+    // transient error to the user.
+    if (!forceProxy) {
+      const { response: retried } = await fetchWithProxyFallback(
+        `https://www.reddit.com/comments/${postId}.json?raw_json=1`,
+        init,
+        true
+      );
+      if (retried.ok) {
+        return parseRedditPostJson(await retried.json());
+      }
+      throw new RedditFetchError(retried.status);
+    }
+    throw new RedditFetchError(response.status);
   }
 
-  const payload = (await response.json()) as unknown;
+  return parseRedditPostJson(await response.json());
+}
+
+function parseRedditPostJson(payload: unknown): RedditPostMedia {
   const postData = getPostData(payload);
-  if (!postData || !isRecord(postData.media_metadata)) {
-    return [];
+  if (!postData) {
+    return { images: [], video: null };
   }
 
-  return getGalleryItemMediaIds(postData)
-    .map((mediaId) =>
-      getGalleryImageUrl(postData.media_metadata as JsonRecord, mediaId)
-    )
-    .filter((imageUrl): imageUrl is string => Boolean(imageUrl));
+  return {
+    images: getGalleryImages(postData),
+    video: getVideoMedia(postData),
+  };
+}
+
+export function fetchRedditGalleryImageUrlsCached(
+  galleryUrl: string,
+  forceProxy?: boolean
+): Promise<string[]> {
+  return fetchRedditPostMediaCached(galleryUrl, forceProxy).then(
+    (media) => media.images
+  );
+}
+
+export async function fetchRedditGalleryImageUrls(
+  galleryUrl: string,
+  forceProxy?: boolean
+): Promise<string[]> {
+  const media = await fetchRedditPostMedia(galleryUrl, forceProxy);
+  return media.images;
 }
