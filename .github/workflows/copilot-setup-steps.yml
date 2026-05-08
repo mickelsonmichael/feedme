@@ -49,6 +49,7 @@ jobs:
        - name: Set up Android SDK
          uses: android-actions/setup-android@v4
          with:
+           log-accepted-android-sdk-licenses: false
            packages: >-
              platform-tools
              platforms;android-34
