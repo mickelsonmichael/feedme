@@ -5,17 +5,31 @@ import { NSFW_BLUR_RADIUS } from "../theme";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 
 const mockExtractRedditGalleryUrl = jest.fn();
-const mockFetchRedditGalleryImageUrls = jest.fn();
+const mockExtractRedditVideoPostUrl = jest.fn();
+const mockFetchRedditPostMedia = jest.fn();
 const mockExtractGifEmbedUrl = jest.fn();
 
-jest.mock("../redditGallery", () => ({
-  extractRedditGalleryUrl: (...args: unknown[]) =>
-    mockExtractRedditGalleryUrl(...args),
-  fetchRedditGalleryImageUrls: (...args: unknown[]) =>
-    mockFetchRedditGalleryImageUrls(...args),
-  fetchRedditGalleryImageUrlsCached: (...args: unknown[]) =>
-    mockFetchRedditGalleryImageUrls(...args),
-}));
+jest.mock("../redditGallery", () => {
+  class MockRedditFetchError extends Error {
+    status: number;
+    constructor(status: number) {
+      super(`HTTP ${status}`);
+      this.name = "RedditFetchError";
+      this.status = status;
+    }
+  }
+  return {
+    extractRedditGalleryUrl: (...args: unknown[]) =>
+      mockExtractRedditGalleryUrl(...args),
+    extractRedditVideoPostUrl: (...args: unknown[]) =>
+      mockExtractRedditVideoPostUrl(...args),
+    fetchRedditPostMedia: (...args: unknown[]) =>
+      mockFetchRedditPostMedia(...args),
+    fetchRedditPostMediaCached: (...args: unknown[]) =>
+      mockFetchRedditPostMedia(...args),
+    RedditFetchError: MockRedditFetchError,
+  };
+});
 
 jest.mock("../gifUtils", () => ({
   extractGifEmbedUrl: (...args: unknown[]) => mockExtractGifEmbedUrl(...args),
@@ -73,6 +87,9 @@ describe("ExpandedFeedMedia", () => {
       success(1080, 1080);
     });
     mockExtractGifEmbedUrl.mockReturnValue(null);
+    mockExtractRedditVideoPostUrl.mockReturnValue(null);
+    mockExtractRedditGalleryUrl.mockReturnValue(null);
+    mockFetchRedditPostMedia.mockResolvedValue({ images: [], video: null });
   });
 
   afterEach(() => {
@@ -88,10 +105,13 @@ describe("ExpandedFeedMedia", () => {
     mockExtractRedditGalleryUrl.mockReturnValue(
       "https://www.reddit.com/gallery/1sw5l42"
     );
-    mockFetchRedditGalleryImageUrls.mockResolvedValue([
-      "https://preview.redd.it/full-1.jpg",
-      "https://preview.redd.it/full-2.jpg",
-    ]);
+    mockFetchRedditPostMedia.mockResolvedValue({
+      video: null,
+      images: [
+        "https://preview.redd.it/full-1.jpg",
+        "https://preview.redd.it/full-2.jpg",
+      ],
+    });
 
     let tree: renderer.ReactTestRenderer;
 
@@ -133,7 +153,7 @@ describe("ExpandedFeedMedia", () => {
     });
 
     // Assert initial state
-    expect(mockFetchRedditGalleryImageUrls).toHaveBeenCalledWith(
+    expect(mockFetchRedditPostMedia).toHaveBeenCalledWith(
       "https://www.reddit.com/gallery/1sw5l42",
       false
     );
@@ -178,12 +198,12 @@ describe("ExpandedFeedMedia", () => {
     ).toBe("#1e1a3a");
   });
 
-  it("falls back to the single preview image when gallery loading fails", async () => {
+  it("renders an inline error and the preview image when gallery loading fails", async () => {
     // Arrange
     mockExtractRedditGalleryUrl.mockReturnValue(
       "https://www.reddit.com/gallery/1sw5l42"
     );
-    mockFetchRedditGalleryImageUrls.mockRejectedValue(
+    mockFetchRedditPostMedia.mockRejectedValue(
       new Error("gallery unavailable")
     );
 
@@ -206,10 +226,15 @@ describe("ExpandedFeedMedia", () => {
       await Promise.resolve();
     });
 
-    const fallbackImage = tree!.root.findByProps({ testID: "expanded-media" });
-
-    // Assert
-    expect(fallbackImage.props.imageUrl).toBe(
+    // Assert — inline error is rendered, with the preview thumbnail behind it.
+    const errorView = tree!.root.findByProps({
+      testID: "expanded-media-error",
+    });
+    expect(errorView.props.accessibilityLabel).toContain("gallery unavailable");
+    const preview = tree!.root.findByProps({
+      testID: "expanded-media-preview",
+    });
+    expect(preview.props.source.uri).toBe(
       "https://preview.redd.it/thumb.jpg?width=140"
     );
   });
@@ -227,9 +252,10 @@ describe("ExpandedFeedMedia", () => {
     mockExtractRedditGalleryUrl.mockReturnValue(
       "https://www.reddit.com/gallery/1sw5l42"
     );
-    mockFetchRedditGalleryImageUrls.mockResolvedValue([
-      "https://preview.redd.it/full-1.jpg",
-    ]);
+    mockFetchRedditPostMedia.mockResolvedValue({
+      video: null,
+      images: ["https://preview.redd.it/full-1.jpg"],
+    });
 
     let tree: renderer.ReactTestRenderer;
 
@@ -259,7 +285,7 @@ describe("ExpandedFeedMedia", () => {
     });
 
     // Assert
-    expect(mockFetchRedditGalleryImageUrls).toHaveBeenCalledWith(
+    expect(mockFetchRedditPostMedia).toHaveBeenCalledWith(
       "https://www.reddit.com/gallery/1sw5l42",
       true
     );
@@ -278,9 +304,10 @@ describe("ExpandedFeedMedia", () => {
     mockExtractRedditGalleryUrl.mockReturnValue(
       "https://www.reddit.com/gallery/1sw5l42"
     );
-    mockFetchRedditGalleryImageUrls.mockResolvedValue([
-      "https://preview.redd.it/full-1.jpg",
-    ]);
+    mockFetchRedditPostMedia.mockResolvedValue({
+      video: null,
+      images: ["https://preview.redd.it/full-1.jpg"],
+    });
 
     let tree: renderer.ReactTestRenderer;
 
@@ -300,7 +327,7 @@ describe("ExpandedFeedMedia", () => {
     // Assert pre-load state — fetch is invoked (via cached helper) so the
     // preview image can be rendered behind the reveal overlay, but the full
     // gallery carousel is not yet shown.
-    expect(mockFetchRedditGalleryImageUrls).toHaveBeenCalledWith(
+    expect(mockFetchRedditPostMedia).toHaveBeenCalledWith(
       "https://www.reddit.com/gallery/1sw5l42",
       false
     );
@@ -451,9 +478,7 @@ describe("ExpandedFeedMedia", () => {
     const preview = tree!.root.findByProps({
       testID: "expanded-media-preview",
     });
-    expect(preview.props.source.uri).toBe(
-      "https://preview.redd.it/poster.jpg"
-    );
+    expect(preview.props.source.uri).toBe("https://preview.redd.it/poster.jpg");
     expect(preview.props.blurRadius).toBe(NSFW_BLUR_RADIUS);
     expect(preview.props.autoplay).toBe(false);
 
@@ -499,5 +524,67 @@ describe("ExpandedFeedMedia", () => {
     });
     expect(preview.props.blurRadius).toBe(0);
     expect(preview.props.autoplay).toBe(false);
+  });
+
+  it("renders a Reddit video play stage and switches to a player on tap", async () => {
+    // Arrange
+    mockExtractRedditGalleryUrl.mockReturnValue(null);
+    mockExtractRedditVideoPostUrl.mockReturnValue(
+      "https://www.reddit.com/comments/abc123"
+    );
+    mockFetchRedditPostMedia.mockResolvedValue({
+      images: [],
+      video: {
+        mp4Url: "https://v.redd.it/abc123/DASH_720.mp4",
+        hlsUrl: "https://v.redd.it/abc123/HLSPlaylist.m3u8",
+        posterUrl: "https://external-preview.redd.it/poster.jpg",
+        width: 1280,
+        height: 720,
+      },
+    });
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://www.reddit.com/r/funny/comments/abc123/funny/"
+          content='<a href="https://v.redd.it/abc123">video</a>'
+          imageUrl="https://b.thumbs.redditmedia.com/poster.jpg"
+          testID="expanded-media"
+          deferGalleryLoad={false}
+        />
+      );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    // Assert — play stage is shown with poster image
+    const playButton = tree!.root.findByProps({
+      accessibilityLabel: "Play video",
+    });
+    const previewImage = tree!.root.findByProps({
+      testID: "expanded-media-preview",
+    });
+    expect(previewImage.props.source.uri).toBe(
+      "https://external-preview.redd.it/poster.jpg"
+    );
+
+    // Act — tap to play
+    await act(async () => {
+      playButton.props.onPress();
+    });
+
+    // Assert — the video player is now mounted
+    const player = tree!.root.findByProps({
+      accessibilityLabel: "Reddit video player",
+    });
+    expect(player).toBeTruthy();
   });
 });

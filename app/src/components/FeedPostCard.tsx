@@ -1,5 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Platform, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
@@ -115,10 +122,7 @@ function FeedPostCardComponent({
   // the reveal overlay rather than auto-loading the entire carousel. Once the
   // user taps reveal, we also auto-load the rest of the gallery.
   const cardGalleryDeferred =
-    layout === "card" &&
-    isRedditGallery &&
-    nsfw &&
-    !cardMediaRevealed;
+    layout === "card" && isRedditGallery && nsfw && !cardMediaRevealed;
   // In compact rows we only ever render the small thumbnail; for Reddit
   // galleries the parsed feed item rarely includes an `image_url`, so we
   // resolve the first gallery image lazily and use it as the thumbnail.
@@ -168,9 +172,7 @@ function FeedPostCardComponent({
                   ]}
                 >
                   <Feather name="eye" size={16} color={colors.paper} />
-                  <Text
-                    style={[styles.mediaBlurText, { color: colors.paper }]}
-                  >
+                  <Text style={[styles.mediaBlurText, { color: colors.paper }]}>
                     Reveal media
                   </Text>
                 </View>
@@ -281,10 +283,9 @@ function FeedPostCardComponent({
             >
               <Image
                 source={{
-                  uri:
-                    item.image_url
-                      ? proxiedImageUrl(item.image_url, useProxy)
-                      : (galleryThumbnailUrl as string),
+                  uri: item.image_url
+                    ? proxiedImageUrl(item.image_url, useProxy)
+                    : (galleryThumbnailUrl as string),
                 }}
                 blurRadius={nsfw ? NSFW_BLUR_RADIUS : 0}
                 autoplay={!nsfw}
@@ -415,7 +416,7 @@ function FeedPostCardComponent({
               useProxy={useProxy}
               nsfw={nsfw}
               deferGalleryLoad={false}
-              deferGifLoad={nsfw && isGif}
+              deferGifLoad={isGif}
             />
           ) : null}
           {item.content ? (

@@ -22,8 +22,11 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import {
   extractRedditGalleryUrl,
-  fetchRedditGalleryImageUrls,
-  fetchRedditGalleryImageUrlsCached,
+  extractRedditVideoPostUrl,
+  fetchRedditPostMedia,
+  fetchRedditPostMediaCached,
+  RedditFetchError,
+  RedditVideoMedia,
 } from "../redditGallery";
 import { extractGifEmbedUrl } from "../gifUtils";
 import { proxiedImageUrl } from "../proxyFetch";
@@ -34,7 +37,14 @@ import {
   getYouTubeEmbedUrl,
 } from "../youtubeUtils";
 import { MAX_EXPANDED_IMAGE_EDGE } from "../expandedImageSize";
-import { fontSize, fonts, NSFW_BLUR_FILTER_STYLE, NSFW_BLUR_RADIUS, radii, spacing } from "../theme";
+import {
+  fontSize,
+  fonts,
+  NSFW_BLUR_FILTER_STYLE,
+  NSFW_BLUR_RADIUS,
+  radii,
+  spacing,
+} from "../theme";
 import { ExpandedFeedImage } from "./ExpandedFeedImage";
 
 type Props = {
@@ -74,6 +84,8 @@ export function ExpandedFeedMedia({
   const [galleryImageUrls, setGalleryImageUrls] = useState<string[] | null>(
     null
   );
+  const [redditVideo, setRedditVideo] = useState<RedditVideoMedia | null>(null);
+  const [galleryError, setGalleryError] = useState<string | null>(null);
   const [isLoadingGallery, setIsLoadingGallery] = useState(false);
   const [galleryContainerSize, setGalleryContainerSize] = useState<{
     width: number;
@@ -83,6 +95,7 @@ export function ExpandedFeedMedia({
   const [hasRequestedGalleryLoad, setHasRequestedGalleryLoad] =
     useState(!deferGalleryLoad);
   const [hasRequestedGifLoad, setHasRequestedGifLoad] = useState(!deferGifLoad);
+  const [hasRequestedVideoLoad, setHasRequestedVideoLoad] = useState(false);
   const youtubeVideoId = useMemo(
     () =>
       extractYouTubeVideoId(itemUrl) ??
@@ -93,32 +106,44 @@ export function ExpandedFeedMedia({
     () => extractRedditGalleryUrl(itemUrl, content),
     [itemUrl, content]
   );
+  const redditVideoPostUrl = useMemo(
+    () => extractRedditVideoPostUrl(itemUrl, content),
+    [itemUrl, content]
+  );
+  const redditPostUrl = redditGalleryUrl ?? redditVideoPostUrl;
   const gifEmbedUrl = useMemo(() => extractGifEmbedUrl(itemUrl), [itemUrl]);
-  const shouldLoadGallery =
-    Boolean(redditGalleryUrl) && hasRequestedGalleryLoad;
+  const shouldLoadGallery = Boolean(redditPostUrl) && hasRequestedGalleryLoad;
 
   useEffect(() => {
     setHasRequestedGalleryLoad(!deferGalleryLoad);
-  }, [deferGalleryLoad, redditGalleryUrl]);
+  }, [deferGalleryLoad, redditPostUrl]);
 
   useEffect(() => {
     setHasRequestedGifLoad(!deferGifLoad);
   }, [deferGifLoad, gifEmbedUrl]);
 
   useEffect(() => {
+    setHasRequestedVideoLoad(false);
+  }, [redditPostUrl, gifEmbedUrl]);
+
+  useEffect(() => {
     let active = true;
 
-    if (!redditGalleryUrl) {
+    if (!redditPostUrl) {
       setGalleryImageUrls(null);
+      setRedditVideo(null);
       setGalleryContainerSize(null);
       setIsLoadingGallery(false);
+      setGalleryError(null);
       return () => {
         active = false;
       };
     }
 
     setGalleryImageUrls(null);
+    setRedditVideo(null);
     setGalleryContainerSize(null);
+    setGalleryError(null);
     // Only show the loading spinner when the user has actually requested
     // the carousel; otherwise the placeholder owns the visible UI and the
     // fetch is just resolving the preview image.
@@ -126,33 +151,36 @@ export function ExpandedFeedMedia({
     setActiveGalleryIndex(0);
 
     const fetcher = shouldLoadGallery
-      ? fetchRedditGalleryImageUrls
-      : fetchRedditGalleryImageUrlsCached;
-    fetcher(redditGalleryUrl, useProxy)
-      .then((urls) => {
+      ? fetchRedditPostMedia
+      : fetchRedditPostMediaCached;
+    fetcher(redditPostUrl, useProxy)
+      .then((media) => {
         if (!active) {
           return;
         }
 
-        const proxiedUrls = urls
+        const proxiedUrls = media.images
           .map((url) => proxiedImageUrl(url, useProxy))
           .filter((url): url is string => Boolean(url));
         setGalleryImageUrls(proxiedUrls.length ? proxiedUrls : null);
+        setRedditVideo(media.video);
         setIsLoadingGallery(false);
       })
-      .catch(() => {
+      .catch((error: unknown) => {
         if (!active) {
           return;
         }
 
         setGalleryImageUrls(null);
+        setRedditVideo(null);
         setIsLoadingGallery(false);
+        setGalleryError(formatRedditLoadError(error));
       });
 
     return () => {
       active = false;
     };
-  }, [redditGalleryUrl, shouldLoadGallery, useProxy]);
+  }, [redditPostUrl, shouldLoadGallery, useProxy]);
 
   useEffect(() => {
     if (!galleryImageUrls?.length) {
@@ -292,14 +320,13 @@ export function ExpandedFeedMedia({
               ]}
             >
               <Feather name="film" size={18} color={colors.paper} />
-              <Text style={[styles.placeholderPillTitle, { color: colors.paper }]}>
+              <Text
+                style={[styles.placeholderPillTitle, { color: colors.paper }]}
+              >
                 Load GIF
               </Text>
               <Text
-                style={[
-                  styles.placeholderPillSubtle,
-                  { color: colors.paper },
-                ]}
+                style={[styles.placeholderPillSubtle, { color: colors.paper }]}
               >
                 {nsfw ? "NSFW GIF. Tap to load." : "Tap to load GIF."}
               </Text>
@@ -390,7 +417,140 @@ export function ExpandedFeedMedia({
     );
   }
 
-  if (redditGalleryUrl && !shouldLoadGallery) {
+  if (redditVideo && hasRequestedVideoLoad) {
+    return (
+      <RedditVideoPlayer
+        video={redditVideo}
+        testID={testID}
+        useProxy={useProxy}
+      />
+    );
+  }
+
+  if (redditVideo) {
+    const previewUri = proxiedImageUrl(
+      redditVideo.posterUrl ?? imageUrl ?? null,
+      useProxy
+    );
+    const showPlaceholderPill = !blur;
+    return (
+      <View style={styles.previewWrap}>
+        {previewUri ? (
+          <View
+            style={[
+              styles.previewBlurClip,
+              nsfw && blur ? NSFW_BLUR_FILTER_STYLE : null,
+            ]}
+          >
+            <Image
+              source={{ uri: previewUri }}
+              style={styles.previewImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              blurRadius={nsfw && blur ? NSFW_BLUR_RADIUS : 0}
+              autoplay={false}
+              transition={120}
+              testID={testID ? `${testID}-preview` : undefined}
+            />
+          </View>
+        ) : null}
+        <TouchableOpacity
+          style={[
+            previewUri ? styles.placeholderOverlay : styles.galleryPlaceholder,
+            previewUri || !showPlaceholderPill
+              ? null
+              : {
+                  borderColor: colors.border,
+                  backgroundColor: colors.paperWarm,
+                },
+          ]}
+          onPress={() => setHasRequestedVideoLoad(true)}
+          activeOpacity={0.85}
+          accessibilityLabel="Play video"
+          testID={testID}
+        >
+          {showPlaceholderPill ? (
+            <View
+              style={[
+                styles.placeholderPill,
+                { backgroundColor: `${colors.ink}d9` },
+              ]}
+            >
+              <Feather name="play" size={18} color={colors.paper} />
+              <Text
+                style={[styles.placeholderPillTitle, { color: colors.paper }]}
+              >
+                Play video
+              </Text>
+              <Text
+                style={[styles.placeholderPillSubtle, { color: colors.paper }]}
+              >
+                {nsfw ? "NSFW video. Tap to play." : "Tap to play."}
+              </Text>
+            </View>
+          ) : null}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (galleryError) {
+    const previewUri = imageUrl ? proxiedImageUrl(imageUrl, useProxy) : null;
+    return (
+      <View style={styles.previewWrap}>
+        {previewUri ? (
+          <View style={styles.previewBlurClip}>
+            <Image
+              source={{ uri: previewUri }}
+              style={styles.previewImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              autoplay={false}
+              transition={120}
+              testID={testID ? `${testID}-preview` : undefined}
+            />
+          </View>
+        ) : null}
+        <View
+          style={[
+            styles.placeholderOverlay,
+            previewUri
+              ? null
+              : {
+                  borderColor: colors.border,
+                  backgroundColor: colors.paperWarm,
+                },
+          ]}
+          testID={testID ? `${testID}-error` : undefined}
+          accessibilityLabel={`Reddit media unavailable: ${galleryError}`}
+        >
+          <View
+            style={[
+              styles.errorPill,
+              {
+                backgroundColor: `${colors.ink}d9`,
+                borderColor: colors.danger,
+              },
+            ]}
+          >
+            <Feather name="alert-triangle" size={18} color={colors.paper} />
+            <Text
+              style={[styles.placeholderPillTitle, { color: colors.paper }]}
+            >
+              Reddit media unavailable
+            </Text>
+            <Text
+              style={[styles.placeholderPillSubtle, { color: colors.paper }]}
+            >
+              {galleryError}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (redditPostUrl && !shouldLoadGallery && !redditVideo) {
     const previewUri =
       galleryImageUrls?.[0] ??
       (imageUrl ? proxiedImageUrl(imageUrl, useProxy) : null);
@@ -430,7 +590,11 @@ export function ExpandedFeedMedia({
           ]}
           onPress={() => setHasRequestedGalleryLoad(true)}
           activeOpacity={0.85}
-          accessibilityLabel="Load Images"
+          accessibilityLabel={
+            redditVideoPostUrl && !redditGalleryUrl
+              ? "Load video"
+              : "Load Images"
+          }
         >
           {showPlaceholderPill ? (
             <View
@@ -439,17 +603,30 @@ export function ExpandedFeedMedia({
                 { backgroundColor: `${colors.ink}d9` },
               ]}
             >
-              <Feather name="image" size={18} color={colors.paper} />
-              <Text style={[styles.placeholderPillTitle, { color: colors.paper }]}>
-                Load Images
+              <Feather
+                name={
+                  redditVideoPostUrl && !redditGalleryUrl ? "play" : "image"
+                }
+                size={18}
+                color={colors.paper}
+              />
+              <Text
+                style={[styles.placeholderPillTitle, { color: colors.paper }]}
+              >
+                {redditVideoPostUrl && !redditGalleryUrl
+                  ? "Load video"
+                  : "Load Images"}
               </Text>
               <Text
-                style={[
-                  styles.placeholderPillSubtle,
-                  { color: colors.paper },
-                ]}
+                style={[styles.placeholderPillSubtle, { color: colors.paper }]}
               >
-                {nsfw ? "NSFW gallery. Tap to load." : "Tap to load gallery images."}
+                {redditVideoPostUrl && !redditGalleryUrl
+                  ? nsfw
+                    ? "NSFW video. Tap to load."
+                    : "Tap to load video."
+                  : nsfw
+                    ? "NSFW gallery. Tap to load."
+                    : "Tap to load gallery images."}
               </Text>
             </View>
           ) : null}
@@ -679,6 +856,81 @@ export function ExpandedFeedMedia({
   return null;
 }
 
+function formatRedditLoadError(error: unknown): string {
+  if (error instanceof RedditFetchError) {
+    return `HTTP ${error.status}`;
+  }
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  return "Unknown error";
+}
+
+type RedditVideoPlayerProps = {
+  video: RedditVideoMedia;
+  testID?: string;
+  useProxy?: boolean;
+};
+
+function RedditVideoPlayer({
+  video,
+  testID,
+  useProxy,
+}: RedditVideoPlayerProps) {
+  const sourceUrl = video.mp4Url;
+  const posterUrl = proxiedImageUrl(video.posterUrl ?? null, useProxy);
+
+  if (Platform.OS === "web") {
+    return (
+      <View
+        style={styles.videoContainer}
+        testID={testID}
+        accessibilityLabel="Reddit video player"
+      >
+        {React.createElement("video", {
+          src: sourceUrl,
+          poster: posterUrl ?? undefined,
+          controls: true,
+          autoPlay: true,
+          playsInline: true,
+          style: styles.iframe as unknown as React.CSSProperties,
+        })}
+      </View>
+    );
+  }
+
+  // On native, embed an HTML5 <video> in a WebView. This works without adding
+  // a native video dependency and supports both MP4 and HLS sources.
+  const playlist = video.hlsUrl ?? sourceUrl;
+  const html = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<style>html,body{margin:0;padding:0;background:#000;height:100%}video{width:100%;height:100%;background:#000;object-fit:contain}</style>
+</head><body>
+<video controls autoplay playsinline${posterUrl ? ` poster="${posterUrl.replace(/"/g, "&quot;")}"` : ""}>
+<source src="${playlist.replace(/"/g, "&quot;")}" type="${video.hlsUrl ? "application/vnd.apple.mpegurl" : "video/mp4"}"/>
+<source src="${sourceUrl.replace(/"/g, "&quot;")}" type="video/mp4"/>
+</video></body></html>`;
+
+  const { WebView } =
+    require("react-native-webview") as typeof import("react-native-webview");
+  return (
+    <View
+      style={styles.videoContainer}
+      testID={testID}
+      accessibilityLabel="Reddit video player"
+    >
+      <WebView
+        source={{ html, baseUrl: "https://www.reddit.com/" }}
+        style={styles.video}
+        allowsFullscreenVideo
+        allowsInlineMediaPlayback
+        mediaPlaybackRequiresUserAction={false}
+        testID={testID ? `${testID}-webview` : undefined}
+      />
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   videoContainer: {
     alignSelf: "center",
@@ -822,5 +1074,14 @@ const styles = StyleSheet.create({
     fontSize: fontSize.meta,
     textAlign: "center",
     opacity: 0.85,
+  },
+  errorPill: {
+    flexDirection: "column",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xs,
   },
 });
