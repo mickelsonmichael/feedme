@@ -856,6 +856,14 @@ export function ExpandedFeedMedia({
   return null;
 }
 
+function escapeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function formatRedditLoadError(error: unknown): string {
   if (error instanceof RedditFetchError) {
     return `HTTP ${error.status}`;
@@ -906,9 +914,9 @@ function RedditVideoPlayer({
 <html><head><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <style>html,body{margin:0;padding:0;background:#000;height:100%}video{width:100%;height:100%;background:#000;object-fit:contain}</style>
 </head><body>
-<video controls autoplay playsinline${posterUrl ? ` poster="${posterUrl.replace(/"/g, "&quot;")}"` : ""}>
-<source src="${playlist.replace(/"/g, "&quot;")}" type="${video.hlsUrl ? "application/vnd.apple.mpegurl" : "video/mp4"}"/>
-<source src="${sourceUrl.replace(/"/g, "&quot;")}" type="video/mp4"/>
+<video controls autoplay playsinline${posterUrl ? ` poster="${escapeHtmlAttribute(posterUrl)}"` : ""}>
+<source src="${escapeHtmlAttribute(playlist)}" type="${video.hlsUrl ? "application/vnd.apple.mpegurl" : "video/mp4"}"/>
+<source src="${escapeHtmlAttribute(sourceUrl)}" type="video/mp4"/>
 </video></body></html>`;
 
   const { WebView } =
