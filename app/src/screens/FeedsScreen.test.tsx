@@ -4,6 +4,7 @@ import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
+import { TextInput } from "react-native";
 import FeedsScreen from "../screens/FeedsScreen";
 import { RootStackParamList, TabParamList } from "../types";
 import { getFeeds } from "../database";
@@ -213,6 +214,158 @@ describe("FeedsScreen", () => {
     // Assert
     expect(props.navigation.navigate).toHaveBeenCalledWith("Feed", {});
     expect(props.navigation.navigate).toHaveBeenCalledWith("Saved");
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("filters feeds by title using case-insensitive substring match", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Hacker News",
+        url: "https://hnrss.org/frontpage",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+      {
+        id: 2,
+        title: "The Daily Podcast",
+        url: "https://feeds.simplecast.com/54nAGcIl",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+    ]);
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Act – type "hacker" in the search box
+    const searchInput = tree!.root.findByType(TextInput);
+    await act(async () => {
+      searchInput.props.onChangeText("hacker");
+    });
+
+    // Assert – only "Hacker News" feed row is visible
+    const hackerBtn = tree!.root.findByProps({
+      accessibilityLabel: "Open Hacker News",
+    });
+    expect(hackerBtn).toBeTruthy();
+    const allOpenBtns = tree!.root.findAllByProps({
+      accessibilityLabel: "Open The Daily Podcast",
+    });
+    expect(allOpenBtns).toHaveLength(0);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("filters feeds case-insensitively", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Tech Weekly",
+        url: "https://tech.example.com/rss",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+      {
+        id: 2,
+        title: "Sports Daily",
+        url: "https://sports.example.com/rss",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+    ]);
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Act – type "TECH" (uppercase) in the search box
+    const searchInput = tree!.root.findByType(TextInput);
+    await act(async () => {
+      searchInput.props.onChangeText("TECH");
+    });
+
+    // Assert – only "Tech Weekly" is shown (case-insensitive match)
+    const techBtn = tree!.root.findByProps({
+      accessibilityLabel: "Open Tech Weekly",
+    });
+    expect(techBtn).toBeTruthy();
+    const sportsBtn = tree!.root.findAllByProps({
+      accessibilityLabel: "Open Sports Daily",
+    });
+    expect(sportsBtn).toHaveLength(0);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows all feeds when search is cleared", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Hacker News",
+        url: "https://hnrss.org/frontpage",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+      {
+        id: 2,
+        title: "The Daily Podcast",
+        url: "https://feeds.simplecast.com/54nAGcIl",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+    ]);
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const searchInput = tree!.root.findByType(TextInput);
+
+    // Act – filter, then clear
+    await act(async () => {
+      searchInput.props.onChangeText("hacker");
+    });
+    await act(async () => {
+      searchInput.props.onChangeText("");
+    });
+
+    // Assert – both feeds are visible again
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Open Hacker News" })
+    ).toBeTruthy();
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Open The Daily Podcast" })
+    ).toBeTruthy();
 
     await act(async () => {
       tree!.unmount();
