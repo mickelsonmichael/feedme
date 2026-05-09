@@ -31,17 +31,6 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
-function fuzzyMatch(query: string, text: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  const t = text.toLowerCase();
-  let qi = 0;
-  for (let i = 0; i < t.length && qi < q.length; i++) {
-    if (t[i] === q[qi]) qi++;
-  }
-  return qi === q.length;
-}
-
 export default function FeedsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = useState<Feed[]>([]);
@@ -70,9 +59,11 @@ export default function FeedsScreen({ navigation }: Props) {
   );
 
   const visibleFeeds = useMemo(() => {
-    if (!search.trim()) return feeds;
+    const q = search.trim().toLowerCase();
+    if (!q) return feeds;
     return feeds.filter(
-      (f) => fuzzyMatch(search, f.title) || fuzzyMatch(search, f.url)
+      (f) =>
+        f.title.toLowerCase().includes(q) || f.url.toLowerCase().includes(q)
     );
   }, [feeds, search]);
 
