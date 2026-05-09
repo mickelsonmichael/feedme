@@ -1,59 +1,71 @@
 # Repository Instructions
 
-This repository contains two projects:
+## Projects
 
-- `app/`: React Native + TypeScript RSS app (Android + Web).
-- `worker/`: Cloudflare Worker backend/service code.
+| Directory | Description |
+|-----------|-------------|
+| `app/` | React Native + TypeScript RSS app (Android + Web) |
+| `worker/` | Cloudflare Worker backend/service code |
 
-These instructions apply across both projects unless a nested `AGENTS.md` provides additional rules.
+**Always `cd` into the relevant project directory before running any scripts or tests.**
+These instructions apply to both projects unless a nested `AGENTS.md` says otherwise.
 
-Before running tests or scripts from package.json, you must change your directory into either `app/` or `worker/`, depending on which you're working on.
+---
 
-## Completing Tasks
+## Hard requirements — a task is NOT complete without all of these
 
-Before considering a task complete, you must have done the following:
+These are gates, not suggestions. Do not open a PR, mark a task done, or stop work until every item is satisfied.
 
-- Plan the work before beginning using the Plan agent. If you have any questions, use the built-in tool for asking the user for clarification
-- **ALWAYS** use the Android emulator to test the Android app. This is non-negotiable — do not skip emulator testing and mark a task complete without it.
-- **ALWAYS** use the embedded web browser to test the web app
-- Add or update tests for the requested changes. Do not "break" any tests - the original tests must still pass unless it is reasonable that they change
-- After the task is completed, use the code quality skill to ensure the code meets the quality standards
+1. **Android emulator verification** — run the app on the emulator using the Expo dev server and attach a screenshot. See the `android-emulator-adb` skill for setup. `start-emulator` must succeed and the app must visibly launch before you proceed.
+2. **Web browser verification** — open the web app in the embedded browser and confirm the relevant behaviour works.
+3. **Tests pass** — all pre-existing tests must still pass. Add or update tests for the changed behaviour. Do not disable or delete tests to make this green.
+4. **Code quality** — run the `code quality` skill before finalising.
 
-You should repeat these steps in whatever order necessary to consider the change a fully implemented, tested, quality change
+> If the emulator fails to boot, fix the boot problem before doing anything else. Do not substitute code reading, test suites, or your own reasoning for live verification on the target platform. Settings persistence, data loading, navigation, and any runtime behaviour can only be confirmed by actually running the app.
 
-> **Important**: Emulator and browser verification must happen for every task, not just "UI changes". Settings persistence, data loading, navigation, and any runtime behaviour can only be verified by actually running the app. Do not substitute code review or test suites for live verification on the target platform.
+---
 
-## Testing
+## Task workflow
 
-- Follow `Arrange - Act - Assert` structure in tests.
-- You should test requirements, not code paths. But you should also test edge and error cases
+Follow these steps in order. Repeat as necessary until the hard requirements above are all satisfied.
 
-## Verification
+1. **Plan** — use the Plan agent before writing any code. If anything is ambiguous, use the ask-user tool before proceeding.
+2. **Implement** — make the change. Stay in scope; do not fix unrelated things.
+3. **Test** — write or update tests following Arrange–Act–Assert. Test requirements and edge cases, not code paths.
+4. **Verify on Android** — `start-emulator` → Expo dev server → confirm the change → `adb exec-out screencap -p > screenshot-android.png`.
+5. **Verify on Web** — open the embedded browser → confirm the change → capture a screenshot.
+6. **Quality check** — run the `code quality` skill.
+7. **Submit** — attach both screenshots to the PR description.
 
-Changes that affect the UI or feed behaviour should be verified on **both platforms**:
+---
 
-- **Android**: Use the Android emulator with the Expo dev server. See the `android-debug` skill for tooling.
-- **Web**: Use the embedded browser.
+## Testing standards
 
-## Curated Discover Feeds
+- Structure: Arrange – Act – Assert.
+- Test requirements and edge/error cases, not implementation details.
+- Do not break existing tests unless the change explicitly requires a behaviour change, and document why in the PR.
 
-Whenever a feed in the Discover screen's curated list is being **added, modified, or removed**, use the `curated-feeds` skill. It covers verifying the feed URL, retrieving and validating the favicon, and the JSON file format.
+---
 
-## Test Feeds
+## Curated Discover feeds
 
-Use these feeds when a feed is needed during development or testing:
+When adding, modifying, or removing a feed from the Discover screen's curated list, follow the `curated-feeds` skill exactly. It covers URL verification, favicon retrieval, and JSON format.
+
+---
+
+## Test feeds
+
+Use these when a feed is needed during development or testing.
 
 | Feed | URL / Description |
-|------|-----------------|
+|------|-------------------|
 | The Daily (podcast) | `https://feeds.simplecast.com/54nAGcIl` |
 | NYT US News | `https://rss.nytimes.com/services/xml/rss/nyt/US.xml` |
 | Reddit: `ama` | Text-focused subreddit |
 | Reddit: `aww` | Image-focused subreddit |
-| Reddit: `gifs` | Gif-focused subreddit |
-| Reddit: `gonewild` | NSFW subreddit (images, galleries, gifs) |
-| YouTube: Atrioc | YouTube: `atrioc` |
-| YouTube: Ludwig | YouTube: `ludwig` |
+| Reddit: `gifs` | GIF-focused subreddit |
+| Reddit: `gonewild` | NSFW subreddit (images, galleries, GIFs) |
+| YouTube: Atrioc | YouTube channel `atrioc` |
+| YouTube: Ludwig | YouTube channel `ludwig` |
 
-If necessary, you should clear the existing feeds to ensure you are starting from a stable state.
-Some changes may require you to find a post with certain characteristics,
-you will need to scroll through the posts until you find one that meets the requirements.
+Clear existing feeds before testing if a clean state is needed. If a post with specific characteristics is required, scroll until you find one — do not assume the first result will qualify.
