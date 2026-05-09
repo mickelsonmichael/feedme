@@ -78,11 +78,11 @@ describe("sortStacked", () => {
   const DAY = 24 * HOUR;
   const MONTH = 30 * DAY;
   const now = () => NOW;
-  // A fixed rng that returns the same offset (0.5) for every feed. This makes
-  // all inter-feed scores equal within the same rank, so ties fall back to
-  // published_at — the same ordering as the original algorithm — allowing all
-  // existing assertions to hold. Tests that specifically exercise the
-  // randomisation behaviour pass their own rng.
+  // A fixed rng that returns the same offset (0.5) for every feed, making the
+  // offset component uniform across feeds. Within the same rank, ties are then
+  // resolved by published_at, matching the original algorithm's tie-breaking
+  // behaviour and allowing all existing assertions to hold. Tests that
+  // specifically exercise the randomisation behaviour pass their own rng.
   const rng = () => 0.5;
 
   it("returns all items without duplicates", () => {
@@ -278,8 +278,8 @@ describe("sortStacked", () => {
       makeItem(11, 2, NOW - 4 * HOUR),
     ];
 
-    // Act — rng that always gives feed 1 a lower offset wins for feed 1.
-    const feedOrder: number[] = [];
+    // Act — rng that gives feed 1 a lower offset places feed 1 first; the
+    // second rng gives feed 2 the lower offset, placing feed 2 first.
     let callCount = 0;
     const rngFavourFeed1 = () => (callCount++ === 0 ? 0.1 : 0.9);
     const resultA = sortStacked(items, now, rngFavourFeed1);
@@ -288,10 +288,8 @@ describe("sortStacked", () => {
     const rngFavourFeed2 = () => (callCount++ === 0 ? 0.9 : 0.1);
     const resultB = sortStacked(items, now, rngFavourFeed2);
 
-    feedOrder.push(resultA[0].feed_id, resultB[0].feed_id);
-
-    // Assert — different rng values should produce different feed at position 0.
-    expect(feedOrder[0]).not.toBe(feedOrder[1]);
+    // Assert — different rng values must produce different feeds at position 0.
+    expect(resultA[0].feed_id).not.toBe(resultB[0].feed_id);
   });
 
   it("does not mutate the original array", () => {
