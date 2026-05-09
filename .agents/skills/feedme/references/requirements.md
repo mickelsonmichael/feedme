@@ -24,6 +24,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDLIST-010 | The default "all feeds" view shall exclude items from feeds flagged `show_only_in_tag`; such items appear only in tag-scoped views. |
 | REQ-FEEDLIST-011 | In card layout, items from NSFW feeds shall show a "Reveal images" overlay instead of unblurred media (images or GIFs); tapping the overlay reveals the media. For GIF posts, tapping reveal also auto-loads the GIF. Reddit galleries use a separate deferred-load mechanism and are excluded from this overlay. |
 | REQ-FEEDLIST-012 | Opening an item's original link via the external-link button shall mark the item as read if it is not already read. |
+| REQ-FEEDLIST-013 | Pressing the Feed tab button while already on the Feed screen shall scroll to the top (and reset any active scope). Pressing it while on any other screen shall navigate to the Feed screen at the same scroll position the user left it at. |
 
 ---
 

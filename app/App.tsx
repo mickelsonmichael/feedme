@@ -400,6 +400,12 @@ function Tabs() {
         }}
         listeners={({ navigation }) => ({
           tabPress: (event) => {
+            if (!navigation.isFocused()) {
+              // Coming from another tab — let the default behavior switch tabs
+              // without resetting params or scrolling to top.
+              return;
+            }
+            // Already on the Feed tab — reset any active scope and scroll to top.
             event.preventDefault();
             navigation.dispatch(
               CommonActions.navigate({
