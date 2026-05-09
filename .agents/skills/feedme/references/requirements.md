@@ -14,7 +14,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 |----|-------------|
 | REQ-FEEDLIST-001 | The feed list shall display items from all subscribed feeds in a single aggregated list. |
 | REQ-FEEDLIST-002 | The user shall be able to switch between "compact" and "card" layout modes. |
-| REQ-FEEDLIST-003 | The user shall be able to sort items by newest-first or stacked mode. |
+| REQ-FEEDLIST-003 | The user shall be able to sort items by newest-first or stacked mode. In stacked mode, feed ordering within the same rank level shall be randomised on every sort call so that no single feed consistently appears first across refreshes. |
 | REQ-FEEDLIST-004 | The user shall be able to filter items to show all, unread only, or saved only. |
 | REQ-FEEDLIST-005 | The user shall be able to expand an item inline to view its media/content without navigating away. |
 | REQ-FEEDLIST-006 | The user shall be able to save or unsave any item from the list. |
