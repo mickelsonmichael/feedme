@@ -1,0 +1,21 @@
+nohup: ignoring input
+Starting project at /home/runner/work/feedme/feedme/app
+Starting Metro Bundler
+
+ ERROR  An unknown error occurred while installing React Native DevTools. Details:
+
+[9273:0510/045808.686904:FATAL:sandbox/linux/suid/client/setuid_sandbox_host.cc:169] The SUID sandbox helper binary was found, but is not configured correctly. Rather than run without sandboxing I'm aborting now. You need to make sure that /home/runner/.cache/dotslash/cb/2a59c5919ce27ef30b55119edf89e556e015ef/React Native DevTools-linux-x64/chrome-sandbox is owned by root and has mode 4755.
+
+The following packages should be updated for best compatibility with the installed expo version:
+  expo@55.0.17 - expected version: ~55.0.23
+  expo-file-system@55.0.16 - expected version: ~55.0.19
+  expo-image@55.0.9 - expected version: ~55.0.10
+  expo-status-bar@55.0.5 - expected version: ~55.0.6
+  expo-web-browser@55.0.14 - expected version: ~55.0.15
+  react-native-safe-area-context@5.7.0 - expected version: ~5.6.2
+  react-native-screens@4.24.0 - expected version: ~4.23.0
+  @types/jest@30.0.0 - expected version: 29.5.14
+  jest-expo@55.0.16 - expected version: ~55.0.17
+Your project may not work correctly until you install the expected versions of the packages.
+Waiting on http://localhost:8081
+Logs for your project will appear below.
