@@ -443,6 +443,15 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             Last fetch: {formatDate(feed.last_fetched)}
           </Text>
 
+          {feed.consecutive_failures && feed.consecutive_failures > 0 ? (
+            <Text style={[styles.lastFetch, { color: colors.inkSoft }]}>
+              Consecutive failures: {feed.consecutive_failures}
+              {feed.next_fetch_at && feed.next_fetch_at > Date.now()
+                ? ` — next retry ${formatDate(feed.next_fetch_at)}`
+                : ""}
+            </Text>
+          ) : null}
+
           <View style={styles.proxyRow}>
             <View style={styles.proxyLabelGroup}>
               <Text style={[styles.label, { color: colors.inkSoft }]}>

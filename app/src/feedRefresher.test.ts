@@ -14,6 +14,9 @@ jest.mock("./database", () => ({
   updateFeedCacheValidators: jest.fn(),
   setFeedError: jest.fn(),
   getItemCountForFeed: jest.fn(),
+  setFeedRefreshSuccess: jest.fn(),
+  setFeedRefreshFailure: jest.fn(),
+  getRecentPublishedAtForFeed: jest.fn(),
 }));
 
 const mockFetchFeedWithMeta = fetchFeedWithMeta as jest.MockedFunction<
@@ -36,6 +39,18 @@ const mockSetFeedError = database.setFeedError as jest.MockedFunction<
 const mockGetItemCountForFeed =
   database.getItemCountForFeed as jest.MockedFunction<
     typeof database.getItemCountForFeed
+  >;
+const mockSetFeedRefreshSuccess =
+  database.setFeedRefreshSuccess as jest.MockedFunction<
+    typeof database.setFeedRefreshSuccess
+  >;
+const mockSetFeedRefreshFailure =
+  database.setFeedRefreshFailure as jest.MockedFunction<
+    typeof database.setFeedRefreshFailure
+  >;
+const mockGetRecentPublishedAtForFeed =
+  database.getRecentPublishedAtForFeed as jest.MockedFunction<
+    typeof database.getRecentPublishedAtForFeed
   >;
 
 const makeFeed = (id: number, overrides: Partial<Feed> = {}): Feed => ({
@@ -69,6 +84,9 @@ beforeEach(() => {
   mockUpdateFeedCacheValidators.mockResolvedValue(undefined);
   mockSetFeedError.mockResolvedValue(undefined);
   mockGetItemCountForFeed.mockResolvedValue(0);
+  mockSetFeedRefreshSuccess.mockResolvedValue(undefined);
+  mockSetFeedRefreshFailure.mockResolvedValue(undefined);
+  mockGetRecentPublishedAtForFeed.mockResolvedValue([]);
 });
 
 describe("refreshFeeds", () => {
@@ -179,6 +197,7 @@ describe("refreshFeeds", () => {
       loading: 2,
       succeeded: 0,
       failed: 0,
+      skipped: 0,
     });
     expect(onProgress).toHaveBeenCalledWith({
       total: 2,
@@ -186,6 +205,7 @@ describe("refreshFeeds", () => {
       loading: 0,
       succeeded: 2,
       failed: 0,
+      skipped: 0,
     });
   });
 
@@ -346,5 +366,120 @@ describe("refreshFeeds", () => {
     expect(onProgress).toHaveBeenLastCalledWith(
       expect.objectContaining({ succeeded: 1, failed: 0, completed: 1 })
     );
+  });
+
+  it("resets consecutive_failures to 0 on a successful 304 response", async () => {
+    // Arrange — feed has a non-zero failure history.
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [],
+      usedProxy: false,
+      notModified: true,
+      etag: '"abc123"',
+      lastModified: null,
+    });
+    const feeds = [
+      makeFeed(1, {
+        etag: '"abc123"',
+        consecutive_failures: 3,
+        fetch_interval_ms: 60 * 60 * 1000,
+      }),
+    ];
+
+    // Act
+    await refreshFeeds(feeds);
+
+    // Assert — success path must call setFeedRefreshSuccess (which resets
+    // consecutive_failures to 0) and not the failure helper.
+    expect(mockSetFeedRefreshSuccess).toHaveBeenCalledTimes(1);
+    expect(mockSetFeedRefreshSuccess).toHaveBeenCalledWith(
+      1,
+      expect.any(Number),
+      expect.any(Number)
+    );
+    expect(mockSetFeedRefreshFailure).not.toHaveBeenCalled();
+  });
+
+  it("skips feeds whose next_fetch_at is in the future and reports them as skipped", async () => {
+    // Arrange — one feed eligible now, one scheduled an hour from now.
+    const now = Date.now();
+    const feeds = [
+      makeFeed(1, { next_fetch_at: 0 }),
+      makeFeed(2, { next_fetch_at: now + 60 * 60 * 1000 }),
+    ];
+    const onProgress = jest.fn();
+
+    // Act
+    const errors = await refreshFeeds(feeds, { onProgress });
+
+    // Assert
+    expect(errors).toBe(0);
+    expect(mockFetchFeedWithMeta).toHaveBeenCalledTimes(1);
+    expect(mockFetchFeedWithMeta).toHaveBeenCalledWith(
+      "https://example.com/feed1",
+      false,
+      undefined,
+      expect.any(Object)
+    );
+    expect(onProgress).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        total: 2,
+        completed: 2,
+        loading: 0,
+        succeeded: 1,
+        skipped: 1,
+        failed: 0,
+      })
+    );
+  });
+
+  it("force: true refreshes every feed regardless of next_fetch_at", async () => {
+    // Arrange — both feeds are scheduled far into the future.
+    const now = Date.now();
+    const feeds = [
+      makeFeed(1, { next_fetch_at: now + 24 * 60 * 60 * 1000 }),
+      makeFeed(2, { next_fetch_at: now + 24 * 60 * 60 * 1000 }),
+    ];
+    const onProgress = jest.fn();
+
+    // Act
+    const errors = await refreshFeeds(feeds, { onProgress, force: true });
+
+    // Assert
+    expect(errors).toBe(0);
+    expect(mockFetchFeedWithMeta).toHaveBeenCalledTimes(2);
+    expect(onProgress).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        total: 2,
+        completed: 2,
+        succeeded: 2,
+        skipped: 0,
+        failed: 0,
+      })
+    );
+  });
+
+  it("on failure increments consecutive_failures and reschedules with backoff", async () => {
+    // Arrange — feed has 2 prior failures and a known interval.
+    mockFetchFeedWithMeta.mockRejectedValue(new Error("boom"));
+    const feeds = [
+      makeFeed(1, {
+        consecutive_failures: 2,
+        fetch_interval_ms: 60 * 60 * 1000, // 1h
+      }),
+    ];
+
+    // Act
+    await refreshFeeds(feeds);
+
+    // Assert — third failure → 1h * 2^3 = 8h backoff
+    expect(mockSetFeedRefreshFailure).toHaveBeenCalledTimes(1);
+    const [feedId, failures, nextFetchAt] =
+      mockSetFeedRefreshFailure.mock.calls[0];
+    expect(feedId).toBe(1);
+    expect(failures).toBe(3);
+    const delay = nextFetchAt - Date.now();
+    // Allow some slack for clock drift between the call and the assertion.
+    expect(delay).toBeGreaterThan(8 * 60 * 60 * 1000 - 5_000);
+    expect(delay).toBeLessThanOrEqual(8 * 60 * 60 * 1000);
   });
 });

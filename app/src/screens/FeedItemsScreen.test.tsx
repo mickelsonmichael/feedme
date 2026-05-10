@@ -6,30 +6,26 @@ import FeedItemsScreen from "../screens/FeedItemsScreen";
 import { RootStackParamList } from "../types";
 import {
   getItemsForFeed,
-  upsertItems,
   markItemRead,
   markItemUnread,
-  updateFeedLastFetched,
   savePost,
   unsavePost,
   getSavedItemIds,
 } from "../database";
-import { fetchFeed } from "../feedParser";
+import { refreshFeeds } from "../feedRefresher";
 import { openUrlWithPreference } from "../linkOpening";
 
 jest.mock("../database", () => ({
   getItemsForFeed: jest.fn(),
-  upsertItems: jest.fn(),
   markItemRead: jest.fn(),
   markItemUnread: jest.fn(),
-  updateFeedLastFetched: jest.fn(),
   savePost: jest.fn(),
   unsavePost: jest.fn(),
   getSavedItemIds: jest.fn(),
 }));
 
-jest.mock("../feedParser", () => ({
-  fetchFeed: jest.fn(),
+jest.mock("../feedRefresher", () => ({
+  refreshFeeds: jest.fn(),
 }));
 
 jest.mock("../context/ThemeContext", () => ({
@@ -130,9 +126,7 @@ describe("FeedItemsScreen – View Raw", () => {
   beforeEach(() => {
     (getItemsForFeed as jest.Mock).mockResolvedValue([mockItem]);
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
-    (fetchFeed as jest.Mock).mockResolvedValue([]);
-    (upsertItems as jest.Mock).mockResolvedValue(undefined);
-    (updateFeedLastFetched as jest.Mock).mockResolvedValue(undefined);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
     (markItemRead as jest.Mock).mockResolvedValue(undefined);
     (markItemUnread as jest.Mock).mockResolvedValue(undefined);
     (savePost as jest.Mock).mockResolvedValue(undefined);

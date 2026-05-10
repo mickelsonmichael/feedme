@@ -14,6 +14,18 @@ export type Feed = {
   /** HTTP `Last-Modified` validator from the last successful refresh, used
    *  for conditional GETs (`If-Modified-Since`). */
   last_modified?: string | null;
+  /** Wall-clock ms after which `refreshFeeds` is allowed to re-fetch this
+   *  feed when not forced. `0` (the post-migration default) and `null` both
+   *  mean "fetch eligible right now". */
+  next_fetch_at?: number | null;
+  /** Number of refresh attempts in a row that have failed. Reset to 0 on
+   *  any successful fetch (200 or 304). Drives the exponential backoff in
+   *  `next_fetch_at`. */
+  consecutive_failures?: number;
+  /** Learned base polling interval in ms — the median gap between recent
+   *  `published_at` values, clamped to `[15 min, 24 h]`. Null until the
+   *  first successful refresh after the migration. */
+  fetch_interval_ms?: number | null;
 };
 
 export type Tag = {

@@ -72,7 +72,10 @@ async function initializeSchema(
       last_fetched INTEGER,
       error TEXT,
       use_proxy INTEGER NOT NULL DEFAULT 0,
-      nsfw INTEGER NOT NULL DEFAULT 0
+      nsfw INTEGER NOT NULL DEFAULT 0,
+      next_fetch_at INTEGER NOT NULL DEFAULT 0,
+      consecutive_failures INTEGER NOT NULL DEFAULT 0,
+      fetch_interval_ms INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS items (
@@ -189,6 +192,32 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
+  // Migration: add adaptive-refresh scheduling columns to feeds.
+  // For pre-existing rows, leave next_fetch_at = 0 so the very next refresh
+  // behaves exactly as it did before the upgrade — only after the first
+  // post-migration successful fetch will we start enforcing per-feed cadence.
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN next_fetch_at INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN consecutive_failures INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN fetch_interval_ms INTEGER"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Indexes: ensure efficient sort/filter for the list screens.
   await database.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_items_published_at ON items(published_at DESC);
@@ -301,6 +330,63 @@ export async function updateFeedCacheValidators(
       [etag, lastModified, feedId]
     )
   );
+}
+
+/**
+ * Persist the post-success state for a feed: clear the failure counter,
+ * remember the learned base interval, and schedule the next eligible
+ * refresh. Called from `refreshFeeds` for both 200 and 304 outcomes.
+ */
+export async function setFeedRefreshSuccess(
+  feedId: number,
+  fetchIntervalMs: number,
+  nextFetchAt: number
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "UPDATE feeds SET fetch_interval_ms = ?, consecutive_failures = 0, next_fetch_at = ? WHERE id = ?",
+      [fetchIntervalMs, nextFetchAt, feedId]
+    )
+  );
+}
+
+/**
+ * Persist the post-failure state for a feed: bump `consecutive_failures`
+ * and push out `next_fetch_at` according to the caller's already-computed
+ * exponential backoff.
+ */
+export async function setFeedRefreshFailure(
+  feedId: number,
+  consecutiveFailures: number,
+  nextFetchAt: number
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "UPDATE feeds SET consecutive_failures = ?, next_fetch_at = ? WHERE id = ?",
+      [consecutiveFailures, nextFetchAt, feedId]
+    )
+  );
+}
+
+/**
+ * Returns the most recent `published_at` timestamps for a feed (newest
+ * first), used by the scheduler to learn that feed's natural cadence.
+ * Bounded by `limit` to keep the query cheap on large podcast back-catalogs.
+ */
+export async function getRecentPublishedAtForFeed(
+  feedId: number,
+  limit: number
+): Promise<number[]> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{ published_at: number | null }>(
+    "SELECT published_at FROM items WHERE feed_id = ? AND published_at IS NOT NULL ORDER BY published_at DESC LIMIT ?",
+    [feedId, limit]
+  );
+  return rows
+    .map((r) => r.published_at)
+    .filter((t): t is number => typeof t === "number");
 }
 
 export async function getItemCountForFeed(feedId: number): Promise<number> {

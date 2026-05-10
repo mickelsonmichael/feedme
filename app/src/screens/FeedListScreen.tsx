@@ -200,9 +200,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
             loading: feedsToRefresh.length,
             succeeded: 0,
             failed: 0,
+            skipped: 0,
           });
           const errors = await refreshFeeds(feedsToRefresh, {
             onProgress: setRefreshProgress,
+            force: false,
           });
           if (errors > 0) {
             Alert.alert("Refresh", `${errors} feed(s) could not be refreshed.`);
@@ -214,6 +216,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             loading: 0,
             succeeded: 0,
             failed: 0,
+            skipped: 0,
           });
         }
 

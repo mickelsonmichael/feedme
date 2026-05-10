@@ -48,6 +48,12 @@ function normalizeFeed(raw: Feed): Feed {
     show_only_in_tag: raw.show_only_in_tag ?? 0,
     etag: raw.etag ?? null,
     last_modified: raw.last_modified ?? null,
+    // Migration: existing rows persisted before adaptive scheduling existed
+    // get next_fetch_at = 0 (eligible immediately) so the first refresh
+    // after the upgrade behaves exactly as it did before.
+    next_fetch_at: raw.next_fetch_at ?? 0,
+    consecutive_failures: raw.consecutive_failures ?? 0,
+    fetch_interval_ms: raw.fetch_interval_ms ?? null,
   };
 }
 
@@ -214,6 +220,9 @@ export async function addFeed({
     show_only_in_tag: show_only_in_tag ?? 0,
     etag: null,
     last_modified: null,
+    next_fetch_at: 0,
+    consecutive_failures: 0,
+    fetch_interval_ms: null,
   };
   state.feeds.push(feed);
   state.nextFeedId = id + 1;
@@ -282,6 +291,50 @@ export async function updateFeedCacheValidators(
     feed.last_modified = lastModified;
     saveState(state);
   }
+}
+
+export async function setFeedRefreshSuccess(
+  feedId: number,
+  fetchIntervalMs: number,
+  nextFetchAt: number
+): Promise<void> {
+  const state = loadState();
+  const feed = state.feeds.find((f) => f.id === feedId);
+  if (feed) {
+    feed.fetch_interval_ms = fetchIntervalMs;
+    feed.consecutive_failures = 0;
+    feed.next_fetch_at = nextFetchAt;
+    saveState(state);
+  }
+}
+
+export async function setFeedRefreshFailure(
+  feedId: number,
+  consecutiveFailures: number,
+  nextFetchAt: number
+): Promise<void> {
+  const state = loadState();
+  const feed = state.feeds.find((f) => f.id === feedId);
+  if (feed) {
+    feed.consecutive_failures = consecutiveFailures;
+    feed.next_fetch_at = nextFetchAt;
+    saveState(state);
+  }
+}
+
+export async function getRecentPublishedAtForFeed(
+  feedId: number,
+  limit: number
+): Promise<number[]> {
+  const state = loadState();
+  const stamps: number[] = [];
+  for (const item of state.items) {
+    if (item.feed_id === feedId && typeof item.published_at === "number") {
+      stamps.push(item.published_at);
+    }
+  }
+  stamps.sort((a, b) => b - a);
+  return stamps.slice(0, limit);
 }
 
 export async function getItemCountForFeed(feedId: number): Promise<number> {
