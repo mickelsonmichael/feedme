@@ -311,9 +311,12 @@ describe("sortStacked", () => {
     // Assert — item 2 (rank-1, score ≈ 1.5) must be last; the rank-0 items
     // (score ≈ 0.5 each) occupy the first two positions.
     expect(result[result.length - 1].id).toBe(2);
-    expect(result.slice(0, 2).map((i) => i.id).sort((a, b) => a - b)).toEqual(
-      [1, 3]
-    );
+    expect(
+      result
+        .slice(0, 2)
+        .map((i) => i.id)
+        .sort((a, b) => a - b)
+    ).toEqual([1, 3]);
   });
 
   it("caps future timestamps in tie-breaking so a far-future item does not automatically beat an item at exactly now", () => {
@@ -324,7 +327,7 @@ describe("sortStacked", () => {
     // (item 2 first). Without the cap, item 1's raw future timestamp would win
     // the tie unconditionally.
     const items = [
-      makeItem(2, 2, NOW),             // exactly now — appears first in input
+      makeItem(2, 2, NOW), // exactly now — appears first in input
       makeItem(1, 1, NOW + 365 * DAY), // far future  — appears second
     ];
 
