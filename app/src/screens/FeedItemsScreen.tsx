@@ -15,15 +15,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   getItemsForFeed,
-  upsertItems,
   markItemRead,
   markItemUnread,
-  updateFeedLastFetched,
   savePost,
   unsavePost,
   getSavedItemIds,
 } from "../database";
-import { fetchFeed } from "../feedParser";
+import { refreshFeeds } from "../feedRefresher";
 import { FeedItem, RootStackParamList } from "../types";
 import { toggleExpandedId } from "../expandItemIds";
 import { MetaText } from "../components/ui";
@@ -67,12 +65,13 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      const fetched = await fetchFeed(feed.url);
-      await upsertItems(feed.id, fetched);
-      await updateFeedLastFetched(feed.id);
+      // Explicit single-feed refresh: bypass adaptive scheduling so the
+      // user actually gets a fresh fetch even if the feed is in backoff.
+      const errors = await refreshFeeds([feed], { force: true });
+      if (errors > 0) {
+        Alert.alert("Refresh Error", "Failed to refresh feed.");
+      }
       await loadItems();
-    } catch (err) {
-      Alert.alert("Refresh Error", (err as Error).message);
     } finally {
       setRefreshing(false);
     }
