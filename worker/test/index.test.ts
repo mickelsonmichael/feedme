@@ -187,4 +187,53 @@ describe('RSS proxy worker', () => {
 		expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
 		expect(await response.text()).toBe('<rss />');
 	});
+
+	it('forwards If-None-Match and If-Modified-Since to upstream', async () => {
+		// Arrange
+		const worker = await loadWorker();
+		const upstreamResponse = new Response('<rss />', { status: 200 });
+		const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(upstreamResponse);
+		const request = makeRequest('https://proxy.test/?url=https://example.com/feed.xml', {
+			headers: {
+				origin: ALLOWED_ORIGIN,
+				'If-None-Match': '"abc123"',
+				'If-Modified-Since': 'Wed, 01 Jan 2025 00:00:00 GMT',
+			},
+		});
+
+		// Act
+		await runFetch(worker, request);
+
+		// Assert
+		expect(fetchSpy).toHaveBeenCalledTimes(1);
+		const init = fetchSpy.mock.calls[0][1] as RequestInit;
+		const forwarded = new Headers(init.headers as HeadersInit);
+		expect(forwarded.get('If-None-Match')).toBe('"abc123"');
+		expect(forwarded.get('If-Modified-Since')).toBe('Wed, 01 Jan 2025 00:00:00 GMT');
+	});
+
+	it('passes through 304 responses with CORS headers attached', async () => {
+		// Arrange
+		const worker = await loadWorker();
+		const upstreamResponse = new Response(null, {
+			status: 304,
+			headers: { ETag: '"abc123"' },
+		});
+		vi.spyOn(globalThis, 'fetch').mockResolvedValue(upstreamResponse);
+		const request = makeRequest('https://proxy.test/?url=https://example.com/feed.xml', {
+			headers: {
+				origin: ALLOWED_ORIGIN,
+				'If-None-Match': '"abc123"',
+			},
+		});
+
+		// Act
+		const response = await runFetch(worker, request);
+
+		// Assert
+		expect(response.status).toBe(304);
+		expect(response.headers.get('Access-Control-Allow-Origin')).toBe(ALLOWED_ORIGIN);
+		expect(response.headers.get('Access-Control-Allow-Methods')).toBe('GET, OPTIONS');
+		expect(response.headers.get('ETag')).toBe('"abc123"');
+	});
 });

@@ -441,6 +441,8 @@ describe("fetchFeedWithMeta", () => {
   let mockXhr: {
     open: jest.Mock;
     send: jest.Mock;
+    setRequestHeader: jest.Mock;
+    getResponseHeader: jest.Mock;
     timeout: number;
     ontimeout: (() => void) | null;
     onerror: (() => void) | null;
@@ -448,12 +450,23 @@ describe("fetchFeedWithMeta", () => {
     status: number;
     statusText: string;
     responseText: string;
+    responseHeaders: Record<string, string>;
   };
 
   beforeEach(() => {
     mockXhr = {
       open: jest.fn(),
       send: jest.fn(),
+      setRequestHeader: jest.fn(function (this: typeof mockXhr, name, value) {
+        // no-op; calls captured via jest.fn for assertions
+      }) as jest.Mock,
+      getResponseHeader: jest.fn(function (this: typeof mockXhr, name: string) {
+        const lower = name.toLowerCase();
+        for (const [key, value] of Object.entries(mockXhr.responseHeaders)) {
+          if (key.toLowerCase() === lower) return value;
+        }
+        return null;
+      }) as jest.Mock,
       timeout: 0,
       ontimeout: null,
       onerror: null,
@@ -461,6 +474,7 @@ describe("fetchFeedWithMeta", () => {
       status: 200,
       statusText: "OK",
       responseText: "",
+      responseHeaders: {},
     };
     (globalThis as unknown as Record<string, unknown>).XMLHttpRequest = jest.fn(
       () => mockXhr
@@ -538,5 +552,121 @@ describe("fetchFeedWithMeta", () => {
     await expect(promise).rejects.toThrow(
       "Failed to fetch feed: 404 Not Found"
     );
+  });
+
+  it("sends If-None-Match header when an etag is supplied", async () => {
+    // Arrange
+    mockXhr.responseText = RSS_FEED;
+
+    // Act
+    const promise = fetchFeedWithMeta(
+      "https://example.com/feed.xml",
+      undefined,
+      undefined,
+      { etag: '"abc123"' }
+    );
+    mockXhr.onload?.();
+    await promise;
+
+    // Assert
+    expect(mockXhr.setRequestHeader).toHaveBeenCalledWith(
+      "If-None-Match",
+      '"abc123"'
+    );
+  });
+
+  it("sends If-Modified-Since header when lastModified is supplied", async () => {
+    // Arrange
+    mockXhr.responseText = RSS_FEED;
+    const lastModified = "Wed, 01 Jan 2025 00:00:00 GMT";
+
+    // Act
+    const promise = fetchFeedWithMeta(
+      "https://example.com/feed.xml",
+      undefined,
+      undefined,
+      { lastModified }
+    );
+    mockXhr.onload?.();
+    await promise;
+
+    // Assert
+    expect(mockXhr.setRequestHeader).toHaveBeenCalledWith(
+      "If-Modified-Since",
+      lastModified
+    );
+  });
+
+  it("omits validator headers when force is true", async () => {
+    // Arrange
+    mockXhr.responseText = RSS_FEED;
+
+    // Act
+    const promise = fetchFeedWithMeta(
+      "https://example.com/feed.xml",
+      undefined,
+      undefined,
+      {
+        etag: '"abc123"',
+        lastModified: "Wed, 01 Jan 2025 00:00:00 GMT",
+        force: true,
+      }
+    );
+    mockXhr.onload?.();
+    await promise;
+
+    // Assert — no conditional headers at all
+    expect(mockXhr.setRequestHeader).not.toHaveBeenCalledWith(
+      "If-None-Match",
+      expect.anything()
+    );
+    expect(mockXhr.setRequestHeader).not.toHaveBeenCalledWith(
+      "If-Modified-Since",
+      expect.anything()
+    );
+  });
+
+  it("captures ETag and Last-Modified from a 200 response", async () => {
+    // Arrange
+    mockXhr.responseText = RSS_FEED;
+    mockXhr.responseHeaders = {
+      ETag: '"newtag"',
+      "Last-Modified": "Thu, 02 Jan 2025 00:00:00 GMT",
+    };
+
+    // Act
+    const promise = fetchFeedWithMeta("https://example.com/feed.xml");
+    mockXhr.onload?.();
+    const result = await promise;
+
+    // Assert
+    expect(result.notModified).toBe(false);
+    expect(result.etag).toBe('"newtag"');
+    expect(result.lastModified).toBe("Thu, 02 Jan 2025 00:00:00 GMT");
+    expect(result.items).toHaveLength(2);
+  });
+
+  it("resolves with notModified:true and skips parsing on a 304 response", async () => {
+    // Arrange — 304 must not carry a body, but we set responseText to assert
+    // the parser is never invoked (would otherwise yield items)
+    mockXhr.status = 304;
+    mockXhr.statusText = "Not Modified";
+    mockXhr.responseText = RSS_FEED;
+    mockXhr.responseHeaders = { ETag: '"abc123"' };
+
+    // Act
+    const promise = fetchFeedWithMeta(
+      "https://example.com/feed.xml",
+      undefined,
+      undefined,
+      { etag: '"abc123"' }
+    );
+    mockXhr.onload?.();
+    const result = await promise;
+
+    // Assert
+    expect(result.notModified).toBe(true);
+    expect(result.items).toEqual([]);
+    expect(result.etag).toBe('"abc123"');
   });
 });

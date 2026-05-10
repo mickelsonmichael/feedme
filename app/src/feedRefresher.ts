@@ -1,9 +1,10 @@
 import { Feed } from "./types";
-import { fetchFeed } from "./feedParser";
+import { fetchFeedWithMeta } from "./feedParser";
 import {
   getItemCountForFeed,
   setFeedError,
   upsertItems,
+  updateFeedCacheValidators,
   updateFeedLastFetched,
 } from "./database";
 
@@ -70,8 +71,29 @@ export async function refreshFeeds(
     // the wall-clock timeout fires first.
     const work = (async (): Promise<void> => {
       try {
-        const fetched = await fetchFeed(feed.url, feed.use_proxy === 1);
-        await upsertItems(feed.id, fetched.slice(0, MAX_ITEMS_PER_FEED));
+        const fetched = await fetchFeedWithMeta(
+          feed.url,
+          feed.use_proxy === 1,
+          undefined,
+          {
+            etag: feed.etag ?? null,
+            lastModified: feed.last_modified ?? null,
+          }
+        );
+        if (fetched.notModified) {
+          // Upstream confirms the feed is unchanged. Bump last_fetched and
+          // clear any prior error, but leave items and validators alone.
+          await updateFeedLastFetched(feed.id);
+          await setFeedError(feed.id, null);
+          succeeded += 1;
+          return;
+        }
+        await upsertItems(feed.id, fetched.items.slice(0, MAX_ITEMS_PER_FEED));
+        await updateFeedCacheValidators(
+          feed.id,
+          fetched.etag ?? null,
+          fetched.lastModified ?? null
+        );
         await updateFeedLastFetched(feed.id);
         await setFeedError(feed.id, null);
         succeeded += 1;

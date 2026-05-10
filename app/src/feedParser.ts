@@ -4,6 +4,23 @@ import { buildProxyRequestUrl, isLikelyCorsBlockedError } from "./proxyFetch";
 export type FetchFeedResult = {
   items: ParsedFeedItem[];
   usedProxy: boolean;
+  /** True when the upstream returned 304 Not Modified. The caller should
+   *  retain its existing items and only bump the last-fetched timestamp. */
+  notModified?: boolean;
+  /** Latest `ETag` response header from a 200 response, if any. */
+  etag?: string | null;
+  /** Latest `Last-Modified` response header from a 200 response, if any. */
+  lastModified?: string | null;
+};
+
+export type FetchFeedOptions = {
+  /** Last seen `ETag` to send as `If-None-Match`. */
+  etag?: string | null;
+  /** Last seen `Last-Modified` to send as `If-Modified-Since`. */
+  lastModified?: string | null;
+  /** When true, omit both validator headers so the caller always receives
+   *  a fresh body. */
+  force?: boolean;
 };
 
 const FETCH_TIMEOUT_MS = 10_000;
@@ -20,26 +37,54 @@ export async function fetchFeed(
   return items;
 }
 
+type XhrResult = {
+  status: number;
+  body: string;
+  etag: string | null;
+  lastModified: string | null;
+};
+
 export async function fetchFeedWithMeta(
   feedUrl: string,
   forceProxy?: boolean,
-  timeoutMs = FETCH_TIMEOUT_MS
+  timeoutMs = FETCH_TIMEOUT_MS,
+  options: FetchFeedOptions = {}
 ): Promise<FetchFeedResult> {
   // Use XMLHttpRequest so that `xhr.timeout` is enforced at the native
   // (OkHttp / NSURLSession) level. This fires independently of the JS event
   // loop, unlike setTimeout-based AbortController which can be starved when
   // the network layer is streaming a large body.
+  //
+  // React Native's XHR (built on OkHttp/NSURLSession) does not enable the
+  // shared HTTP cache by default, so a `304 Not Modified` from upstream
+  // surfaces directly as `xhr.status === 304` instead of being silently
+  // promoted to a 200 with a cached body. Browsers behave the same way for
+  // requests carrying a manually-set `If-None-Match` / `If-Modified-Since`.
   const proxyUrl = buildProxyRequestUrl(feedUrl);
+  const sendValidators = !options.force;
+  const ifNoneMatch = sendValidators ? options.etag : null;
+  const ifModifiedSince = sendValidators ? options.lastModified : null;
 
-  const xhrFetch = (url: string): Promise<string> =>
+  const xhrFetch = (url: string): Promise<XhrResult> =>
     new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.timeout = timeoutMs;
       xhr.ontimeout = () => reject(new Error("Request timed out"));
       xhr.onerror = () => reject(new Error("Network request failed"));
       xhr.onload = () => {
+        const etag = xhr.getResponseHeader?.("ETag") ?? null;
+        const lastModified = xhr.getResponseHeader?.("Last-Modified") ?? null;
+        if (xhr.status === 304) {
+          resolve({ status: 304, body: "", etag, lastModified });
+          return;
+        }
         if (xhr.status >= 200 && xhr.status < 300) {
-          resolve(xhr.responseText);
+          resolve({
+            status: xhr.status,
+            body: xhr.responseText,
+            etag,
+            lastModified,
+          });
         } else {
           reject(
             new Error(`Failed to fetch feed: ${xhr.status} ${xhr.statusText}`)
@@ -47,18 +92,45 @@ export async function fetchFeedWithMeta(
         }
       };
       xhr.open("GET", url);
+      if (ifNoneMatch) {
+        xhr.setRequestHeader("If-None-Match", ifNoneMatch);
+      }
+      if (ifModifiedSince) {
+        xhr.setRequestHeader("If-Modified-Since", ifModifiedSince);
+      }
       xhr.send();
     });
 
+  const toResult = (xhr: XhrResult, usedProxy: boolean): FetchFeedResult => {
+    if (xhr.status === 304) {
+      return {
+        items: [],
+        usedProxy,
+        notModified: true,
+        // Preserve the validators we already had so the caller can leave them
+        // in place. Some servers also re-send ETag/Last-Modified on 304s.
+        etag: xhr.etag ?? options.etag ?? null,
+        lastModified: xhr.lastModified ?? options.lastModified ?? null,
+      };
+    }
+    return {
+      items: parseFeed(xhr.body),
+      usedProxy,
+      notModified: false,
+      etag: xhr.etag,
+      lastModified: xhr.lastModified,
+    };
+  };
+
   if (forceProxy && proxyUrl) {
-    return { items: parseFeed(await xhrFetch(proxyUrl)), usedProxy: true };
+    return toResult(await xhrFetch(proxyUrl), true);
   }
 
   try {
-    return { items: parseFeed(await xhrFetch(feedUrl)), usedProxy: false };
+    return toResult(await xhrFetch(feedUrl), false);
   } catch (error) {
     if (proxyUrl && isLikelyCorsBlockedError(error)) {
-      return { items: parseFeed(await xhrFetch(proxyUrl)), usedProxy: true };
+      return toResult(await xhrFetch(proxyUrl), true);
     }
     throw error;
   }

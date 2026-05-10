@@ -8,6 +8,12 @@ export type Feed = {
   use_proxy?: number;
   nsfw?: number;
   show_only_in_tag?: number;
+  /** HTTP `ETag` validator from the last successful refresh, used for
+   *  conditional GETs (`If-None-Match`). */
+  etag?: string | null;
+  /** HTTP `Last-Modified` validator from the last successful refresh, used
+   *  for conditional GETs (`If-Modified-Since`). */
+  last_modified?: string | null;
 };
 
 export type Tag = {

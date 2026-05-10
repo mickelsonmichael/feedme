@@ -1,27 +1,34 @@
 import { refreshFeeds } from "./feedRefresher";
-import { fetchFeed } from "./feedParser";
+import { fetchFeedWithMeta } from "./feedParser";
 import * as database from "./database";
 import { Feed, ParsedFeedItem } from "./types";
 
 // Mock network and database calls so tests run offline and touch no real storage
 jest.mock("./feedParser", () => ({
-  fetchFeed: jest.fn(),
+  fetchFeedWithMeta: jest.fn(),
 }));
 
 jest.mock("./database", () => ({
   upsertItems: jest.fn(),
   updateFeedLastFetched: jest.fn(),
+  updateFeedCacheValidators: jest.fn(),
   setFeedError: jest.fn(),
   getItemCountForFeed: jest.fn(),
 }));
 
-const mockFetchFeed = fetchFeed as jest.MockedFunction<typeof fetchFeed>;
+const mockFetchFeedWithMeta = fetchFeedWithMeta as jest.MockedFunction<
+  typeof fetchFeedWithMeta
+>;
 const mockUpsertItems = database.upsertItems as jest.MockedFunction<
   typeof database.upsertItems
 >;
 const mockUpdateFeedLastFetched =
   database.updateFeedLastFetched as jest.MockedFunction<
     typeof database.updateFeedLastFetched
+  >;
+const mockUpdateFeedCacheValidators =
+  database.updateFeedCacheValidators as jest.MockedFunction<
+    typeof database.updateFeedCacheValidators
   >;
 const mockSetFeedError = database.setFeedError as jest.MockedFunction<
   typeof database.setFeedError
@@ -31,13 +38,14 @@ const mockGetItemCountForFeed =
     typeof database.getItemCountForFeed
   >;
 
-const makeFeed = (id: number): Feed => ({
+const makeFeed = (id: number, overrides: Partial<Feed> = {}): Feed => ({
   id,
   title: `Feed ${id}`,
   url: `https://example.com/feed${id}`,
   description: null,
   last_fetched: null,
   error: null,
+  ...overrides,
 });
 
 const parsedItem: ParsedFeedItem = {
@@ -49,9 +57,16 @@ const parsedItem: ParsedFeedItem = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockFetchFeed.mockResolvedValue([parsedItem]);
+  mockFetchFeedWithMeta.mockResolvedValue({
+    items: [parsedItem],
+    usedProxy: false,
+    notModified: false,
+    etag: null,
+    lastModified: null,
+  });
   mockUpsertItems.mockResolvedValue(undefined);
   mockUpdateFeedLastFetched.mockResolvedValue(undefined);
+  mockUpdateFeedCacheValidators.mockResolvedValue(undefined);
   mockSetFeedError.mockResolvedValue(undefined);
   mockGetItemCountForFeed.mockResolvedValue(0);
 });
@@ -65,7 +80,7 @@ describe("refreshFeeds", () => {
 
     // Assert
     expect(errors).toBe(0);
-    expect(mockFetchFeed).not.toHaveBeenCalled();
+    expect(mockFetchFeedWithMeta).not.toHaveBeenCalled();
     expect(mockUpsertItems).not.toHaveBeenCalled();
   });
 
@@ -78,14 +93,18 @@ describe("refreshFeeds", () => {
 
     // Assert
     expect(errors).toBe(0);
-    expect(mockFetchFeed).toHaveBeenCalledTimes(2);
-    expect(mockFetchFeed).toHaveBeenCalledWith(
+    expect(mockFetchFeedWithMeta).toHaveBeenCalledTimes(2);
+    expect(mockFetchFeedWithMeta).toHaveBeenCalledWith(
       "https://example.com/feed1",
-      false
+      false,
+      undefined,
+      { etag: null, lastModified: null }
     );
-    expect(mockFetchFeed).toHaveBeenCalledWith(
+    expect(mockFetchFeedWithMeta).toHaveBeenCalledWith(
       "https://example.com/feed2",
-      false
+      false,
+      undefined,
+      { etag: null, lastModified: null }
     );
     expect(mockUpsertItems).toHaveBeenCalledTimes(2);
     expect(mockUpsertItems).toHaveBeenCalledWith(1, [parsedItem]);
@@ -101,10 +120,22 @@ describe("refreshFeeds", () => {
   it("counts individual feed failures without throwing", async () => {
     // Arrange
     const feeds = [makeFeed(1), makeFeed(2), makeFeed(3)];
-    mockFetchFeed
-      .mockResolvedValueOnce([parsedItem]) // feed 1 succeeds
+    mockFetchFeedWithMeta
+      .mockResolvedValueOnce({
+        items: [parsedItem],
+        usedProxy: false,
+        notModified: false,
+        etag: null,
+        lastModified: null,
+      }) // feed 1 succeeds
       .mockRejectedValueOnce(new Error("Network error")) // feed 2 fails
-      .mockResolvedValueOnce([parsedItem]); // feed 3 succeeds
+      .mockResolvedValueOnce({
+        items: [parsedItem],
+        usedProxy: false,
+        notModified: false,
+        etag: null,
+        lastModified: null,
+      }); // feed 3 succeeds
 
     // Act
     const errors = await refreshFeeds(feeds);
@@ -120,7 +151,7 @@ describe("refreshFeeds", () => {
   it("returns the total error count when all feeds fail", async () => {
     // Arrange
     const feeds = [makeFeed(1), makeFeed(2)];
-    mockFetchFeed.mockRejectedValue(new Error("Offline"));
+    mockFetchFeedWithMeta.mockRejectedValue(new Error("Offline"));
 
     // Act
     const errors = await refreshFeeds(feeds);
@@ -161,7 +192,7 @@ describe("refreshFeeds", () => {
   it("keeps failed feed errors but notes cached fallback when available", async () => {
     // Arrange
     const feeds = [makeFeed(1)];
-    mockFetchFeed.mockRejectedValue(new Error("Offline"));
+    mockFetchFeedWithMeta.mockRejectedValue(new Error("Offline"));
     mockGetItemCountForFeed.mockResolvedValue(3);
 
     // Act
@@ -205,7 +236,13 @@ describe("refreshFeeds", () => {
       { length: 200 },
       (_, i) => ({ ...parsedItem, url: `https://example.com/article${i}` })
     );
-    mockFetchFeed.mockResolvedValue(lotsOfItems);
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: lotsOfItems,
+      usedProxy: false,
+      notModified: false,
+      etag: null,
+      lastModified: null,
+    });
     const feeds = [makeFeed(1)];
 
     // Act
@@ -222,7 +259,7 @@ describe("refreshFeeds", () => {
   it("marks a feed as failed and advances progress when refresh exceeds REFRESH_ONE_TIMEOUT_MS", async () => {
     // Arrange — fetchFeed never resolves (simulates a hung network request)
     jest.useFakeTimers();
-    mockFetchFeed.mockImplementation(() => new Promise(() => {}));
+    mockFetchFeedWithMeta.mockImplementation(() => new Promise(() => {}));
     const feeds = [makeFeed(1)];
     const onProgress = jest.fn();
 
@@ -237,5 +274,77 @@ describe("refreshFeeds", () => {
       expect.objectContaining({ completed: 1, loading: 0 })
     );
     jest.useRealTimers();
+  });
+
+  it("forwards stored etag/last_modified to fetchFeedWithMeta", async () => {
+    // Arrange
+    const feeds = [
+      makeFeed(1, {
+        etag: '"abc123"',
+        last_modified: "Wed, 01 Jan 2025 00:00:00 GMT",
+      }),
+    ];
+
+    // Act
+    await refreshFeeds(feeds);
+
+    // Assert
+    expect(mockFetchFeedWithMeta).toHaveBeenCalledWith(
+      "https://example.com/feed1",
+      false,
+      undefined,
+      {
+        etag: '"abc123"',
+        lastModified: "Wed, 01 Jan 2025 00:00:00 GMT",
+      }
+    );
+  });
+
+  it("persists ETag and Last-Modified after a successful 200 refresh", async () => {
+    // Arrange
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [parsedItem],
+      usedProxy: false,
+      notModified: false,
+      etag: '"newtag"',
+      lastModified: "Thu, 02 Jan 2025 00:00:00 GMT",
+    });
+    const feeds = [makeFeed(1)];
+
+    // Act
+    await refreshFeeds(feeds);
+
+    // Assert
+    expect(mockUpdateFeedCacheValidators).toHaveBeenCalledWith(
+      1,
+      '"newtag"',
+      "Thu, 02 Jan 2025 00:00:00 GMT"
+    );
+  });
+
+  it("counts a 304 Not Modified result as success without upserting items", async () => {
+    // Arrange
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [],
+      usedProxy: false,
+      notModified: true,
+      etag: '"abc123"',
+      lastModified: null,
+    });
+    const feeds = [makeFeed(1, { etag: '"abc123"', last_modified: null })];
+    const onProgress = jest.fn();
+
+    // Act
+    const errors = await refreshFeeds(feeds, { onProgress });
+
+    // Assert
+    expect(errors).toBe(0);
+    expect(mockUpsertItems).not.toHaveBeenCalled();
+    expect(mockUpdateFeedCacheValidators).not.toHaveBeenCalled();
+    expect(mockUpdateFeedLastFetched).toHaveBeenCalledWith(1);
+    expect(mockSetFeedError).toHaveBeenCalledWith(1, null);
+    expect(onProgress).toHaveBeenLastCalledWith(
+      expect.objectContaining({ succeeded: 1, failed: 0, completed: 1 })
+    );
   });
 });
