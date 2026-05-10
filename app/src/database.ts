@@ -175,6 +175,20 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
+  // Migration: add etag column to feeds if it doesn't exist yet
+  try {
+    await database.execAsync("ALTER TABLE feeds ADD COLUMN etag TEXT");
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Migration: add last_modified column to feeds if it doesn't exist yet
+  try {
+    await database.execAsync("ALTER TABLE feeds ADD COLUMN last_modified TEXT");
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Indexes: ensure efficient sort/filter for the list screens.
   await database.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_items_published_at ON items(published_at DESC);
@@ -272,6 +286,20 @@ export async function setFeedError(
       error,
       feedId,
     ])
+  );
+}
+
+export async function updateFeedCacheValidators(
+  feedId: number,
+  etag: string | null,
+  lastModified: string | null
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "UPDATE feeds SET etag = ?, last_modified = ? WHERE id = ?",
+      [etag, lastModified, feedId]
+    )
   );
 }
 

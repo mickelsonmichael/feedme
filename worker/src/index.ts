@@ -62,14 +62,25 @@ const worker: ExportedHandler<Env> = {
 			return new Response('Target not allowed', { status: 400 });
 		}
 
-		// Fetch the target
+		// Fetch the target, forwarding cache-validator headers so upstream can
+		// reply with 304 Not Modified and skip sending an unchanged body.
+		const upstreamHeaders: Record<string, string> = {
+			'User-Agent': 'Mozilla/5.0 (compatible; RSSReader/1.0)',
+			Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
+		};
+		const ifNoneMatch = request.headers.get('If-None-Match');
+		if (ifNoneMatch) {
+			upstreamHeaders['If-None-Match'] = ifNoneMatch;
+		}
+		const ifModifiedSince = request.headers.get('If-Modified-Since');
+		if (ifModifiedSince) {
+			upstreamHeaders['If-Modified-Since'] = ifModifiedSince;
+		}
+
 		let response: Response;
 		try {
 			response = await fetch(target, {
-				headers: {
-					'User-Agent': 'Mozilla/5.0 (compatible; RSSReader/1.0)',
-					Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
-				},
+				headers: upstreamHeaders,
 				redirect: 'follow',
 			});
 		} catch {
@@ -78,13 +89,18 @@ const worker: ExportedHandler<Env> = {
 
 		console.log(`Proxied request to ${target} from origin ${origin}, response status: ${response.status}`);
 
-		// Stream the response back with CORS headers added
+		// Stream the response back with CORS headers added. CORS headers must be
+		// applied to 304 responses too — without them browsers drop the response
+		// and fail the request, defeating the conditional GET.
 		const newHeaders = new Headers(response.headers);
 		newHeaders.set('Access-Control-Allow-Origin', allowOrigin);
 		newHeaders.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
 		newHeaders.set('Vary', 'Origin');
 
-		return new Response(response.body, {
+		// 304 responses must not carry a body per RFC 9110 §15.4.5.
+		const body = response.status === 304 ? null : response.body;
+
+		return new Response(body, {
 			status: response.status,
 			headers: newHeaders,
 		});

@@ -46,6 +46,8 @@ function normalizeFeed(raw: Feed): Feed {
     use_proxy: raw.use_proxy ?? 0,
     nsfw: raw.nsfw ?? 0,
     show_only_in_tag: raw.show_only_in_tag ?? 0,
+    etag: raw.etag ?? null,
+    last_modified: raw.last_modified ?? null,
   };
 }
 
@@ -210,6 +212,8 @@ export async function addFeed({
     use_proxy: use_proxy ?? 0,
     nsfw: nsfw ?? 0,
     show_only_in_tag: show_only_in_tag ?? 0,
+    etag: null,
+    last_modified: null,
   };
   state.feeds.push(feed);
   state.nextFeedId = id + 1;
@@ -262,6 +266,20 @@ export async function setFeedError(
   const feed = state.feeds.find((f) => f.id === feedId);
   if (feed) {
     feed.error = error;
+    saveState(state);
+  }
+}
+
+export async function updateFeedCacheValidators(
+  feedId: number,
+  etag: string | null,
+  lastModified: string | null
+): Promise<void> {
+  const state = loadState();
+  const feed = state.feeds.find((f) => f.id === feedId);
+  if (feed) {
+    feed.etag = etag;
+    feed.last_modified = lastModified;
     saveState(state);
   }
 }
