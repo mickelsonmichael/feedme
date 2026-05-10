@@ -123,8 +123,7 @@ function parseRss(
       content: description ?? null,
       imageUrl: extractImageUrl(block, description) ?? null,
       rawXml,
-      publishedAt:
-        parsedTs !== null ? Math.min(parsedTs, now()) : null,
+      publishedAt: parsedTs !== null ? Math.min(parsedTs, now()) : null,
     });
   }
   return items;
@@ -156,8 +155,7 @@ function parseAtom(
       content: content ?? null,
       imageUrl: extractImageUrl(block, content) ?? null,
       rawXml,
-      publishedAt:
-        parsedTs !== null ? Math.min(parsedTs, now()) : null,
+      publishedAt: parsedTs !== null ? Math.min(parsedTs, now()) : null,
     });
   }
   return items;
