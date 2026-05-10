@@ -111,6 +111,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const flatListRef = useRef<FlashListRef<FeedItemWithFeed>>(null);
 
+  // Stable seed for the stacked-sort RNG. Generated once and reset only when
+  // loadData fetches a fresh list from the database. This prevents the random
+  // per-feed offsets from being regenerated on every in-place item update (e.g.
+  // marking an item as read), which was causing the feed to shuffle on read.
+  const sortSeedRef = useRef(Math.random());
+
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
     minimumViewTime: 400,
@@ -217,6 +223,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
           getFeedTagMap(),
         ]);
         const readLaterIdsLoaded = await getReadLaterItemIds();
+        // Generate a new sort seed so the stacked-sort ordering changes on
+        // each fresh load while remaining stable for in-place updates (e.g.
+        // marking an item read) within the same session.
+        sortSeedRef.current = Math.random();
         setItems(itemData);
         setSavedIds(ids);
         setReadLaterIds(readLaterIdsLoaded);
@@ -598,10 +608,18 @@ export default function FeedListScreen({ navigation, route }: Props) {
     });
   }, [scopedItems, hasSearch, searchHaystacks, normalizedSearch]);
 
-  const sortedItems = useMemo(
-    () => applySortMode(searchedItems, sort),
-    [searchedItems, sort]
-  );
+  const sortedItems = useMemo(() => {
+    // Build a deterministic LCG RNG from the stable per-session seed so that
+    // the stacked sort produces the same feed ordering for every re-render
+    // within a session (e.g. after marking an item as read). The seed is only
+    // rotated inside loadData, ensuring the order genuinely varies per reload.
+    let s = (sortSeedRef.current * 0x100000000) >>> 0;
+    const stableRng = () => {
+      s = Math.imul(s, 1664525) + 1013904223;
+      return (s >>> 0) / 0x100000000;
+    };
+    return applySortMode(searchedItems, sort, undefined, stableRng);
+  }, [searchedItems, sort]);
 
   const visibleItems = useMemo(() => {
     const filtered = applyFilter(sortedItems, filter, savedIds);
