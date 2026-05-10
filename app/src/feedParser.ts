@@ -66,13 +66,21 @@ export async function fetchFeedWithMeta(
 
 /**
  * Parses RSS 2.0 or Atom feed XML and extracts title and feed entries.
+ *
+ * @param now - Optional clock function (defaults to Date.now) used to cap
+ *   future-dated timestamps to the current time. Inject a deterministic
+ *   function in tests.
  */
-export function parseFeed(xml: string, maxItems = 100): ParsedFeedItem[] {
+export function parseFeed(
+  xml: string,
+  maxItems = 100,
+  now: () => number = Date.now
+): ParsedFeedItem[] {
   const isAtom = /<feed[^>]*xmlns[^>]*>/i.test(xml);
   if (isAtom) {
-    return parseAtom(xml, maxItems);
+    return parseAtom(xml, maxItems, now);
   }
-  return parseRss(xml, maxItems);
+  return parseRss(xml, maxItems, now);
 }
 
 /**
@@ -93,7 +101,11 @@ export function extractFeedTitle(xml: string): string {
 
 // ── RSS 2.0 ────────────────────────────────────────────────────────────────
 
-function parseRss(xml: string, maxItems = 100): ParsedFeedItem[] {
+function parseRss(
+  xml: string,
+  maxItems = 100,
+  now: () => number = Date.now
+): ParsedFeedItem[] {
   const items: ParsedFeedItem[] = [];
   const itemRegex = /<item[^>]*>([\s\S]*?)<\/item>/gi;
   let match;
@@ -104,13 +116,15 @@ function parseRss(xml: string, maxItems = 100): ParsedFeedItem[] {
     const link = extractTagText(block, "link") ?? extractTagText(block, "guid");
     const description = extractCData(block, "description");
     const pubDate = extractTagText(block, "pubDate");
+    const parsedTs = pubDate ? new Date(pubDate).getTime() : null;
     items.push({
       title,
       url: link ?? null,
       content: description ?? null,
       imageUrl: extractImageUrl(block, description) ?? null,
       rawXml,
-      publishedAt: pubDate ? new Date(pubDate).getTime() : null,
+      publishedAt:
+        parsedTs !== null ? Math.min(parsedTs, now()) : null,
     });
   }
   return items;
@@ -118,7 +132,11 @@ function parseRss(xml: string, maxItems = 100): ParsedFeedItem[] {
 
 // ── Atom ───────────────────────────────────────────────────────────────────
 
-function parseAtom(xml: string, maxItems = 100): ParsedFeedItem[] {
+function parseAtom(
+  xml: string,
+  maxItems = 100,
+  now: () => number = Date.now
+): ParsedFeedItem[] {
   const items: ParsedFeedItem[] = [];
   const entryRegex = /<entry[^>]*>([\s\S]*?)<\/entry>/gi;
   let match;
@@ -131,13 +149,15 @@ function parseAtom(xml: string, maxItems = 100): ParsedFeedItem[] {
       extractCData(block, "content") ?? extractCData(block, "summary");
     const published =
       extractTagText(block, "published") ?? extractTagText(block, "updated");
+    const parsedTs = published ? new Date(published).getTime() : null;
     items.push({
       title,
       url: link ?? null,
       content: content ?? null,
       imageUrl: extractImageUrl(block, content) ?? null,
       rawXml,
-      publishedAt: published ? new Date(published).getTime() : null,
+      publishedAt:
+        parsedTs !== null ? Math.min(parsedTs, now()) : null,
     });
   }
   return items;

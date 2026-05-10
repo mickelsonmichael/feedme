@@ -292,6 +292,50 @@ describe("sortStacked", () => {
     expect(resultA[0].feed_id).not.toBe(resultB[0].feed_id);
   });
 
+  it("caps future timestamps in within-feed ranking so they do not displace past-dated items beyond their natural rank", () => {
+    // Arrange — feed 1 has a far-future item and a genuinely recent item.
+    // Feed 2 has a genuinely recent item.
+    // The future item still sorts as "rank 0" within its feed (capToNow = NOW,
+    // which is newer than NOW-1H), so the genuinely-recent co-feed item stays
+    // at rank 1. Both rank-0 items (ids 1 and 3) must appear before the
+    // rank-1 item (id 2).
+    const items = [
+      makeItem(1, 1, NOW + 1 * DAY), // future-dated — rank 0 within feed 1
+      makeItem(2, 1, NOW - 1 * HOUR), // genuinely recent — rank 1 within feed 1
+      makeItem(3, 2, NOW - 1 * HOUR), // feed 2 rank-0 item
+    ];
+
+    // Act
+    const result = sortStacked(items, now, rng);
+
+    // Assert — item 2 (rank-1, score ≈ 1.5) must be last; the rank-0 items
+    // (score ≈ 0.5 each) occupy the first two positions.
+    expect(result[result.length - 1].id).toBe(2);
+    expect(result.slice(0, 2).map((i) => i.id).sort((a, b) => a - b)).toEqual(
+      [1, 3]
+    );
+  });
+
+  it("caps future timestamps in tie-breaking so a far-future item does not automatically beat an item at exactly now", () => {
+    // Arrange — item 2 (exactly now) is first in the input array; item 1
+    // (far future) is second. With equal offsets (rng = 0.5) both score 0.5.
+    // The tie-break uses capToNow: capToNow(NOW+365d) = NOW = capToNow(NOW),
+    // leaving the scores identical and the stable-sort input order intact
+    // (item 2 first). Without the cap, item 1's raw future timestamp would win
+    // the tie unconditionally.
+    const items = [
+      makeItem(2, 2, NOW),             // exactly now — appears first in input
+      makeItem(1, 1, NOW + 365 * DAY), // far future  — appears second
+    ];
+
+    // Act
+    const result = sortStacked(items, now, rng);
+
+    // Assert — item 2 must come first because the cap makes both timestamps
+    // equal (NOW) and stable sort preserves the input order.
+    expect(result[0].id).toBe(2);
+  });
+
   it("does not mutate the original array", () => {
     // Arrange
     const items = [
