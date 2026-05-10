@@ -67,11 +67,16 @@ export function sortStacked(
 ): FeedItemWithFeed[] {
   const currentTime = now();
 
-  // Clamps a timestamp to [−∞, currentTime] so that posts erroneously dated
-  // in the future are treated as if they were published right now, preventing
-  // them from receiving outsized weight in ranking and tie-breaking.
-  const capToNow = (ts: number | null) =>
-    ts === null ? -Infinity : Math.min(ts, currentTime);
+  // Pre-compute the capped timestamp for every item once. Future timestamps
+  // are clamped to currentTime so that posts erroneously dated in the future
+  // are treated as if published right now — preventing them from receiving
+  // outsized weight in within-feed ranking and final tie-breaking.
+  const cappedAt = new Map<number, number>();
+  for (const item of items) {
+    if (item.published_at != null) {
+      cappedAt.set(item.id, Math.min(item.published_at, currentTime));
+    }
+  }
 
   // Step 1: assign each item its within-feed rank (0 = newest from that feed).
   const rankById = new Map<number, number>();
@@ -87,10 +92,12 @@ export function sortStacked(
   }
 
   for (const feedItems of byFeed.values()) {
-    // Sort newest-first within each feed (items without a timestamp go last).
-    // Future timestamps are capped to currentTime so a post erroneously dated
-    // in the future is ranked no better than a post published right now.
-    feedItems.sort((a, b) => capToNow(b.published_at) - capToNow(a.published_at));
+    // Sort newest-first within each feed using the pre-computed capped
+    // timestamps (items without a timestamp go last).
+    feedItems.sort(
+      (a, b) =>
+        (cappedAt.get(b.id) ?? -Infinity) - (cappedAt.get(a.id) ?? -Infinity)
+    );
     feedItems.forEach((item, i) => rankById.set(item.id, i));
   }
 
@@ -119,10 +126,14 @@ export function sortStacked(
   });
 
   // Step 3: sort by score ascending; break ties by recency (newer first),
-  // capping future timestamps to now so they cannot win ties unfairly.
+  // using the pre-computed capped timestamps so that future-dated items
+  // cannot win tie-breaks solely because their raw timestamp is in the future.
   scored.sort((a, b) => {
     if (a.score !== b.score) return a.score - b.score;
-    return capToNow(b.item.published_at) - capToNow(a.item.published_at);
+    return (
+      (cappedAt.get(b.item.id) ?? -Infinity) -
+      (cappedAt.get(a.item.id) ?? -Infinity)
+    );
   });
 
   return scored.map((s) => s.item);
