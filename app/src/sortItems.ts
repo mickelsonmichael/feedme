@@ -67,6 +67,12 @@ export function sortStacked(
 ): FeedItemWithFeed[] {
   const currentTime = now();
 
+  // Clamps a timestamp to [−∞, currentTime] so that posts erroneously dated
+  // in the future are treated as if they were published right now, preventing
+  // them from receiving outsized weight in ranking and tie-breaking.
+  const capToNow = (ts: number | null) =>
+    ts === null ? -Infinity : Math.min(ts, currentTime);
+
   // Step 1: assign each item its within-feed rank (0 = newest from that feed).
   const rankById = new Map<number, number>();
   const byFeed = new Map<number, FeedItemWithFeed[]>();
@@ -82,9 +88,9 @@ export function sortStacked(
 
   for (const feedItems of byFeed.values()) {
     // Sort newest-first within each feed (items without a timestamp go last).
-    feedItems.sort(
-      (a, b) => (b.published_at ?? -Infinity) - (a.published_at ?? -Infinity)
-    );
+    // Future timestamps are capped to currentTime so a post erroneously dated
+    // in the future is ranked no better than a post published right now.
+    feedItems.sort((a, b) => capToNow(b.published_at) - capToNow(a.published_at));
     feedItems.forEach((item, i) => rankById.set(item.id, i));
   }
 
@@ -112,12 +118,11 @@ export function sortStacked(
     return { item, score: rank + offset + penalty };
   });
 
-  // Step 3: sort by score ascending; break ties by recency (newer first).
+  // Step 3: sort by score ascending; break ties by recency (newer first),
+  // capping future timestamps to now so they cannot win ties unfairly.
   scored.sort((a, b) => {
     if (a.score !== b.score) return a.score - b.score;
-    return (
-      (b.item.published_at ?? -Infinity) - (a.item.published_at ?? -Infinity)
-    );
+    return capToNow(b.item.published_at) - capToNow(a.item.published_at);
   });
 
   return scored.map((s) => s.item);

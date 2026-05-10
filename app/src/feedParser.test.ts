@@ -324,6 +324,86 @@ describe("extractImageUrl", () => {
   });
 });
 
+describe("parseFeed – future timestamp capping", () => {
+  // A fixed "now" in the past so we can craft a genuinely "future" pubDate.
+  const FIXED_NOW = new Date("2024-01-15T00:00:00Z").getTime();
+  const now = () => FIXED_NOW;
+
+  const RSS_FUTURE = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Future RSS Feed</title>
+    <item>
+      <title>Future Post</title>
+      <link>https://example.com/future</link>
+      <pubDate>Sat, 01 Feb 2025 12:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>Past Post</title>
+      <link>https://example.com/past</link>
+      <pubDate>Sun, 01 Jan 2024 12:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`;
+
+  const ATOM_FUTURE = `<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Future Atom Feed</title>
+  <entry>
+    <title>Future Atom Entry</title>
+    <link href="https://example.com/atom-future"/>
+    <published>2025-06-01T00:00:00Z</published>
+  </entry>
+  <entry>
+    <title>Past Atom Entry</title>
+    <link href="https://example.com/atom-past"/>
+    <published>2024-01-10T00:00:00Z</published>
+  </entry>
+</feed>`;
+
+  it("caps a future RSS pubDate to now", () => {
+    // Arrange & Act
+    const items = parseFeed(RSS_FUTURE, 100, now);
+    const future = items.find((i) => i.title === "Future Post")!;
+
+    // Assert
+    expect(future.publishedAt).toBe(FIXED_NOW);
+  });
+
+  it("preserves a past RSS pubDate unchanged", () => {
+    // Arrange
+    const expected = new Date("2024-01-01T12:00:00Z").getTime();
+
+    // Act
+    const items = parseFeed(RSS_FUTURE, 100, now);
+    const past = items.find((i) => i.title === "Past Post")!;
+
+    // Assert
+    expect(past.publishedAt).toBe(expected);
+  });
+
+  it("caps a future Atom published date to now", () => {
+    // Arrange & Act
+    const items = parseFeed(ATOM_FUTURE, 100, now);
+    const future = items.find((i) => i.title === "Future Atom Entry")!;
+
+    // Assert
+    expect(future.publishedAt).toBe(FIXED_NOW);
+  });
+
+  it("preserves a past Atom published date unchanged", () => {
+    // Arrange
+    const expected = new Date("2024-01-10T00:00:00Z").getTime();
+
+    // Act
+    const items = parseFeed(ATOM_FUTURE, 100, now);
+    const past = items.find((i) => i.title === "Past Atom Entry")!;
+
+    // Assert
+    expect(past.publishedAt).toBe(expected);
+  });
+});
+
 describe("parseFeed – rawXml field", () => {
   it("includes the full <item> block as rawXml for RSS items", () => {
     // Arrange & Act
