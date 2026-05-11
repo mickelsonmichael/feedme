@@ -448,6 +448,7 @@ export async function savePost(
   state.savedPosts.push({
     id: state.nextSavedPostId++,
     item_id: item.id,
+    feed_id: item.feed_id,
     feed_title: feedTitle,
     title: item.title,
     url: item.url ?? null,
@@ -482,12 +483,23 @@ export async function getSavedItemIdsForFeed(
   feedId: number
 ): Promise<Set<number>> {
   const state = loadState();
-  const feedItemIds = new Set(
-    state.items.filter((i) => i.feed_id === feedId).map((i) => i.id)
-  );
+
+  // Saved posts written by the current version store feed_id directly, so we
+  // can filter without scanning state.items.  For entries persisted by an
+  // older version that lack feed_id, fall back to an item-id lookup.
+  const legacyItemIds = state.savedPosts.some(
+    (p) => p.item_id !== null && p.feed_id == null
+  )
+    ? new Set(state.items.filter((i) => i.feed_id === feedId).map((i) => i.id))
+    : null;
+
   return new Set(
     state.savedPosts
-      .filter((p) => p.item_id !== null && feedItemIds.has(p.item_id as number))
+      .filter((p) => {
+        if (p.item_id === null) return false;
+        if (p.feed_id != null) return p.feed_id === feedId;
+        return legacyItemIds!.has(p.item_id as number);
+      })
       .map((p) => p.item_id as number)
   );
 }

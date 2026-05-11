@@ -55,6 +55,9 @@ export type FeedItemWithFeed = FeedItem & { feed_title: string };
 export type SavedPost = {
   id: number;
   item_id: number | null;
+  /** Feed the item belongs to. Stored on web for efficient per-feed filtering;
+   *  undefined on native (the SQL query handles scoping). */
+  feed_id?: number | null;
   feed_title: string;
   title: string;
   url: string | null;
