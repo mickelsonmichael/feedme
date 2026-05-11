@@ -511,6 +511,23 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
               thumbColor={colors.paper}
             />
           </View>
+
+          <TouchableOpacity
+            style={[styles.actionBtn, styles.notificationButton, { borderColor: colors.border }]}
+            onPress={() =>
+              navigation.navigate("NotificationSettings", {
+                source: "feed",
+                feedId: feed.id,
+              })
+            }
+            accessibilityLabel="Open notification settings"
+            activeOpacity={0.7}
+          >
+            <Feather name="bell" size={16} color={colors.inkSoft} />
+            <Text style={[styles.actionText, { color: colors.inkSoft }]}>
+              Notification settings
+            </Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -633,5 +650,9 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontWeight: "600",
     fontSize: fontSize.meta,
+  },
+  notificationButton: {
+    marginTop: spacing.xl,
+    justifyContent: "center",
   },
 });

@@ -26,11 +26,16 @@ export type Feed = {
    *  `published_at` values, clamped to `[15 min, 24 h]`. Null until the
    *  first successful refresh after the migration. */
   fetch_interval_ms?: number | null;
+  notify_enabled?: number;
+  notify_frequency?: "immediate" | "daily" | "off";
+  notify_last_seen_item_id?: number | null;
+  notify_daily_last_sent_at?: number | null;
 };
 
 export type Tag = {
   id: number;
   name: string;
+  notify_enabled?: number;
 };
 
 export type TagWithFeedCount = Tag & { feed_count: number };
@@ -107,6 +112,9 @@ export type RootStackParamList = {
   };
   FeedDetail: { feedId: number };
   TagDetail: { tagId?: number; from?: string } | undefined;
+  NotificationSettings:
+    | { feedId: number; source: "feed" }
+    | { tagId: number; source: "tag" };
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
 };
@@ -145,6 +153,9 @@ export type TabParamList = {
   };
   FeedDetail: { feedId: number };
   TagDetail: { tagId?: number; from?: string } | undefined;
+  NotificationSettings:
+    | { feedId: number; source: "feed" }
+    | { tagId: number; source: "tag" };
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
 };

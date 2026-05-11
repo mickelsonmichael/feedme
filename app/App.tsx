@@ -9,7 +9,11 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
-import { CommonActions, NavigationContainer } from "@react-navigation/native";
+import {
+  CommonActions,
+  NavigationContainer,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
 import {
   createBottomTabNavigator,
   BottomTabBarProps,
@@ -34,6 +38,7 @@ import TagDetailScreen from "./src/screens/TagDetailScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
 import InAppBrowserScreen from "./src/screens/InAppBrowserScreen";
+import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
 import { Feed, Tag, TabParamList } from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
@@ -41,6 +46,10 @@ import { AppHeader } from "./src/components/AppHeader";
 import { HeaderContentProvider } from "./src/context/HeaderContentContext";
 import { getFeeds, getTags } from "./src/database";
 import { getFeedIconUrl } from "./src/feedIcon";
+import {
+  initializeNotificationSystem,
+  subscribeToNotificationOpens,
+} from "./src/notifications";
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
@@ -61,6 +70,8 @@ const TAB_CONFIG: {
   { name: "Discover", icon: "compass", label: "Discover" },
   { name: "Settings", icon: "settings", label: "Settings" },
 ];
+
+const navigationRef = createNavigationContainerRef<TabParamList>();
 
 function FeatherTabIcon({
   icon,
@@ -511,15 +522,47 @@ function Tabs() {
         component={InAppBrowserScreen}
         options={HIDDEN_TAB_OPTIONS}
       />
+      <Tab.Screen
+        name="NotificationSettings"
+        component={NotificationSettingsScreen}
+        options={HIDDEN_TAB_OPTIONS}
+      />
     </Tab.Navigator>
   );
 }
 
 function AppContent() {
   const { colors, isDark } = useTheme();
+
+  React.useEffect(() => {
+    initializeNotificationSystem().catch(() => {});
+    const subscription = subscribeToNotificationOpens((payload) => {
+      if (!navigationRef.isReady()) {
+        return;
+      }
+      navigationRef.navigate("FeedItemView", {
+        item: {
+          itemId: payload.itemId,
+          title: payload.title,
+          url: payload.url,
+          content: payload.content,
+          imageUrl: payload.imageUrl,
+          publishedAt: payload.publishedAt,
+          feedTitle: payload.feedTitle,
+          read: payload.read,
+          useProxy: payload.useProxy,
+          nsfw: payload.nsfw,
+        },
+      });
+    });
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
+
   return (
     <View style={[styles.root, { backgroundColor: colors.paper }]}>
-      <NavigationContainer>
+      <NavigationContainer ref={navigationRef}>
         <StatusBar style={isDark ? "light" : "dark"} />
         <Tabs />
       </NavigationContainer>

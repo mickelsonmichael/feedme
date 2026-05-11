@@ -447,6 +447,29 @@ export default function TagDetailScreen({ route, navigation }: Props) {
               })
             )}
           </View>
+
+          {isEditMode && tagId !== undefined ? (
+            <TouchableOpacity
+              style={[
+                styles.actionBtn,
+                styles.notificationButton,
+                { borderColor: colors.border },
+              ]}
+              onPress={() =>
+                navigation.navigate("NotificationSettings", {
+                  source: "tag",
+                  tagId,
+                })
+              }
+              activeOpacity={0.7}
+              accessibilityLabel="Open notification settings"
+            >
+              <Feather name="bell" size={16} color={colors.inkSoft} />
+              <Text style={[styles.actionText, { color: colors.inkSoft }]}>
+                Notification settings
+              </Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -514,6 +537,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontWeight: "600",
     fontSize: fontSize.meta,
+  },
+  notificationButton: {
+    marginTop: spacing.lg,
+    justifyContent: "center",
   },
   heading: {
     fontFamily: fonts.heading,

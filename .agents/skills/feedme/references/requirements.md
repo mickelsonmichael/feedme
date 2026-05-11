@@ -80,6 +80,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDDETAIL-007 | The screen shall display the feed's last-fetched timestamp and any fetch error. |
 | REQ-FEEDDETAIL-008 | The user shall be able to assign up to 25 tags to a feed via a multi-select picker, including creating new tags inline. |
 | REQ-FEEDDETAIL-009 | The user shall be able to toggle "Show only on tag feeds" so the feed's items are hidden from the default home view and only appear in tag-scoped views. |
+| REQ-FEEDDETAIL-010 | [added] The user shall be able to open per-feed notification settings from FeedDetailScreen. |
 
 ---
 
@@ -110,6 +111,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-TAGDETAIL-003 | The user shall be able to associate or disassociate any feed with the tag via a searchable feed list. |
 | REQ-TAGDETAIL-004 | In edit mode, the user shall be able to delete the tag with a confirmation step. |
 | REQ-TAGDETAIL-005 | Saving shall persist the tag and replace its feed associations atomically before returning to the previous screen. |
+| REQ-TAGDETAIL-006 | [added] In edit mode, the user shall be able to open per-tag notification settings from TagDetailScreen. |
 
 ---
 
@@ -136,6 +138,18 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-SETTINGS-006 | The user shall be able to choose how links are opened (in-app browser vs. external browser). |
 | REQ-SETTINGS-007 | All settings shall persist across app restarts. |
 | REQ-SETTINGS-008 | The settings screen shall provide navigation to ImportExportScreen. |
+
+---
+
+## NotificationSettingsScreen
+
+| ID | Requirement |
+|----|-------------|
+| REQ-NOTIFY-001 | [added] The screen shall support feed mode (`feedId`) and tag mode (`tagId`). |
+| REQ-NOTIFY-002 | [added] In feed mode, the user shall be able to toggle "Notify on new items" (default off). |
+| REQ-NOTIFY-003 | [added] In feed mode, the user shall be able to set notification frequency to Immediate, Daily digest, or Off. |
+| REQ-NOTIFY-004 | [added] In tag mode, the user shall be able to toggle notifications for any feed linked to the tag (default off). |
+| REQ-NOTIFY-005 | [added] Enabling notifications shall request OS notification permission if not already granted. |
 
 ---
 
