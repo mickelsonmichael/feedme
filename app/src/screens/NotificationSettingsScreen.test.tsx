@@ -150,7 +150,9 @@ describe("NotificationSettingsScreen", () => {
     const dailyButton = tree!.root
       .findAllByType(TouchableOpacity)
       .find((node) =>
-        node.findAllByType(Text).some((label) => label.props.children === "Daily digest")
+        node
+          .findAllByType(Text)
+          .some((label) => label.props.children === "Daily digest")
       );
     expect(dailyButton).toBeTruthy();
 

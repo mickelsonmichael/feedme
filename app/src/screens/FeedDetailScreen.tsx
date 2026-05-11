@@ -513,7 +513,11 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
           </View>
 
           <TouchableOpacity
-            style={[styles.actionBtn, styles.notificationButton, { borderColor: colors.border }]}
+            style={[
+              styles.actionBtn,
+              styles.notificationButton,
+              { borderColor: colors.border },
+            ]}
             onPress={() =>
               navigation.navigate("NotificationSettings", {
                 source: "feed",
