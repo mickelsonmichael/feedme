@@ -223,6 +223,7 @@ async function initializeSchema(
     CREATE INDEX IF NOT EXISTS idx_items_published_at ON items(published_at DESC);
     CREATE INDEX IF NOT EXISTS idx_items_feed_id ON items(feed_id);
     CREATE INDEX IF NOT EXISTS idx_items_read ON items(read);
+    CREATE INDEX IF NOT EXISTS idx_items_feed_id_read ON items(feed_id, read);
     CREATE INDEX IF NOT EXISTS idx_saved_posts_item_id ON saved_posts(item_id);
     CREATE INDEX IF NOT EXISTS idx_read_later_posts_item_id ON read_later_posts(item_id);
     CREATE INDEX IF NOT EXISTS idx_feed_tags_tag_id ON feed_tags(tag_id);
@@ -547,6 +548,19 @@ export async function getSavedItemIds(): Promise<Set<number>> {
   return new Set(rows.map((r) => r.item_id));
 }
 
+export async function getSavedItemIdsForFeed(
+  feedId: number
+): Promise<Set<number>> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{ item_id: number }>(
+    `SELECT sp.item_id FROM saved_posts sp
+     JOIN items ON items.id = sp.item_id
+     WHERE items.feed_id = ? AND sp.item_id IS NOT NULL`,
+    [feedId]
+  );
+  return new Set(rows.map((r) => r.item_id));
+}
+
 // ── Read Later Posts ───────────────────────────────────────────────────────
 
 export async function addToReadLater(
@@ -710,10 +724,12 @@ export async function setFeedTags(
     await database.runAsync("DELETE FROM feed_tags WHERE feed_id = ?", [
       feedId,
     ]);
-    for (const tagId of unique) {
+    if (unique.length > 0) {
+      const placeholders = unique.map(() => "(?, ?)").join(", ");
+      const values = unique.flatMap((tagId) => [feedId, tagId]);
       await database.runAsync(
-        "INSERT OR IGNORE INTO feed_tags (feed_id, tag_id) VALUES (?, ?)",
-        [feedId, tagId]
+        `INSERT OR IGNORE INTO feed_tags (feed_id, tag_id) VALUES ${placeholders}`,
+        values
       );
     }
   });
@@ -727,10 +743,12 @@ export async function setTagFeeds(
   const unique = Array.from(new Set(feedIds));
   await withWriteLock(async () => {
     await database.runAsync("DELETE FROM feed_tags WHERE tag_id = ?", [tagId]);
-    for (const feedId of unique) {
+    if (unique.length > 0) {
+      const placeholders = unique.map(() => "(?, ?)").join(", ");
+      const values = unique.flatMap((feedId) => [feedId, tagId]);
       await database.runAsync(
-        "INSERT OR IGNORE INTO feed_tags (feed_id, tag_id) VALUES (?, ?)",
-        [feedId, tagId]
+        `INSERT OR IGNORE INTO feed_tags (feed_id, tag_id) VALUES ${placeholders}`,
+        values
       );
     }
   });

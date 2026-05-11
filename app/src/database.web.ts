@@ -478,6 +478,20 @@ export async function getSavedItemIds(): Promise<Set<number>> {
   );
 }
 
+export async function getSavedItemIdsForFeed(
+  feedId: number
+): Promise<Set<number>> {
+  const state = loadState();
+  const feedItemIds = new Set(
+    state.items.filter((i) => i.feed_id === feedId).map((i) => i.id)
+  );
+  return new Set(
+    state.savedPosts
+      .filter((p) => p.item_id !== null && feedItemIds.has(p.item_id as number))
+      .map((p) => p.item_id as number)
+  );
+}
+
 // ── Read Later Posts ───────────────────────────────────────────────────────
 
 export async function addToReadLater(

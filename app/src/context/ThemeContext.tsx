@@ -1,4 +1,10 @@
-import React, { createContext, useCallback, useContext, useState } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useMemo,
+  useState,
+} from "react";
 import { useColorScheme } from "react-native";
 import { colors as lightColors, darkColors, type ColorTokens } from "../theme";
 import { loadConfig, saveConfig } from "../storage";
@@ -45,8 +51,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     mode === "dark" || (mode === "system" && systemScheme === "dark");
   const colors = isDark ? darkColors : lightColors;
 
+  const contextValue = useMemo(
+    () => ({ mode, setMode, colors, isDark }),
+    [mode, setMode, colors, isDark]
+  );
+
   return (
-    <ThemeContext.Provider value={{ mode, setMode, colors, isDark }}>
+    <ThemeContext.Provider value={contextValue}>
       {children}
     </ThemeContext.Provider>
   );
