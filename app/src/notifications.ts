@@ -104,10 +104,19 @@ function ensureTaskDefined(): void {
         return BackgroundFetch.BackgroundFetchResult.Failed;
       }
     });
-  } catch {
-    // Task may already be defined if Metro reloaded this module.
-    // Keep boot resilient, but surface unexpected define failures.
-    console.warn("[feedme] Notification background task definition skipped");
+  } catch (error) {
+    const message = (error as Error).message?.toLowerCase?.() ?? "";
+    if (
+      message.includes("already") ||
+      message.includes("exists") ||
+      message.includes("defined")
+    ) {
+      return;
+    }
+    console.warn(
+      "[feedme] Notification background task definition failed:",
+      error
+    );
   }
 }
 
@@ -160,8 +169,11 @@ export async function runBackgroundNotificationSync(): Promise<void> {
       continue;
     }
 
+    const lastDailySentAt = feed.notify_daily_last_sent_at;
     const dailyDue =
-      now - (feed.notify_daily_last_sent_at ?? 0) >= DAILY_INTERVAL_MS;
+      lastDailySentAt === null ||
+      lastDailySentAt === undefined ||
+      now - lastDailySentAt >= DAILY_INTERVAL_MS;
     const shouldSendNow =
       matchedTag ||
       feedFrequency === "immediate" ||

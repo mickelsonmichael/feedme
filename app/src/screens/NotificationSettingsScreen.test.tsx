@@ -7,10 +7,10 @@ import renderer, { act } from "react-test-renderer";
 import NotificationSettingsScreen from "../screens/NotificationSettingsScreen";
 import { RootStackParamList, TabParamList } from "../types";
 import {
-  getFeeds,
+  getFeedById,
   getFeedsForTag,
   getMaxItemIdForFeed,
-  getTags,
+  getTagById,
   setFeedNotificationCheckpoint,
   setFeedNotificationSettings,
   setTagNotificationEnabled,
@@ -32,9 +32,9 @@ jest.mock("../context/ThemeContext", () => ({
 }));
 
 jest.mock("../database", () => ({
-  getFeeds: jest.fn(),
+  getFeedById: jest.fn(),
   getFeedsForTag: jest.fn(async () => [{ id: 1 }]),
-  getTags: jest.fn(),
+  getTagById: jest.fn(),
   getMaxItemIdForFeed: jest.fn(),
   setFeedNotificationCheckpoint: jest.fn(),
   setFeedNotificationSettings: jest.fn(),
@@ -80,12 +80,17 @@ function buildTagProps(): FeedProps {
 
 describe("NotificationSettingsScreen", () => {
   beforeEach(() => {
-    (getFeeds as jest.Mock).mockResolvedValue([
-      { id: 1, title: "Feed One", notify_enabled: 0, notify_frequency: "off" },
-    ]);
-    (getTags as jest.Mock).mockResolvedValue([
-      { id: 2, name: "News", notify_enabled: 0 },
-    ]);
+    (getFeedById as jest.Mock).mockResolvedValue({
+      id: 1,
+      title: "Feed One",
+      notify_enabled: 0,
+      notify_frequency: "off",
+    });
+    (getTagById as jest.Mock).mockResolvedValue({
+      id: 2,
+      name: "News",
+      notify_enabled: 0,
+    });
     (getFeedsForTag as jest.Mock).mockResolvedValue([{ id: 1 }]);
     (getMaxItemIdForFeed as jest.Mock).mockResolvedValue(42);
     (ensureNotificationPermissions as jest.Mock).mockResolvedValue(true);
