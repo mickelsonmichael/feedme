@@ -852,7 +852,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
           ref={flatListRef}
           data={visibleItems}
           keyExtractor={keyExtractor}
-          estimatedItemSize={feedLayout === "card" ? 300 : 72}
+
           onRefresh={handleRefreshAll}
           refreshing={refreshing}
           viewabilityConfig={viewabilityConfig}
