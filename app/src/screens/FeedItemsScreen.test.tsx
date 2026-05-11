@@ -10,7 +10,7 @@ import {
   markItemUnread,
   savePost,
   unsavePost,
-  getSavedItemIds,
+  getSavedItemIdsForFeed,
 } from "../database";
 import { refreshFeeds } from "../feedRefresher";
 import { openUrlWithPreference } from "../linkOpening";
@@ -21,7 +21,7 @@ jest.mock("../database", () => ({
   markItemUnread: jest.fn(),
   savePost: jest.fn(),
   unsavePost: jest.fn(),
-  getSavedItemIds: jest.fn(),
+  getSavedItemIdsForFeed: jest.fn(),
 }));
 
 jest.mock("../feedRefresher", () => ({
@@ -125,7 +125,7 @@ function buildProps(): Props {
 describe("FeedItemsScreen – View Raw", () => {
   beforeEach(() => {
     (getItemsForFeed as jest.Mock).mockResolvedValue([mockItem]);
-    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (getSavedItemIdsForFeed as jest.Mock).mockResolvedValue(new Set<number>());
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
     (markItemRead as jest.Mock).mockResolvedValue(undefined);
     (markItemUnread as jest.Mock).mockResolvedValue(undefined);
