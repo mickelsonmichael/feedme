@@ -13,10 +13,10 @@ import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
-  getFeeds,
+  getFeedById,
   getFeedsForTag,
   getMaxItemIdForFeed,
-  getTags,
+  getTagById,
   setFeedDailyNotificationSentAt,
   setFeedNotificationCheckpoint,
   setFeedNotificationSettings,
@@ -64,11 +64,9 @@ export default function NotificationSettingsScreen({ route }: Props) {
     setLoading(true);
     try {
       if (source === "feed") {
-        const feeds = await getFeeds();
-        setFeed(feeds.find((entry) => entry.id === params.feedId) ?? null);
+        setFeed(await getFeedById(params.feedId));
       } else {
-        const tags = await getTags();
-        setTag(tags.find((entry) => entry.id === params.tagId) ?? null);
+        setTag(await getTagById(params.tagId));
       }
       setPermissionGranted(await getNotificationPermissionGranted());
     } finally {
@@ -105,9 +103,11 @@ export default function NotificationSettingsScreen({ route }: Props) {
       }
       const maxItemId = await getMaxItemIdForFeed(feed.id);
       await setFeedNotificationCheckpoint(feed.id, maxItemId);
+      const nextFrequency: FeedFrequency =
+        feed.notify_frequency === "daily" ? "daily" : "immediate";
       await setFeedNotificationSettings(feed.id, {
         enabled: true,
-        frequency: feed.notify_frequency === "daily" ? "daily" : "immediate",
+        frequency: nextFrequency,
       });
     } else {
       await setFeedNotificationSettings(feed.id, {

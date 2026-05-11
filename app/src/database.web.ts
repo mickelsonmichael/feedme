@@ -209,6 +209,12 @@ export async function getFeeds(): Promise<Feed[]> {
   );
 }
 
+export async function getFeedById(feedId: number): Promise<Feed | null> {
+  const state = loadState();
+  const feed = state.feeds.find((entry) => entry.id === feedId);
+  return feed ? normalizeFeed(feed) : null;
+}
+
 export async function addFeed({
   title,
   url,
@@ -664,6 +670,14 @@ export async function getTags(): Promise<Tag[]> {
   return [...state.tags].sort((a, b) =>
     a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
   );
+}
+
+export async function getTagById(tagId: number): Promise<Tag | null> {
+  const state = loadState();
+  const tag = state.tags.find((entry) => entry.id === tagId);
+  return tag
+    ? { ...tag, notify_enabled: tag.notify_enabled === 1 ? 1 : 0 }
+    : null;
 }
 
 export async function getTagsWithFeedCounts(): Promise<TagWithFeedCount[]> {

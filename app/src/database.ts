@@ -231,7 +231,7 @@ async function initializeSchema(
   }
   try {
     await database.execAsync(
-      "ALTER TABLE feeds ADD COLUMN notify_frequency TEXT NOT NULL DEFAULT 'off'"
+      "ALTER TABLE feeds ADD COLUMN notify_frequency TEXT NOT NULL DEFAULT 'off' CHECK (notify_frequency IN ('immediate', 'daily', 'off'))"
     );
   } catch {
     // Column already exists — ignore
@@ -276,6 +276,15 @@ async function initializeSchema(
 export async function getFeeds(): Promise<Feed[]> {
   const database = await getDatabase();
   return database.getAllAsync<Feed>("SELECT * FROM feeds ORDER BY title ASC");
+}
+
+export async function getFeedById(feedId: number): Promise<Feed | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<Feed>(
+    "SELECT * FROM feeds WHERE id = ?",
+    [feedId]
+  );
+  return row ?? null;
 }
 
 export async function addFeed({
@@ -739,6 +748,15 @@ export async function getTags(): Promise<Tag[]> {
   return database.getAllAsync<Tag>(
     "SELECT id, name, notify_enabled FROM tags ORDER BY name COLLATE NOCASE ASC"
   );
+}
+
+export async function getTagById(tagId: number): Promise<Tag | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<Tag>(
+    "SELECT id, name, notify_enabled FROM tags WHERE id = ?",
+    [tagId]
+  );
+  return row ?? null;
 }
 
 export async function getTagsWithFeedCounts(): Promise<TagWithFeedCount[]> {
