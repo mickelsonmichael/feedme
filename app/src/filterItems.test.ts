@@ -8,6 +8,7 @@ function makeItem(id: number, read: 0 | 1 = 0, feedId = 1): FeedItemWithFeed {
     title: `Item ${id}`,
     url: `https://example.com/item/${id}`,
     content: null,
+    full_content: null,
     image_url: null,
     raw_xml: null,
     published_at: id * 1000,

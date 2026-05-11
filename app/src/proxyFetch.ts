@@ -138,6 +138,52 @@ export function proxiedImageUrl(
   return buildProxyRequestUrl(url, env) ?? url;
 }
 
+// Returns the worker base URL on all platforms — unlike getProxyBaseUrl, this
+// doesn't short-circuit on native, because article extraction needs the worker
+// regardless of platform (readability runs server-side).
+function getWorkerBaseUrl(env: EnvMap = getEnvironmentVariables()): string {
+  const explicitUrl = env.EXPO_PUBLIC_FEED_PROXY_URL?.trim();
+  if (explicitUrl) return explicitUrl;
+
+  const configuredTarget =
+    env.EXPO_PUBLIC_FEED_PROXY_TARGET?.trim().toLowerCase();
+  const isLocal =
+    configuredTarget === "local" ||
+    (isWebRuntime() && isLocalHostname(getCurrentHostname()));
+
+  if (isLocal) {
+    return (
+      env.EXPO_PUBLIC_FEED_PROXY_LOCAL_URL ?? DEFAULT_LOCAL_PROXY_URL
+    ).trim();
+  }
+
+  return (env.EXPO_PUBLIC_FEED_PROXY_LIVE_URL ?? DEFAULT_LIVE_PROXY_URL).trim();
+}
+
+export async function extractArticleContent(
+  articleUrl: string
+): Promise<string> {
+  const workerBase = getWorkerBaseUrl();
+  const extractUrl = new URL(workerBase);
+  extractUrl.pathname = "/extract";
+  extractUrl.searchParams.set("url", articleUrl);
+
+  const response = await fetch(extractUrl.toString());
+
+  if (response.status === 422) {
+    throw new Error("Could not extract readable content from this page.");
+  }
+  if (!response.ok) {
+    throw new Error(`Extraction failed with status ${response.status}.`);
+  }
+
+  const data = (await response.json()) as { content?: string };
+  if (!data.content) {
+    throw new Error("No content was extracted from this page.");
+  }
+  return data.content;
+}
+
 export function isLikelyCorsBlockedError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;

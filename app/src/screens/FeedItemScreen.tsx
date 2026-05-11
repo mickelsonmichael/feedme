@@ -13,11 +13,13 @@ import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
 import {
   addToReadLater,
+  getItemFullContent,
   getReadLaterItemIds,
   getSavedItemIds,
   markItemRead,
   markItemUnread,
   removeFromReadLater,
+  saveItemFullContent,
   savePost,
   unsavePost,
 } from "../database";
@@ -25,8 +27,10 @@ import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedItem, RootStackParamList } from "../types";
-import { parseContentAndLinks } from "../utils/contentActions";
+import { isLikelyTruncated, parseContentAndLinks } from "../utils/contentActions";
+import { extractArticleContent } from "../proxyFetch";
 import { openUrlWithPreference } from "../linkOpening";
+import RenderHtml from "react-native-render-html";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
 
@@ -40,7 +44,11 @@ export default function FeedItemScreen({ route, navigation }: Props) {
   const [updatingReadLater, setUpdatingReadLater] = React.useState(false);
   const [read, setRead] = React.useState(item.read === 1);
   const [updatingRead, setUpdatingRead] = React.useState(false);
+  const [fullContent, setFullContent] = React.useState<string | null>(null);
+  const [fetchingContent, setFetchingContent] = React.useState(false);
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
+  const contentWidth =
+    width - (spacing.md + spacing.lg) * 2 - (isDesktopWeb ? spacing.xl * 2 : 0);
   const { text: contentText, links: contentLinks } = React.useMemo(
     () => parseContentAndLinks(item.content),
     [item.content]
@@ -72,13 +80,15 @@ export default function FeedItemScreen({ route, navigation }: Props) {
     const hydrate = async () => {
       try {
         if (item.itemId !== null) {
-          const [savedIds, readLaterIds] = await Promise.all([
+          const [savedIds, readLaterIds, storedFullContent] = await Promise.all([
             getSavedItemIds(),
             getReadLaterItemIds(),
+            getItemFullContent(item.itemId),
           ]);
           if (isMounted) {
             setSaved(savedIds.has(item.itemId));
             setReadLater(readLaterIds.has(item.itemId));
+            if (storedFullContent) setFullContent(storedFullContent);
           }
         }
 
@@ -115,6 +125,25 @@ export default function FeedItemScreen({ route, navigation }: Props) {
     openUrlWithPreference({ url, navigation, title: item.title });
   };
 
+  const handleFetchFullContent = async () => {
+    if (!item.url || fetchingContent) return;
+    setFetchingContent(true);
+    try {
+      const html = await extractArticleContent(item.url);
+      if (item.itemId !== null) {
+        await saveItemFullContent(item.itemId, html);
+      }
+      setFullContent(html);
+    } catch (err) {
+      Alert.alert(
+        "Could not fetch article",
+        err instanceof Error ? err.message : "Something went wrong."
+      );
+    } finally {
+      setFetchingContent(false);
+    }
+  };
+
   const handleToggleSave = async () => {
     if (item.itemId === null || saving) return;
 
@@ -130,6 +159,7 @@ export default function FeedItemScreen({ route, navigation }: Props) {
           title: item.title,
           url: item.url,
           content: item.content,
+          full_content: fullContent,
           image_url: item.imageUrl,
           raw_xml: null,
           published_at: item.publishedAt,
@@ -181,6 +211,7 @@ export default function FeedItemScreen({ route, navigation }: Props) {
           title: item.title,
           url: item.url,
           content: item.content,
+          full_content: fullContent,
           image_url: item.imageUrl,
           raw_xml: null,
           published_at: item.publishedAt,
@@ -340,6 +371,21 @@ export default function FeedItemScreen({ route, navigation }: Props) {
                 </Text>
               </TouchableOpacity>
             ) : null}
+
+            {item.url && !fullContent ? (
+              <TouchableOpacity
+                style={[styles.actionBtn, { borderColor: colors.border }]}
+                onPress={handleFetchFullContent}
+                activeOpacity={0.7}
+                disabled={fetchingContent}
+                accessibilityLabel="Fetch full article"
+              >
+                <Feather name="file-text" size={16} color={colors.ink} />
+                <Text style={[styles.actionText, { color: colors.ink }]}>
+                  {fetchingContent ? "Loading…" : "Full Article"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
 
           <Text style={[styles.meta, { color: colors.inkSoft }]}>
@@ -361,9 +407,51 @@ export default function FeedItemScreen({ route, navigation }: Props) {
             />
           ) : null}
 
-          <Text style={[styles.article, { color: colors.ink }]}>
-            {contentText || "No content available."}
-          </Text>
+          {fullContent ? (
+            <RenderHtml
+              contentWidth={contentWidth}
+              source={{ html: fullContent }}
+              baseStyle={{
+                color: colors.ink,
+                fontFamily: fonts.sans,
+                fontSize: fontSize.bodyLg,
+                lineHeight: 24,
+              }}
+              tagsStyles={{
+                a: { color: colors.accent },
+                h1: { color: colors.ink, marginTop: 8, marginBottom: 4 },
+                h2: { color: colors.ink, marginTop: 8, marginBottom: 4 },
+                h3: { color: colors.ink, marginTop: 6, marginBottom: 4 },
+                blockquote: {
+                  borderLeftWidth: 3,
+                  borderLeftColor: colors.border,
+                  paddingLeft: spacing.sm,
+                  opacity: 0.8,
+                  marginLeft: 0,
+                },
+                pre: { backgroundColor: colors.paperWarm, padding: spacing.sm },
+                code: { backgroundColor: colors.paperWarm },
+                p: { marginTop: 0, marginBottom: spacing.sm },
+              }}
+              renderersProps={{
+                a: {
+                  onPress: (_e, href) =>
+                    openUrlWithPreference({
+                      url: href,
+                      navigation,
+                      title: item.title,
+                    }),
+                },
+              }}
+            />
+          ) : (
+            <Text style={[styles.article, { color: colors.ink }]}>
+              {contentText ||
+                (isLikelyTruncated(item.content)
+                  ? ""
+                  : "No content available.")}
+            </Text>
+          )}
 
           {visibleContentLinks.length ? (
             <View style={styles.contentLinkRow}>

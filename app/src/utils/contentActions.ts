@@ -49,6 +49,19 @@ function toActionLabel(value: string): ContentActionLink["label"] | null {
   return null;
 }
 
+const TRUNCATION_PATTERNS =
+  /\b(read\s+more|continue\s+reading|full\s+story|read\s+the\s+full|view\s+full|see\s+more)\b/i;
+
+export function isLikelyTruncated(content: string | null): boolean {
+  if (!content) return true;
+  const text = stripHtml(content);
+  if (text.length < 350) return true;
+  if (text.trimEnd().endsWith("…") || text.trimEnd().endsWith("..."))
+    return true;
+  if (TRUNCATION_PATTERNS.test(text)) return true;
+  return false;
+}
+
 function decodeHtmlEntities(value: string): string {
   const decodeCodePoint = (rawCodePoint: string, radix: 10 | 16): string => {
     const parsed = Number.parseInt(rawCodePoint, radix);

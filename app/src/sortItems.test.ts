@@ -13,6 +13,7 @@ function makeItem(
     title: `Item ${id}`,
     url: `https://example.com/item/${id}`,
     content: null,
+    full_content: null,
     image_url: null,
     raw_xml: null,
     published_at: publishedAt,

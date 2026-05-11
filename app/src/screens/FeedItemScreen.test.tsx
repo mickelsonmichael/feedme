@@ -5,11 +5,13 @@ import FeedItemScreen from "../screens/FeedItemScreen";
 import { RootStackParamList } from "../types";
 import {
   addToReadLater,
+  getItemFullContent,
   getReadLaterItemIds,
   getSavedItemIds,
   markItemRead,
   markItemUnread,
   removeFromReadLater,
+  saveItemFullContent,
   savePost,
   unsavePost,
 } from "../database";
@@ -17,11 +19,13 @@ import { openUrlWithPreference } from "../linkOpening";
 
 jest.mock("../database", () => ({
   addToReadLater: jest.fn(),
+  getItemFullContent: jest.fn(),
   getReadLaterItemIds: jest.fn(),
   getSavedItemIds: jest.fn(),
   markItemRead: jest.fn(),
   markItemUnread: jest.fn(),
   removeFromReadLater: jest.fn(),
+  saveItemFullContent: jest.fn(),
   savePost: jest.fn(),
   unsavePost: jest.fn(),
 }));
@@ -112,6 +116,8 @@ describe("FeedItemScreen", () => {
   beforeEach(() => {
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
     (getReadLaterItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (getItemFullContent as jest.Mock).mockResolvedValue(null);
+    (saveItemFullContent as jest.Mock).mockResolvedValue(undefined);
     (markItemRead as jest.Mock).mockResolvedValue(undefined);
     (markItemUnread as jest.Mock).mockResolvedValue(undefined);
     (savePost as jest.Mock).mockResolvedValue(undefined);

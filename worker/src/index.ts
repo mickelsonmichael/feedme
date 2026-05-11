@@ -1,3 +1,5 @@
+import { parseHTML } from 'linkedom';
+import { Readability } from '@mozilla/readability';
 import { isBlockedHostname, isRunningLocally, isRequestAllowed, getOriginAndReferrer } from './utils';
 
 const ALLOWED_PROTOCOLS = new Set(['http:', 'https:']);
@@ -36,6 +38,11 @@ const worker: ExportedHandler<Env> = {
 
 		const [origin] = getOriginAndReferrer(request);
 		const allowOrigin = isRunningLocally ? '*' : origin;
+
+		const requestPath = new URL(request.url).pathname;
+		if (requestPath === '/extract') {
+			return handleExtract(request, allowOrigin);
+		}
 
 		// Get target URL from query param: ?url=https://example.com/feed.xml
 		const { searchParams } = new URL(request.url);
@@ -106,5 +113,95 @@ const worker: ExportedHandler<Env> = {
 		});
 	},
 };
+
+async function handleExtract(request: Request, allowOrigin: string): Promise<Response> {
+	const corsHeaders = {
+		'Access-Control-Allow-Origin': allowOrigin,
+		'Access-Control-Allow-Methods': 'GET, OPTIONS',
+		Vary: 'Origin',
+	};
+
+	const { searchParams } = new URL(request.url);
+	const target = searchParams.get('url');
+
+	if (!target) {
+		return new Response(JSON.stringify({ error: 'Missing url parameter' }), {
+			status: 400,
+			headers: { 'Content-Type': 'application/json', ...corsHeaders },
+		});
+	}
+
+	let parsed: URL;
+	try {
+		parsed = new URL(target);
+	} catch {
+		return new Response(JSON.stringify({ error: 'Invalid URL' }), {
+			status: 400,
+			headers: { 'Content-Type': 'application/json', ...corsHeaders },
+		});
+	}
+
+	if (!ALLOWED_PROTOCOLS.has(parsed.protocol)) {
+		return new Response(JSON.stringify({ error: 'Protocol not allowed' }), {
+			status: 400,
+			headers: { 'Content-Type': 'application/json', ...corsHeaders },
+		});
+	}
+
+	if (isBlockedHostname(parsed.hostname)) {
+		return new Response(JSON.stringify({ error: 'Target not allowed' }), {
+			status: 400,
+			headers: { 'Content-Type': 'application/json', ...corsHeaders },
+		});
+	}
+
+	let html: string;
+	try {
+		const response = await fetch(target, {
+			headers: {
+				'User-Agent': 'Mozilla/5.0 (compatible; RSSReader/1.0)',
+				Accept: 'text/html,application/xhtml+xml,*/*',
+			},
+			redirect: 'follow',
+		});
+		if (!response.ok) {
+			return new Response(JSON.stringify({ error: `Failed to fetch article: ${response.status}` }), {
+				status: 502,
+				headers: { 'Content-Type': 'application/json', ...corsHeaders },
+			});
+		}
+		html = await response.text();
+	} catch {
+		return new Response(JSON.stringify({ error: 'Failed to fetch article' }), {
+			status: 502,
+			headers: { 'Content-Type': 'application/json', ...corsHeaders },
+		});
+	}
+
+	const { document } = parseHTML(html);
+
+	// eslint-disable-next-line @typescript-eslint/no-explicit-any
+	const article = new Readability(document as any).parse();
+	if (!article || !article.content) {
+		return new Response(JSON.stringify({ error: 'Could not extract article content' }), {
+			status: 422,
+			headers: { 'Content-Type': 'application/json', ...corsHeaders },
+		});
+	}
+
+	console.log(`Extracted article from ${target}`);
+
+	return new Response(
+		JSON.stringify({
+			content: article.content,
+			title: article.title ?? null,
+			byline: article.byline ?? null,
+		}),
+		{
+			status: 200,
+			headers: { 'Content-Type': 'application/json', ...corsHeaders },
+		}
+	);
+}
 
 export default worker;

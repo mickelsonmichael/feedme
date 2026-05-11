@@ -17,6 +17,13 @@ export function isRequestAllowed(request: Request): boolean {
 
 	const [origin, referer] = getOriginAndReferrer(request);
 
+	// Requests with no origin and no referer come from non-browser clients (e.g.
+	// native mobile apps). Browsers always add an Origin header on cross-origin
+	// requests, so the absence of both headers means this isn't a rogue web page.
+	if (!origin && !referer) {
+		return true;
+	}
+
 	return ALLOWED_ORIGINS.some((allowed_origin) => origin.startsWith(allowed_origin) || referer.startsWith(allowed_origin));
 }
 

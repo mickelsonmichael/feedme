@@ -44,6 +44,7 @@ export type FeedItem = {
   title: string;
   url: string | null;
   content: string | null;
+  full_content: string | null;
   image_url: string | null;
   raw_xml: string | null;
   published_at: number | null;

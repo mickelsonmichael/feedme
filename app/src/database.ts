@@ -192,6 +192,13 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
+  // Migration: add full_content column to items if it doesn't exist yet
+  try {
+    await database.execAsync("ALTER TABLE items ADD COLUMN full_content TEXT");
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Migration: add adaptive-refresh scheduling columns to feeds.
   // For pre-existing rows, leave next_fetch_at = 0 so the very next refresh
   // behaves exactly as it did before the upgrade — only after the first
@@ -468,6 +475,30 @@ export async function getItemRawXml(itemId: number): Promise<string | null> {
     [itemId]
   );
   return row?.raw_xml ?? null;
+}
+
+export async function getItemFullContent(
+  itemId: number
+): Promise<string | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{ full_content: string | null }>(
+    "SELECT full_content FROM items WHERE id = ?",
+    [itemId]
+  );
+  return row?.full_content ?? null;
+}
+
+export async function saveItemFullContent(
+  itemId: number,
+  html: string
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync("UPDATE items SET full_content = ? WHERE id = ?", [
+      html,
+      itemId,
+    ])
+  );
 }
 
 export async function markItemRead(itemId: number): Promise<void> {
