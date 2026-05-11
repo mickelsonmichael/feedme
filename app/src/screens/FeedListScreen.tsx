@@ -110,7 +110,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const scrollToTopParam = route.params?.scrollToTop;
 
   const flatListRef = useRef<FlashListRef<FeedItemWithFeed>>(null);
-  const markAsReadOnScrollRef = useRef(false);
+  const markAsReadOnScrollRef = useRef(
+    loadConfig().markAsReadOnScroll ?? false
+  );
 
   // Stable seed for the stacked-sort RNG. Generated once and reset only when
   // loadData fetches a fresh list from the database. This prevents the random
