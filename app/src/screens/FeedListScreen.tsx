@@ -110,6 +110,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const scrollToTopParam = route.params?.scrollToTop;
 
   const flatListRef = useRef<FlashListRef<FeedItemWithFeed>>(null);
+  const markAsReadOnScrollRef = useRef(false);
 
   // Stable seed for the stacked-sort RNG. Generated once and reset only when
   // loadData fetches a fresh list from the database. This prevents the random
@@ -124,7 +125,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const handleViewableItemsChanged = useCallback(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
-      if (!loadConfig().markAsReadOnScroll) return;
+      if (!markAsReadOnScrollRef.current) return;
       for (const token of viewableItems) {
         const item = token.item as FeedItemWithFeed;
         if (!item.read) {
@@ -247,7 +248,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   useFocusEffect(
     useCallback(() => {
-      setFeedLayout(loadConfig().feedLayout ?? "compact");
+      const config = loadConfig();
+      setFeedLayout(config.feedLayout ?? "compact");
+      markAsReadOnScrollRef.current = config.markAsReadOnScroll ?? false;
       if (shouldRefreshOnFocus) {
         setRefreshing(true);
       }
@@ -849,6 +852,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
           ref={flatListRef}
           data={visibleItems}
           keyExtractor={keyExtractor}
+          estimatedItemSize={feedLayout === "card" ? 300 : 72}
           onRefresh={handleRefreshAll}
           refreshing={refreshing}
           viewabilityConfig={viewabilityConfig}
