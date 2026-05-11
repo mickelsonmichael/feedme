@@ -24,6 +24,7 @@ import {
   getReadLaterItemIds,
   getReadLaterPosts,
   getSavedItemIds,
+  getSavedItemIdsForFeed,
   getSavedPosts,
   getTags,
   getTagsForFeed,
@@ -435,6 +436,45 @@ describe("database.web — saved posts", () => {
     // Assert
     expect(ids.has(items[0].id)).toBe(true);
     expect(ids.has(items[1].id)).toBe(false);
+  });
+
+  it("getSavedItemIdsForFeed returns only saved IDs belonging to the given feed", async () => {
+    // Arrange: two feeds, each with one item
+    const feedId2 = await addFeed({
+      title: "Feed 2",
+      url: "https://example.com/feed2",
+      description: null,
+    });
+    await upsertItems(feedId, [
+      {
+        title: "Feed1 Post",
+        url: "https://x/f1",
+        content: null,
+        publishedAt: 1,
+      },
+    ]);
+    await upsertItems(feedId2, [
+      {
+        title: "Feed2 Post",
+        url: "https://x/f2",
+        content: null,
+        publishedAt: 2,
+      },
+    ]);
+    const [feed1Item] = await getItemsForFeed(feedId);
+    const [feed2Item] = await getItemsForFeed(feedId2);
+    await savePost(feed1Item, "Feed 1");
+    await savePost(feed2Item, "Feed 2");
+
+    // Act
+    const idsForFeed1 = await getSavedItemIdsForFeed(feedId);
+    const idsForFeed2 = await getSavedItemIdsForFeed(feedId2);
+
+    // Assert: each set contains only its own feed's saved item
+    expect(idsForFeed1.has(feed1Item.id)).toBe(true);
+    expect(idsForFeed1.has(feed2Item.id)).toBe(false);
+    expect(idsForFeed2.has(feed2Item.id)).toBe(true);
+    expect(idsForFeed2.has(feed1Item.id)).toBe(false);
   });
 
   it("getSavedPosts returns posts sorted by saved_at descending", async () => {
