@@ -18,6 +18,8 @@ import {
   getFeeds,
   getFeedTagMap,
   getFeedsForTag,
+  getMaxItemIdForFeed,
+  getUnseenItemsForFeed,
   getItemCountForFeed,
   getItemsForFeed,
   getOrCreateTag,
@@ -35,8 +37,12 @@ import {
   removeFromReadLater,
   savePost,
   setFeedError,
+  setFeedNotificationCheckpoint,
+  setFeedNotificationSettings,
   setFeedTags,
+  setTagNotificationEnabled,
   setTagFeeds,
+  setFeedDailyNotificationSentAt,
   unsavePost,
   updateFeed,
   updateFeedLastFetched,
@@ -691,7 +697,7 @@ describe("database.web — tags", () => {
 
     // Assert
     const tags = await getTags();
-    expect(tags).toEqual([{ id, name: "News" }]);
+    expect(tags).toEqual([{ id, name: "News", notify_enabled: 0 }]);
   });
 
   it("getOrCreateTag returns existing id (case-insensitive)", async () => {
@@ -798,7 +804,9 @@ describe("database.web — tags", () => {
     const result = await getTagsWithFeedCounts();
 
     // Assert
-    expect(result).toEqual([{ id: tagId, name: "News", feed_count: 2 }]);
+    expect(result).toEqual([
+      { id: tagId, name: "News", notify_enabled: 0, feed_count: 2 },
+    ]);
   });
 
   it("deleting a feed removes its tag associations", async () => {
@@ -858,5 +866,50 @@ describe("database.web — tags", () => {
 
     // Assert
     expect((await getFeeds())[0].show_only_in_tag).toBe(0);
+  });
+
+  it("persists feed notification settings and unseen-item checkpoint", async () => {
+    // Arrange
+    const feedId = await addFeed({
+      title: "Notify feed",
+      url: "https://example.com/notify",
+      description: null,
+    });
+    await upsertItems(feedId, [
+      { title: "A", url: "https://x/a", content: null, publishedAt: 1 },
+      { title: "B", url: "https://x/b", content: null, publishedAt: 2 },
+      { title: "C", url: "https://x/c", content: null, publishedAt: 3 },
+    ]);
+
+    // Act
+    await setFeedNotificationSettings(feedId, {
+      enabled: true,
+      frequency: "daily",
+    });
+    await setFeedNotificationCheckpoint(feedId, 1);
+    await setFeedDailyNotificationSentAt(feedId, 1234);
+
+    // Assert
+    const feed = (await getFeeds())[0];
+    expect(feed.notify_enabled).toBe(1);
+    expect(feed.notify_frequency).toBe("daily");
+    expect(feed.notify_last_seen_item_id).toBe(1);
+    expect(feed.notify_daily_last_sent_at).toBe(1234);
+    expect(await getMaxItemIdForFeed(feedId)).toBe(3);
+
+    const unseen = await getUnseenItemsForFeed(feedId, 1, 2);
+    expect(unseen.map((item) => item.id)).toEqual([3, 2]);
+  });
+
+  it("persists tag notification toggle", async () => {
+    // Arrange
+    const tagId = await addTag("Alerts");
+
+    // Act
+    await setTagNotificationEnabled(tagId, true);
+
+    // Assert
+    const tags = await getTags();
+    expect(tags[0].notify_enabled).toBe(1);
   });
 });

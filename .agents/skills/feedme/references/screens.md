@@ -31,6 +31,7 @@ The set of bottom tabs depends on screen size:
 | `FeedItemView` | `FeedItemScreen` |
 | `FeedDetail` | `FeedDetailScreen` |
 | `TagDetail` | `TagDetailScreen` |
+| `NotificationSettings` | `NotificationSettingsScreen` |
 | `ImportExport` | `ImportExportScreen` |
 | `InAppBrowser` | `InAppBrowserScreen` |
 
@@ -144,6 +145,21 @@ The set of bottom tabs depends on screen size:
 - Save creates/updates the tag (case-insensitive uniqueness) and replaces feed associations
 - Delete button (edit mode only) with confirm dialog (`Alert` on native, `window.confirm` on web)
 - Returns to either `FeedsScreen` or the main `Feed` based on the `from` route param
+- Edit mode includes a link to `NotificationSettingsScreen` for per-tag notifications
+
+---
+
+### NotificationSettingsScreen
+**File:** `app/src/screens/NotificationSettingsScreen.tsx`  
+**Route:** `NotificationSettings` (stack)  
+**Purpose:** Configure push notifications for one feed or one tag.
+
+**Primary features:**
+- Feed mode: toggle "Notify on new items"
+- Feed mode: frequency selector (Immediate / Daily digest / Off)
+- Tag mode: toggle "Notify when tagged feeds have new items"
+- Requests notification permission when enabling notifications
+- Initializes per-feed last-seen checkpoint when enabling feed notifications
 
 ---
 

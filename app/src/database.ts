@@ -75,7 +75,11 @@ async function initializeSchema(
       nsfw INTEGER NOT NULL DEFAULT 0,
       next_fetch_at INTEGER NOT NULL DEFAULT 0,
       consecutive_failures INTEGER NOT NULL DEFAULT 0,
-      fetch_interval_ms INTEGER
+      fetch_interval_ms INTEGER,
+      notify_enabled INTEGER NOT NULL DEFAULT 0,
+      notify_frequency TEXT NOT NULL DEFAULT 'off',
+      notify_last_seen_item_id INTEGER,
+      notify_daily_last_sent_at INTEGER
     );
 
     CREATE TABLE IF NOT EXISTS items (
@@ -118,7 +122,8 @@ async function initializeSchema(
 
     CREATE TABLE IF NOT EXISTS tags (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE COLLATE NOCASE
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      notify_enabled INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS feed_tags (
@@ -213,6 +218,41 @@ async function initializeSchema(
   try {
     await database.execAsync(
       "ALTER TABLE feeds ADD COLUMN fetch_interval_ms INTEGER"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN notify_enabled INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN notify_frequency TEXT NOT NULL DEFAULT 'off'"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN notify_last_seen_item_id INTEGER"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN notify_daily_last_sent_at INTEGER"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+  try {
+    await database.execAsync(
+      "ALTER TABLE tags ADD COLUMN notify_enabled INTEGER NOT NULL DEFAULT 0"
     );
   } catch {
     // Column already exists — ignore
@@ -369,6 +409,85 @@ export async function setFeedRefreshFailure(
       [consecutiveFailures, nextFetchAt, feedId]
     )
   );
+}
+
+export async function setFeedNotificationSettings(
+  feedId: number,
+  settings: {
+    enabled: boolean;
+    frequency: "immediate" | "daily" | "off";
+  }
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "UPDATE feeds SET notify_enabled = ?, notify_frequency = ? WHERE id = ?",
+      [settings.enabled ? 1 : 0, settings.frequency, feedId]
+    )
+  );
+}
+
+export async function setFeedNotificationCheckpoint(
+  feedId: number,
+  lastSeenItemId: number | null
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "UPDATE feeds SET notify_last_seen_item_id = ? WHERE id = ?",
+      [lastSeenItemId, feedId]
+    )
+  );
+}
+
+export async function setFeedDailyNotificationSentAt(
+  feedId: number,
+  sentAt: number | null
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "UPDATE feeds SET notify_daily_last_sent_at = ? WHERE id = ?",
+      [sentAt, feedId]
+    )
+  );
+}
+
+export async function getMaxItemIdForFeed(feedId: number): Promise<number | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{ id: number }>(
+    "SELECT id FROM items WHERE feed_id = ? ORDER BY id DESC LIMIT 1",
+    [feedId]
+  );
+  return row?.id ?? null;
+}
+
+export async function getUnseenItemsForFeed(
+  feedId: number,
+  sinceItemIdExclusive: number,
+  limit: number
+): Promise<FeedItem[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<FeedItem>(
+    "SELECT * FROM items WHERE feed_id = ? AND id > ? ORDER BY id DESC LIMIT ?",
+    [feedId, sinceItemIdExclusive, limit]
+  );
+}
+
+export async function getFeedItemWithFeedById(
+  itemId: number
+): Promise<FeedItemWithFeed | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<FeedItemWithFeed>(
+    `SELECT items.id, items.feed_id, items.title, items.url, items.content,
+            items.image_url, items.raw_xml, items.published_at, items.read,
+            feeds.title AS feed_title
+     FROM items
+     JOIN feeds ON feeds.id = items.feed_id
+     WHERE items.id = ?`,
+    [itemId]
+  );
+  return row ?? null;
 }
 
 /**
@@ -616,14 +735,14 @@ export async function getReadLaterItemIds(): Promise<Set<number>> {
 export async function getTags(): Promise<Tag[]> {
   const database = await getDatabase();
   return database.getAllAsync<Tag>(
-    "SELECT id, name FROM tags ORDER BY name COLLATE NOCASE ASC"
+    "SELECT id, name, notify_enabled FROM tags ORDER BY name COLLATE NOCASE ASC"
   );
 }
 
 export async function getTagsWithFeedCounts(): Promise<TagWithFeedCount[]> {
   const database = await getDatabase();
   return database.getAllAsync<TagWithFeedCount>(
-    `SELECT tags.id, tags.name, COUNT(feed_tags.feed_id) AS feed_count
+    `SELECT tags.id, tags.name, tags.notify_enabled, COUNT(feed_tags.feed_id) AS feed_count
      FROM tags
      LEFT JOIN feed_tags ON feed_tags.tag_id = tags.id
      GROUP BY tags.id
@@ -650,7 +769,7 @@ export async function getOrCreateTag(name: string): Promise<Tag> {
   }
   const database = await getDatabase();
   const existing = await database.getFirstAsync<Tag>(
-    "SELECT id, name FROM tags WHERE name = ? COLLATE NOCASE",
+    "SELECT id, name, notify_enabled FROM tags WHERE name = ? COLLATE NOCASE",
     [trimmed]
   );
   if (existing) return existing;
@@ -676,10 +795,23 @@ export async function deleteTag(tagId: number): Promise<void> {
   );
 }
 
+export async function setTagNotificationEnabled(
+  tagId: number,
+  enabled: boolean
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync("UPDATE tags SET notify_enabled = ? WHERE id = ?", [
+      enabled ? 1 : 0,
+      tagId,
+    ])
+  );
+}
+
 export async function getTagsForFeed(feedId: number): Promise<Tag[]> {
   const database = await getDatabase();
   return database.getAllAsync<Tag>(
-    `SELECT tags.id, tags.name
+    `SELECT tags.id, tags.name, tags.notify_enabled
      FROM tags
      JOIN feed_tags ON feed_tags.tag_id = tags.id
      WHERE feed_tags.feed_id = ?

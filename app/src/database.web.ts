@@ -59,6 +59,10 @@ function normalizeFeed(raw: Feed): Feed {
     next_fetch_at: raw.next_fetch_at ?? 0,
     consecutive_failures: raw.consecutive_failures ?? 0,
     fetch_interval_ms: raw.fetch_interval_ms ?? null,
+    notify_enabled: raw.notify_enabled ?? 0,
+    notify_frequency: raw.notify_frequency ?? "off",
+    notify_last_seen_item_id: raw.notify_last_seen_item_id ?? null,
+    notify_daily_last_sent_at: raw.notify_daily_last_sent_at ?? null,
   };
 }
 
@@ -119,7 +123,12 @@ function loadState(): DbState {
           ? (parsed.readLaterPosts as ReadLaterPost[])
           : [];
       const tags =
-        parsed && Array.isArray(parsed.tags) ? (parsed.tags as Tag[]) : [];
+        parsed && Array.isArray(parsed.tags)
+          ? (parsed.tags as Tag[]).map((tag) => ({
+              ...tag,
+              notify_enabled: tag.notify_enabled ?? 0,
+            }))
+          : [];
       const feedTags =
         parsed && Array.isArray(parsed.feedTags)
           ? (parsed.feedTags as FeedTagRow[])
@@ -232,6 +241,10 @@ export async function addFeed({
     next_fetch_at: 0,
     consecutive_failures: 0,
     fetch_interval_ms: null,
+    notify_enabled: 0,
+    notify_frequency: "off",
+    notify_last_seen_item_id: null,
+    notify_daily_last_sent_at: null,
   };
   state.feeds.push(feed);
   state.nextFeedId = id + 1;
@@ -329,6 +342,85 @@ export async function setFeedRefreshFailure(
     feed.next_fetch_at = nextFetchAt;
     saveState(state);
   }
+}
+
+export async function setFeedNotificationSettings(
+  feedId: number,
+  settings: {
+    enabled: boolean;
+    frequency: "immediate" | "daily" | "off";
+  }
+): Promise<void> {
+  const state = loadState();
+  const feed = state.feeds.find((f) => f.id === feedId);
+  if (feed) {
+    feed.notify_enabled = settings.enabled ? 1 : 0;
+    feed.notify_frequency = settings.frequency;
+    saveState(state);
+  }
+}
+
+export async function setFeedNotificationCheckpoint(
+  feedId: number,
+  lastSeenItemId: number | null
+): Promise<void> {
+  const state = loadState();
+  const feed = state.feeds.find((f) => f.id === feedId);
+  if (feed) {
+    feed.notify_last_seen_item_id = lastSeenItemId;
+    saveState(state);
+  }
+}
+
+export async function setFeedDailyNotificationSentAt(
+  feedId: number,
+  sentAt: number | null
+): Promise<void> {
+  const state = loadState();
+  const feed = state.feeds.find((f) => f.id === feedId);
+  if (feed) {
+    feed.notify_daily_last_sent_at = sentAt;
+    saveState(state);
+  }
+}
+
+export async function getMaxItemIdForFeed(feedId: number): Promise<number | null> {
+  const state = loadState();
+  let maxId: number | null = null;
+  for (const item of state.items) {
+    if (item.feed_id !== feedId) continue;
+    if (maxId === null || item.id > maxId) {
+      maxId = item.id;
+    }
+  }
+  return maxId;
+}
+
+export async function getUnseenItemsForFeed(
+  feedId: number,
+  sinceItemIdExclusive: number,
+  limit: number
+): Promise<FeedItem[]> {
+  const state = loadState();
+  return state.items
+    .filter((item) => item.feed_id === feedId && item.id > sinceItemIdExclusive)
+    .map((item) => ({ ...item }))
+    .sort((a, b) => b.id - a.id)
+    .slice(0, limit);
+}
+
+export async function getFeedItemWithFeedById(
+  itemId: number
+): Promise<FeedItemWithFeed | null> {
+  const state = loadState();
+  const item = state.items.find((entry) => entry.id === itemId);
+  if (!item) return null;
+  const feed = state.feeds.find((entry) => entry.id === item.feed_id);
+  if (!feed) return null;
+  return {
+    ...item,
+    feed_title: feed.title,
+  };
 }
 
 export async function getRecentPublishedAtForFeed(
@@ -597,7 +689,7 @@ export async function addTag(name: string): Promise<number> {
     throw new Error(`Tag "${trimmed}" already exists`);
   }
   const id = state.nextTagId;
-  state.tags.push({ id, name: trimmed });
+  state.tags.push({ id, name: trimmed, notify_enabled: 0 });
   state.nextTagId = id + 1;
   saveState(state);
   return id;
@@ -612,7 +704,7 @@ export async function getOrCreateTag(name: string): Promise<Tag> {
   const existing = findTagByName(state, trimmed);
   if (existing) return existing;
   const id = state.nextTagId;
-  const tag: Tag = { id, name: trimmed };
+  const tag: Tag = { id, name: trimmed, notify_enabled: 0 };
   state.tags.push(tag);
   state.nextTagId = id + 1;
   saveState(state);
@@ -703,4 +795,16 @@ export async function setTagFeeds(
     }
   }
   saveState(state);
+}
+
+export async function setTagNotificationEnabled(
+  tagId: number,
+  enabled: boolean
+): Promise<void> {
+  const state = loadState();
+  const tag = state.tags.find((entry) => entry.id === tagId);
+  if (tag) {
+    tag.notify_enabled = enabled ? 1 : 0;
+    saveState(state);
+  }
 }
