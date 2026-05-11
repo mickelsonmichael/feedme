@@ -77,7 +77,7 @@ async function initializeSchema(
       consecutive_failures INTEGER NOT NULL DEFAULT 0,
       fetch_interval_ms INTEGER,
       notify_enabled INTEGER NOT NULL DEFAULT 0,
-      notify_frequency TEXT NOT NULL DEFAULT 'off',
+      notify_frequency TEXT NOT NULL DEFAULT 'off' CHECK (notify_frequency IN ('immediate', 'daily', 'off')),
       notify_last_seen_item_id INTEGER,
       notify_daily_last_sent_at INTEGER
     );

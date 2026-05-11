@@ -43,6 +43,13 @@ const FEED_FREQUENCY_OPTIONS: { value: FeedFrequency; label: string }[] = [
   { value: "off", label: "Off" },
 ];
 
+function normalizeFeedFrequency(value: string | undefined): FeedFrequency {
+  if (value === "immediate" || value === "daily" || value === "off") {
+    return value;
+  }
+  return "off";
+}
+
 export default function NotificationSettingsScreen({ route }: Props) {
   const { colors } = useTheme();
   const [loading, setLoading] = useState(true);
@@ -73,7 +80,7 @@ export default function NotificationSettingsScreen({ route }: Props) {
     loadData();
   }, [loadData]);
 
-  const feedFrequency = (feed?.notify_frequency ?? "off") as FeedFrequency;
+  const feedFrequency = normalizeFeedFrequency(feed?.notify_frequency);
   const feedEnabled = feed?.notify_enabled === 1 && feedFrequency !== "off";
   const tagEnabled = tag?.notify_enabled === 1;
 
