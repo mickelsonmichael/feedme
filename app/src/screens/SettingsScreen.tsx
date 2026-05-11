@@ -281,6 +281,9 @@ export default function SettingsScreen({ navigation }: Props) {
   const [defaultSort, setDefaultSort] = React.useState<"newest" | "stacked">(
     () => loadConfig().defaultSort ?? "stacked"
   );
+  const [bionicReading, setBionicReading] = React.useState(
+    () => loadConfig().bionicReading ?? false
+  );
 
   const handleLayoutChange = React.useCallback((nextLayout: FeedLayoutMode) => {
     setFeedLayout(nextLayout);
@@ -333,6 +336,15 @@ export default function SettingsScreen({ navigation }: Props) {
     []
   );
 
+  const handleBionicReadingChange = React.useCallback((value: boolean) => {
+    setBionicReading(value);
+    try {
+      saveConfig({ bionicReading: value });
+    } catch (e) {
+      console.warn("[feedme] Failed to persist bionicReading:", e);
+    }
+  }, []);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -357,6 +369,11 @@ export default function SettingsScreen({ navigation }: Props) {
           label="Hide read items by default"
           value={hideReadByDefault}
           onValueChange={handleHideReadByDefaultChange}
+        />
+        <ToggleRow
+          label="Bionic Reading"
+          value={bionicReading}
+          onValueChange={handleBionicReadingChange}
         />
 
         <SectionHeading label="Default sort" />

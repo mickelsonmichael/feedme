@@ -26,7 +26,9 @@ import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedItem, RootStackParamList } from "../types";
 import { parseContentAndLinks } from "../utils/contentActions";
+import { toBionic } from "../utils/bionicReading";
 import { openUrlWithPreference } from "../linkOpening";
+import { loadConfig } from "../storage";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
 
@@ -41,6 +43,7 @@ export default function FeedItemScreen({ route, navigation }: Props) {
   const [read, setRead] = React.useState(item.read === 1);
   const [updatingRead, setUpdatingRead] = React.useState(false);
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
+  const [bionicReading] = React.useState(() => loadConfig().bionicReading ?? false);
   const { text: contentText, links: contentLinks } = React.useMemo(
     () => parseContentAndLinks(item.content),
     [item.content]
@@ -362,7 +365,19 @@ export default function FeedItemScreen({ route, navigation }: Props) {
           ) : null}
 
           <Text style={[styles.article, { color: colors.ink }]}>
-            {contentText || "No content available."}
+            {bionicReading
+              ? toBionic(contentText || "No content available.").map(
+                  (token, i) =>
+                    token.kind === "space" ? (
+                      token.text
+                    ) : (
+                      <Text key={i}>
+                        <Text style={styles.bionicBold}>{token.bold}</Text>
+                        {token.rest}
+                      </Text>
+                    )
+                )
+              : contentText || "No content available."}
           </Text>
 
           {visibleContentLinks.length ? (
@@ -483,6 +498,9 @@ const styles = StyleSheet.create({
     fontSize: fontSize.bodyLg,
     lineHeight: 24,
     fontFamily: fonts.sans,
+  },
+  bionicBold: {
+    fontWeight: "700",
   },
   contentLinkRow: {
     flexDirection: "row",

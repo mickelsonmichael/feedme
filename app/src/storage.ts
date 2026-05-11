@@ -18,6 +18,7 @@ export type WebConfig = {
   markAsReadOnScroll?: boolean;
   hideReadByDefault?: boolean;
   defaultSort?: "newest" | "stacked";
+  bionicReading?: boolean;
 };
 
 let cachedConfig: WebConfig | null = null;
@@ -77,6 +78,11 @@ function validateConfig(raw: unknown): WebConfig {
     const defaultSort = (raw as Record<string, unknown>).defaultSort;
     if (defaultSort === "newest" || defaultSort === "stacked") {
       config.defaultSort = defaultSort;
+    }
+
+    const bionicReading = (raw as Record<string, unknown>).bionicReading;
+    if (typeof bionicReading === "boolean") {
+      config.bionicReading = bionicReading;
     }
   }
   return config;
