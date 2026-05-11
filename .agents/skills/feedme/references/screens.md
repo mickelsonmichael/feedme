@@ -99,6 +99,7 @@ The set of bottom tabs depends on screen size:
 - Save/unsave button, read/unread toggle (auto-marks read on open)
 - "Open in browser" action using user's preferred link-open mode
 - Header title set to the feed's name
+- Bionic reading: when enabled in Settings, boldes the leading characters of each word in the article body
 
 ---
 
@@ -183,7 +184,7 @@ The set of bottom tabs depends on screen size:
 
 **Primary features:**
 - Appearance: Light / Dark / System theme (segmented control)
-- Reading: "Mark as read on scroll" toggle, "Hide read items by default" toggle
+- Reading: "Mark as read on scroll" toggle, "Hide read items by default" toggle, "Bionic Reading" toggle
 - Default sort: Newest / Stacked (segmented)
 - Feed layout: Compact / Card (segmented, with visual icon previews)
 - Link open mode: Embedded (in-app browser) / External browser

@@ -64,6 +64,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDITEM-003 | The user shall be able to save/unsave the item from this screen. |
 | REQ-FEEDITEM-004 | The user shall be able to open the item's link in the browser (using their preferred link-open mode). |
 | REQ-FEEDITEM-005 | Reddit posts shall show a dedicated "Comments" link to the Reddit thread. |
+| REQ-FEEDITEM-006 | [added] When the "Bionic Reading" setting is enabled, the article body shall render each word with its leading characters (Math.ceil(n/2)) in bold and the remainder in normal weight. Trailing punctuation (non-alphanumeric characters at the end of a token) shall not be bolded. |
 
 ---
 
@@ -138,6 +139,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-SETTINGS-006 | The user shall be able to choose how links are opened (in-app browser vs. external browser). |
 | REQ-SETTINGS-007 | All settings shall persist across app restarts. |
 | REQ-SETTINGS-008 | The settings screen shall provide navigation to ImportExportScreen. |
+| REQ-SETTINGS-009 | [added] The user shall be able to toggle "Bionic Reading" in the Reading section. When enabled, the leading characters of each word in the article body (FeedItemScreen) shall be displayed in bold. |
 
 ---
 
