@@ -272,7 +272,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
         <FlashList
           data={items}
           keyExtractor={keyExtractor}
-
           onRefresh={handleRefresh}
           refreshing={refreshing}
           contentContainerStyle={styles.list}
