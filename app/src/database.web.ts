@@ -406,9 +406,9 @@ export async function getUnseenItemsForFeed(
   const state = loadState();
   return state.items
     .filter((item) => item.feed_id === feedId && item.id > sinceItemIdExclusive)
-    .map((item) => ({ ...item }))
     .sort((a, b) => b.id - a.id)
-    .slice(0, limit);
+    .slice(0, limit)
+    .map((item) => ({ ...item }));
 }
 
 export async function getFeedItemWithFeedById(
