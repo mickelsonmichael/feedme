@@ -30,6 +30,11 @@ type DbState = {
   feeds: Feed[];
   items: FeedItem[];
   savedPosts: SavedPost[];
+  /** True when any entry in savedPosts was persisted by an older version that
+   *  did not store feed_id.  Computed once at load time; used by
+   *  getSavedItemIdsForFeed to decide whether an items-scan fallback is
+   *  needed. */
+  hasLegacySavedPosts: boolean;
   readLaterPosts: ReadLaterPost[];
   tags: Tag[];
   feedTags: FeedTagRow[];
@@ -62,6 +67,7 @@ function emptyState(): DbState {
     feeds: [],
     items: [],
     savedPosts: [],
+    hasLegacySavedPosts: false,
     readLaterPosts: [],
     tags: [],
     feedTags: [],
@@ -122,6 +128,9 @@ function loadState(): DbState {
         feeds,
         items,
         savedPosts,
+        hasLegacySavedPosts: savedPosts.some(
+          (p) => p.item_id !== null && p.feed_id == null
+        ),
         readLaterPosts,
         tags,
         feedTags,
@@ -485,11 +494,9 @@ export async function getSavedItemIdsForFeed(
   const state = loadState();
 
   // Saved posts written by the current version store feed_id directly, so we
-  // can filter without scanning state.items.  For entries persisted by an
-  // older version that lack feed_id, fall back to an item-id lookup.
-  const legacyItemIds = state.savedPosts.some(
-    (p) => p.item_id !== null && p.feed_id == null
-  )
+  // can filter without scanning state.items.  hasLegacySavedPosts is computed
+  // once at load time so we avoid an O(n) scan on every call here.
+  const legacyItemIds = state.hasLegacySavedPosts
     ? new Set(state.items.filter((i) => i.feed_id === feedId).map((i) => i.id))
     : null;
 
