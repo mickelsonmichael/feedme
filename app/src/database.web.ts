@@ -126,7 +126,7 @@ function loadState(): DbState {
         parsed && Array.isArray(parsed.tags)
           ? (parsed.tags as Tag[]).map((tag) => ({
               ...tag,
-              notify_enabled: tag.notify_enabled ?? 0,
+              notify_enabled: tag.notify_enabled === 1 ? 1 : 0,
             }))
           : [];
       const feedTags =

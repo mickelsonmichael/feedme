@@ -19,6 +19,7 @@ const FEED_CHANNEL_ID = "feedme-feed-updates";
 const TAG_CHANNEL_ID = "feedme-tag-updates";
 const MAX_NOTIFICATIONS_PER_FEED = 5;
 const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const BACKGROUND_FETCH_INTERVAL_SECONDS = 15 * 60;
 
 type NotificationOpenPayload = {
   itemId: number;
@@ -118,7 +119,7 @@ async function registerBackgroundNotificationTask(): Promise<void> {
   );
   if (!isRegistered) {
     await BackgroundFetch.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK, {
-      minimumInterval: 15 * 60,
+      minimumInterval: BACKGROUND_FETCH_INTERVAL_SECONDS,
       stopOnTerminate: false,
       startOnBoot: true,
     });
@@ -222,13 +223,20 @@ export function subscribeToNotificationOpens(
     const data = response.notification.request.content.data as
       | NotificationOpenPayload
       | undefined;
-    if (
-      data &&
-      typeof data.itemId === "number" &&
-      typeof data.title === "string" &&
-      typeof data.feedTitle === "string"
-    ) {
-      onOpen(data);
+    if (data && typeof data.itemId === "number") {
+      onOpen({
+        itemId: data.itemId,
+        title: typeof data.title === "string" ? data.title : "",
+        url: typeof data.url === "string" ? data.url : null,
+        content: typeof data.content === "string" ? data.content : null,
+        imageUrl: typeof data.imageUrl === "string" ? data.imageUrl : null,
+        publishedAt:
+          typeof data.publishedAt === "number" ? data.publishedAt : null,
+        feedTitle: typeof data.feedTitle === "string" ? data.feedTitle : "",
+        read: typeof data.read === "number" ? data.read : 0,
+        useProxy: data.useProxy === true,
+        nsfw: data.nsfw === true,
+      });
     }
   });
 }
