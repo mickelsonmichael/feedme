@@ -142,12 +142,15 @@ export async function runBackgroundNotificationSync(): Promise<void> {
     tags.filter((tag) => tag.notify_enabled === 1).map((tag) => tag.id)
   );
   const feedTagMap: Map<number, number[]> =
-    enabledTagIds.size > 0 ? await getFeedTagMap() : new Map<number, number[]>();
+    enabledTagIds.size > 0
+      ? await getFeedTagMap()
+      : new Map<number, number[]>();
 
   const now = Date.now();
   for (const feed of feeds) {
     const feedFrequency = feed.notify_frequency ?? "off";
-    const feedNotifyEnabled = feed.notify_enabled === 1 && feedFrequency !== "off";
+    const feedNotifyEnabled =
+      feed.notify_enabled === 1 && feedFrequency !== "off";
     const tagIds: number[] = feedTagMap.get(feed.id) ?? [];
     const matchedTag = tagIds.some((tagId) => enabledTagIds.has(tagId));
     if (!feedNotifyEnabled && !matchedTag) {
@@ -157,7 +160,9 @@ export async function runBackgroundNotificationSync(): Promise<void> {
     const dailyDue =
       now - (feed.notify_daily_last_sent_at ?? 0) >= DAILY_INTERVAL_MS;
     const shouldSendNow =
-      matchedTag || feedFrequency === "immediate" || (feedFrequency === "daily" && dailyDue);
+      matchedTag ||
+      feedFrequency === "immediate" ||
+      (feedFrequency === "daily" && dailyDue);
     if (!shouldSendNow) {
       continue;
     }
@@ -173,7 +178,8 @@ export async function runBackgroundNotificationSync(): Promise<void> {
       continue;
     }
 
-    const channelId = matchedTag && !feedNotifyEnabled ? TAG_CHANNEL_ID : FEED_CHANNEL_ID;
+    const channelId =
+      matchedTag && !feedNotifyEnabled ? TAG_CHANNEL_ID : FEED_CHANNEL_ID;
     for (const item of unseenItems) {
       const payload: NotificationOpenPayload = {
         itemId: item.id,

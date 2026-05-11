@@ -165,7 +165,13 @@ export default function NotificationSettingsScreen({ route }: Props) {
 
   if (loading) {
     return (
-      <View style={[styles.container, styles.center, { backgroundColor: colors.paper }]}>
+      <View
+        style={[
+          styles.container,
+          styles.center,
+          { backgroundColor: colors.paper },
+        ]}
+      >
         <ActivityIndicator color={colors.accent} size="large" />
       </View>
     );

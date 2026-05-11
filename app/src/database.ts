@@ -453,7 +453,9 @@ export async function setFeedDailyNotificationSentAt(
   );
 }
 
-export async function getMaxItemIdForFeed(feedId: number): Promise<number | null> {
+export async function getMaxItemIdForFeed(
+  feedId: number
+): Promise<number | null> {
   const database = await getDatabase();
   const row = await database.getFirstAsync<{ id: number }>(
     "SELECT id FROM items WHERE feed_id = ? ORDER BY id DESC LIMIT 1",

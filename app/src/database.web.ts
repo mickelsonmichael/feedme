@@ -384,7 +384,9 @@ export async function setFeedDailyNotificationSentAt(
   }
 }
 
-export async function getMaxItemIdForFeed(feedId: number): Promise<number | null> {
+export async function getMaxItemIdForFeed(
+  feedId: number
+): Promise<number | null> {
   const state = loadState();
   let maxId: number | null = null;
   for (const item of state.items) {
