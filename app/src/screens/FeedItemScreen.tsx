@@ -43,7 +43,9 @@ export default function FeedItemScreen({ route, navigation }: Props) {
   const [read, setRead] = React.useState(item.read === 1);
   const [updatingRead, setUpdatingRead] = React.useState(false);
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
-  const [bionicReading] = React.useState(() => loadConfig().bionicReading ?? false);
+  const [bionicReading] = React.useState(
+    () => loadConfig().bionicReading ?? false
+  );
   const { text: contentText, links: contentLinks } = React.useMemo(
     () => parseContentAndLinks(item.content),
     [item.content]
