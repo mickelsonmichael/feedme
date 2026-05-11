@@ -106,6 +106,8 @@ function ensureTaskDefined(): void {
     });
   } catch {
     // Task may already be defined if Metro reloaded this module.
+    // Keep boot resilient, but surface unexpected define failures.
+    console.warn("[feedme] Notification background task definition skipped");
   }
 }
 

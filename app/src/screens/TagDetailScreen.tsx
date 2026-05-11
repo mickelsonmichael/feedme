@@ -448,7 +448,7 @@ export default function TagDetailScreen({ route, navigation }: Props) {
             )}
           </View>
 
-          {isEditMode && tagId !== undefined ? (
+          {isEditMode ? (
             <TouchableOpacity
               style={[
                 styles.actionBtn,
@@ -458,7 +458,7 @@ export default function TagDetailScreen({ route, navigation }: Props) {
               onPress={() =>
                 navigation.navigate("NotificationSettings", {
                   source: "tag",
-                  tagId,
+                  tagId: tagId as number,
                 })
               }
               activeOpacity={0.7}
