@@ -205,7 +205,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                 ? `https://www.reddit.com/user/${target.name}`
                 : `https://www.reddit.com/r/${target.name}`;
             setFeedError(
-              `The Reddit ${target.type} ${redditPath} was not found. Check the name and try again.`
+              `The Reddit feed ${redditPath} was not found. Check the name and try again.`
             );
           } else {
             setFeedError(
@@ -544,7 +544,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           >
             <Text style={[styles.hintText, { color: colors.inkSoft }]}>
               {source === "reddit"
-                ? "Enter a subreddit or user (e.g. r/pics, u/spez, or https://reddit.com/user/spez) to subscribe to its RSS feed."
+                ? "Enter a subreddit or user (e.g. r/pics, u/spez, or https://www.reddit.com/user/spez) to subscribe to its RSS feed."
                 : source === "youtube"
                   ? "Enter a YouTube channel name or URL to subscribe to its RSS feed."
                   : source === "github"
