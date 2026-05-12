@@ -43,7 +43,7 @@ export function getRedditFeedTarget(rawValue: string): RedditFeedTarget | null {
 
 /**
  * Extracts the subreddit name from a raw user-supplied value.
- * Returns an empty string when the input is a Reddit user.
+ * Returns an empty string when the input is a Reddit user or invalid/empty.
  */
 export function getSubreddit(rawValue: string): string {
   const target = getRedditFeedTarget(rawValue);
