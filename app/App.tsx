@@ -7,6 +7,8 @@ import {
   TouchableOpacity,
   ScrollView,
   useWindowDimensions,
+  Alert,
+  Linking,
 } from "react-native";
 import { Image } from "expo-image";
 import {
@@ -50,6 +52,15 @@ import {
   initializeNotificationSystem,
   subscribeToNotificationOpens,
 } from "./src/notifications";
+import {
+  installCrashHandler,
+  checkForCrashReport,
+  clearCrashReport,
+  buildGitHubIssueUrl,
+} from "./src/crashReporter";
+import { ErrorBoundary } from "./src/components/ErrorBoundary";
+
+installCrashHandler();
 
 const Tab = createBottomTabNavigator<TabParamList>();
 
@@ -535,6 +546,29 @@ function AppContent() {
   const { colors, isDark } = useTheme();
 
   React.useEffect(() => {
+    checkForCrashReport()
+      .then((report) => {
+        if (!report) return;
+        Alert.alert(
+          "App Crashed",
+          "The app crashed on the previous launch. Would you like to report it?",
+          [
+            { text: "Dismiss", onPress: () => clearCrashReport() },
+            {
+              text: "Report Issue",
+              onPress: async () => {
+                try {
+                  await Linking.openURL(buildGitHubIssueUrl(report));
+                } finally {
+                  await clearCrashReport();
+                }
+              },
+            },
+          ]
+        );
+      })
+      .catch(() => {});
+
     initializeNotificationSystem().catch(() => {});
     const subscription = subscribeToNotificationOpens((payload) => {
       if (!navigationRef.isReady()) {
@@ -575,7 +609,9 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <HeaderContentProvider>
-          <AppContent />
+          <ErrorBoundary>
+            <AppContent />
+          </ErrorBoundary>
         </HeaderContentProvider>
       </ThemeProvider>
     </SafeAreaProvider>
