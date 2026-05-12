@@ -1,5 +1,6 @@
 import {
   extractGifEmbedUrl,
+  extractGifEmbedUrlFromContent,
   extractGiphyId,
   extractRedgifsId,
   getGiphyEmbedUrl,
@@ -121,5 +122,46 @@ describe("extractGifEmbedUrl", () => {
 
   it("returns null for null input", () => {
     expect(extractGifEmbedUrl(null)).toBeNull();
+  });
+});
+
+describe("extractGifEmbedUrlFromContent", () => {
+  it("finds a Redgifs embed URL from an href in HTML content", () => {
+    expect(
+      extractGifEmbedUrlFromContent(
+        '<p><a href="https://www.redgifs.com/watch/TightGif">view</a></p>'
+      )
+    ).toBe("https://www.redgifs.com/ifr/TightGif");
+  });
+
+  it("finds a Giphy embed URL from an href in HTML content", () => {
+    expect(
+      extractGifEmbedUrlFromContent(
+        '<p><a href="https://giphy.com/gifs/cat-xT9IgG50Lg7KXYNX8I">view</a></p>'
+      )
+    ).toBe("https://giphy.com/embed/xT9IgG50Lg7KXYNX8I");
+  });
+
+  it("returns null when content has no gif links", () => {
+    expect(
+      extractGifEmbedUrlFromContent("<p>No gif links here</p>")
+    ).toBeNull();
+  });
+
+  it("returns null for null input", () => {
+    expect(extractGifEmbedUrlFromContent(null)).toBeNull();
+  });
+
+  it("returns null for undefined input", () => {
+    expect(extractGifEmbedUrlFromContent(undefined)).toBeNull();
+  });
+
+  it("returns the first gif link when multiple hrefs are present", () => {
+    expect(
+      extractGifEmbedUrlFromContent(
+        '<a href="https://www.redgifs.com/watch/FirstGif">1</a>' +
+          '<a href="https://www.redgifs.com/watch/SecondGif">2</a>'
+      )
+    ).toBe("https://www.redgifs.com/ifr/FirstGif");
   });
 });

@@ -8,6 +8,7 @@ const mockExtractRedditGalleryUrl = jest.fn();
 const mockExtractRedditVideoPostUrl = jest.fn();
 const mockFetchRedditPostMedia = jest.fn();
 const mockExtractGifEmbedUrl = jest.fn();
+const mockExtractGifEmbedUrlFromContent = jest.fn();
 
 jest.mock("../redditGallery", () => {
   class MockRedditFetchError extends Error {
@@ -33,6 +34,8 @@ jest.mock("../redditGallery", () => {
 
 jest.mock("../gifUtils", () => ({
   extractGifEmbedUrl: (...args: unknown[]) => mockExtractGifEmbedUrl(...args),
+  extractGifEmbedUrlFromContent: (...args: unknown[]) =>
+    mockExtractGifEmbedUrlFromContent(...args),
 }));
 
 jest.mock("../context/ThemeContext", () => ({
@@ -87,6 +90,7 @@ describe("ExpandedFeedMedia", () => {
       success(1080, 1080);
     });
     mockExtractGifEmbedUrl.mockReturnValue(null);
+    mockExtractGifEmbedUrlFromContent.mockReturnValue(null);
     mockExtractRedditVideoPostUrl.mockReturnValue(null);
     mockExtractRedditGalleryUrl.mockReturnValue(null);
     mockFetchRedditPostMedia.mockResolvedValue({ images: [], video: null });
@@ -524,6 +528,34 @@ describe("ExpandedFeedMedia", () => {
     });
     expect(preview.props.blurRadius).toBe(0);
     expect(preview.props.autoplay).toBe(false);
+  });
+
+  it("detects a Redgifs embed URL from HTML content when itemUrl is not a gif host", async () => {
+    // Arrange — itemUrl is a Reddit thread, but content contains a Redgifs href
+    mockExtractGifEmbedUrl.mockReturnValue(null);
+    mockExtractGifEmbedUrlFromContent.mockReturnValue(
+      "https://www.redgifs.com/ifr/ContentGif"
+    );
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://www.reddit.com/r/test/comments/abc123"
+          content='<p><a href="https://www.redgifs.com/watch/ContentGif">view</a></p>'
+          testID="expanded-media"
+          deferGifLoad
+        />
+      );
+    });
+
+    // Assert — the GIF placeholder is shown (not a static image)
+    const loadButton = tree!.root.findByProps({
+      accessibilityLabel: "Load GIF",
+    });
+    expect(loadButton.props.testID).toBe("expanded-media");
   });
 
   it("renders a Reddit video play stage and switches to a player on tap", async () => {

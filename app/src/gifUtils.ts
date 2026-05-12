@@ -107,3 +107,19 @@ export function extractGifEmbedUrl(
 
   return null;
 }
+
+/**
+ * Scans HTML content for the first href attribute pointing to a Redgifs or
+ * Giphy URL and returns its embed URL, or null if none is found.
+ * Useful for Reddit self-posts that embed a GIF link in the post body.
+ */
+export function extractGifEmbedUrlFromContent(
+  content: string | null | undefined
+): string | null {
+  if (!content) return null;
+  for (const match of content.matchAll(/href="([^"]+)"/gi)) {
+    const embedUrl = extractGifEmbedUrl(match[1]);
+    if (embedUrl) return embedUrl;
+  }
+  return null;
+}

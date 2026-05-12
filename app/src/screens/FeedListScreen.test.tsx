@@ -937,7 +937,7 @@ describe("FeedListScreen", () => {
     });
   });
 
-  it("shows reveal overlay for NSFW GIFs in card layout and auto-loads GIF after reveal", async () => {
+  it("shows reveal overlay for NSFW GIFs in card layout and shows Load GIF pill after reveal", async () => {
     // Arrange
     (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "card" });
     (getFeeds as jest.Mock).mockResolvedValue([
@@ -1006,13 +1006,13 @@ describe("FeedListScreen", () => {
       await revealButton.props.onPress();
     });
 
-    // Assert: overlay is gone and GIF is no longer deferred
+    // Assert: overlay is gone and GIF is still deferred (user must tap "Load GIF")
     expect(
       mockExpandedFeedMedia.mock.calls.some(
         ([props]) =>
           props.testID === "card-media-701" &&
           props.blur === false &&
-          props.deferGifLoad === false
+          props.deferGifLoad === true
       )
     ).toBe(true);
 
