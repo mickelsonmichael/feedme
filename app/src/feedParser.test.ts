@@ -59,6 +59,20 @@ const RSS_FEED_WITH_IMAGES = `<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>`;
 
+const RSS_FEED_WITH_CONTENT_ENCODED = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>Encoded RSS Feed</title>
+    <item>
+      <title>Encoded Post</title>
+      <link>https://example.com/encoded</link>
+      <description><![CDATA[<p>Summary only.</p>]]></description>
+      <content:encoded><![CDATA[<div><p>Full body <strong>HTML</strong>.</p></div>]]></content:encoded>
+      <pubDate>Tue, 12 May 2026 11:56:11 GMT</pubDate>
+    </item>
+  </channel>
+</rss>`;
+
 const ATOM_FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>Test Atom Feed</title>
@@ -118,6 +132,12 @@ describe("parseFeed – RSS 2.0", () => {
   it("handles plain-text descriptions", () => {
     const items = parseFeed(RSS_FEED);
     expect(items[1].content).toBe("Plain text description");
+  });
+
+  it("prefers <content:encoded> over <description> when both exist", () => {
+    const [item] = parseFeed(RSS_FEED_WITH_CONTENT_ENCODED);
+    expect(item.content).toContain("<div><p>Full body");
+    expect(item.content).not.toContain("Summary only");
   });
 });
 
