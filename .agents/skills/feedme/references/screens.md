@@ -124,7 +124,7 @@ The set of bottom tabs depends on screen size:
 ### AddFeedScreen
 **File:** `app/src/screens/AddFeedScreen.tsx`  
 **Tab:** AddFeed  
-**Purpose:** Subscribe to a new feed by URL, subreddit name, YouTube channel, GitHub repository releases, or Substack publication.
+**Purpose:** Subscribe to a new feed by URL, Reddit subreddit/user, YouTube channel, GitHub repository releases, or Substack publication.
 
 **Primary features:**
 - Five source modes (2-column chip grid): URL, Reddit, YouTube, GitHub, Substack

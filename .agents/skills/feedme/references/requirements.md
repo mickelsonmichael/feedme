@@ -92,7 +92,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | ID | Requirement |
 |----|-------------|
 | REQ-ADDFEED-001 | The user shall be able to subscribe to a feed by entering a URL. |
-| REQ-ADDFEED-002 | The user shall be able to subscribe to a Reddit feed by entering a subreddit name. |
+| REQ-ADDFEED-002 | [modified] The user shall be able to subscribe to a Reddit feed by entering either a subreddit or a user (`u/<name>`, `user/<name>`, or full Reddit profile URL). If no user prefix is provided, input is treated as a subreddit. |
 | REQ-ADDFEED-003 | The user shall be able to subscribe to a YouTube channel feed. |
 | REQ-ADDFEED-004 | The feed title shall be automatically populated by fetching the feed's XML when the URL field loses focus. |
 | REQ-ADDFEED-005 | The app shall prevent adding a duplicate feed URL. |

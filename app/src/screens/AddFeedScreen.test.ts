@@ -1,4 +1,54 @@
-import { buildRedditFeedUrl, getSubreddit } from "../redditUtils";
+import {
+  buildRedditFeedUrl,
+  getRedditFeedTarget,
+  getSubreddit,
+} from "../redditUtils";
+
+describe("getRedditFeedTarget", () => {
+  it("defaults plain input to subreddit", () => {
+    // Arrange
+    const raw = "pics";
+
+    // Act
+    const result = getRedditFeedTarget(raw);
+
+    // Assert
+    expect(result).toEqual({ type: "subreddit", name: "pics" });
+  });
+
+  it("parses a user/ prefix", () => {
+    // Arrange
+    const raw = "user/mickelsonmichael";
+
+    // Act
+    const result = getRedditFeedTarget(raw);
+
+    // Assert
+    expect(result).toEqual({ type: "user", name: "mickelsonmichael" });
+  });
+
+  it("parses a u/ prefix", () => {
+    // Arrange
+    const raw = "u/mickelsonmichael";
+
+    // Act
+    const result = getRedditFeedTarget(raw);
+
+    // Assert
+    expect(result).toEqual({ type: "user", name: "mickelsonmichael" });
+  });
+
+  it("parses a full Reddit user URL", () => {
+    // Arrange
+    const raw = "https://www.reddit.com/user/mickelsonmichael";
+
+    // Act
+    const result = getRedditFeedTarget(raw);
+
+    // Assert
+    expect(result).toEqual({ type: "user", name: "mickelsonmichael" });
+  });
+});
 
 describe("getSubreddit", () => {
   it("returns a plain subreddit name unchanged", () => {
@@ -71,6 +121,17 @@ describe("getSubreddit", () => {
     // Assert
     expect(result).toBe("science");
   });
+
+  it("returns an empty string for a Reddit user input", () => {
+    // Arrange
+    const raw = "u/spez";
+
+    // Act
+    const result = getSubreddit(raw);
+
+    // Assert
+    expect(result).toBe("");
+  });
 });
 
 describe("buildRedditFeedUrl", () => {
@@ -138,5 +199,38 @@ describe("buildRedditFeedUrl", () => {
 
     // Assert
     expect(result).toBe("https://www.reddit.com/r/science.rss");
+  });
+
+  it("builds from a /user/ path", () => {
+    // Arrange
+    const user = "user/mickelsonmichael";
+
+    // Act
+    const result = buildRedditFeedUrl(user);
+
+    // Assert
+    expect(result).toBe("https://www.reddit.com/user/mickelsonmichael.rss");
+  });
+
+  it("builds from a /u/ path", () => {
+    // Arrange
+    const user = "u/mickelsonmichael";
+
+    // Act
+    const result = buildRedditFeedUrl(user);
+
+    // Assert
+    expect(result).toBe("https://www.reddit.com/user/mickelsonmichael.rss");
+  });
+
+  it("builds from a full Reddit user URL", () => {
+    // Arrange
+    const user = "https://www.reddit.com/user/mickelsonmichael";
+
+    // Act
+    const result = buildRedditFeedUrl(user);
+
+    // Assert
+    expect(result).toBe("https://www.reddit.com/user/mickelsonmichael.rss");
   });
 });
