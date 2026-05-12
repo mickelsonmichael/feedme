@@ -34,6 +34,7 @@ The set of bottom tabs depends on screen size:
 | `NotificationSettings` | `NotificationSettingsScreen` |
 | `ImportExport` | `ImportExportScreen` |
 | `InAppBrowser` | `InAppBrowserScreen` |
+| `RawXml` | `RawXmlScreen` |
 
 ---
 
@@ -202,6 +203,20 @@ The set of bottom tabs depends on screen size:
 - Import: file picker for `.opml` files, parses and bulk-adds feeds
 - Status message area shows success/error inline
 - Graceful fallback for web vs. native file handling
+
+---
+
+### RawXmlScreen
+**File:** `app/src/screens/RawXmlScreen.tsx`  
+**Route:** `RawXml` (stack)  
+**Purpose:** Displays the raw XML for a single feed item, pretty-printed for readability.
+
+**Primary features:**
+- Shows the stored `raw_xml` for the item, formatted with indentation
+- Horizontal scrolling for wide XML content
+- Copy button that copies the formatted XML to the clipboard
+- Back button to return to FeedItemScreen
+- Empty state message when no raw XML is available
 
 ---
 

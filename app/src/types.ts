@@ -117,6 +117,7 @@ export type RootStackParamList = {
     | { tagId: number; source: "tag" };
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
+  RawXml: { rawXml: string | null; title?: string };
 };
 
 export type TabParamList = {
@@ -158,6 +159,7 @@ export type TabParamList = {
     | { tagId: number; source: "tag" };
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
+  RawXml: { rawXml: string | null; title?: string };
 };
 
 export const THEME_MODES = ["light", "dark", "system"] as const;

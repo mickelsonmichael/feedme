@@ -65,6 +65,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDITEM-004 | The user shall be able to open the item's link in the browser (using their preferred link-open mode). |
 | REQ-FEEDITEM-005 | Reddit posts shall show a dedicated "Comments" link to the Reddit thread. |
 | REQ-FEEDITEM-006 | When the "Bionic Reading" setting is enabled, the article body shall render each word with its leading characters (Math.ceil(n/2)) in bold and the remainder in normal weight. Trailing punctuation (non-alphanumeric characters at the end of a token) shall not be bolded. |
+| REQ-FEEDITEM-007 | The screen shall display a "View XML" button that navigates to the RawXmlScreen showing the pretty-printed raw XML for the item. |
 
 ---
 
@@ -164,6 +165,15 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-IMPORTEXPORT-003 | On web, the exported OPML file shall be downloaded via the browser. |
 | REQ-IMPORTEXPORT-004 | The user shall be able to import feeds from an OPML file. |
 | REQ-IMPORTEXPORT-005 | The screen shall display a success or error message after import/export operations. |
+
+## RawXmlScreen
+
+| ID | Requirement |
+|----|-------------|
+| REQ-RAWXML-001 | The screen shall display the raw XML for a feed item, formatted with proper indentation. |
+| REQ-RAWXML-002 | The user shall be able to copy the formatted XML to the clipboard using a Copy button. The button shall briefly indicate success after copying. |
+| REQ-RAWXML-003 | When no raw XML is available for the item, the screen shall display an empty-state message. |
+| REQ-RAWXML-004 | The screen shall support horizontal scrolling for wide XML content. |
 
 ---
 
