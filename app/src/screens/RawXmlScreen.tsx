@@ -45,9 +45,7 @@ export default function RawXmlScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <View
-        style={[styles.toolbar, { borderBottomColor: colors.border }]}
-      >
+      <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
           style={[styles.toolbarBtn, { borderColor: colors.border }]}
           onPress={() => navigation.goBack()}

@@ -4,10 +4,7 @@
  */
 export function prettyXml(xml: string): string {
   // Normalise line endings and remove existing indentation/blank lines
-  const flat = xml
-    .replace(/\r\n?/g, "\n")
-    .replace(/>\s+</g, "><")
-    .trim();
+  const flat = xml.replace(/\r\n?/g, "\n").replace(/>\s+</g, "><").trim();
 
   let result = "";
   let depth = 0;
