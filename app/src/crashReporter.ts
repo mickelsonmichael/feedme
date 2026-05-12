@@ -1,12 +1,12 @@
 import { Platform } from "react-native";
-import * as FileSystem from "expo-file-system";
+import { File as ExpoFile, Paths } from "expo-file-system";
 
-const CRASH_FILE =
-  Platform.OS !== "web"
-    ? (FileSystem.cacheDirectory ?? "") + "crash_report.json"
-    : "";
-
+const CRASH_FILE_NAME = "crash_report.json";
 const CRASH_STORAGE_KEY = "crash_report";
+
+function getCrashFile(): ExpoFile {
+  return new ExpoFile(Paths.cache, CRASH_FILE_NAME);
+}
 
 export type CrashReport = {
   message: string;
@@ -33,7 +33,10 @@ export async function persistCrash(
 ): Promise<void> {
   const report: CrashReport = {
     message: error instanceof Error ? error.message : String(error),
-    stack: (error instanceof Error ? error.stack ?? stack ?? "" : stack ?? "")
+    stack: (error instanceof Error
+      ? (error.stack ?? stack ?? "")
+      : (stack ?? "")
+    )
       .slice(0, 20000)
       .trim(),
     platform: Platform.OS,
@@ -45,7 +48,7 @@ export async function persistCrash(
     if (Platform.OS === "web") {
       localStorage.setItem(CRASH_STORAGE_KEY, json);
     } else {
-      await FileSystem.writeAsStringAsync(CRASH_FILE, json);
+      getCrashFile().write(json);
     }
   } catch {
     // nothing we can do if the write fails during a crash
@@ -65,7 +68,8 @@ export function installCrashHandler(): void {
     const prevUnhandled = window.onunhandledrejection;
     window.onunhandledrejection = (event) => {
       persistCrash(event.reason);
-      if (typeof prevUnhandled === "function") prevUnhandled.call(window, event);
+      if (typeof prevUnhandled === "function")
+        prevUnhandled.call(window, event);
     };
   } else {
     // ErrorUtils is a React Native global available on Android
@@ -85,9 +89,9 @@ export async function checkForCrashReport(): Promise<CrashReport | null> {
     if (Platform.OS === "web") {
       json = localStorage.getItem(CRASH_STORAGE_KEY);
     } else {
-      const info = await FileSystem.getInfoAsync(CRASH_FILE);
-      if (!info.exists) return null;
-      json = await FileSystem.readAsStringAsync(CRASH_FILE);
+      const file = getCrashFile();
+      if (!file.exists) return null;
+      json = file.textSync();
     }
     if (!json) return null;
     const parsed: unknown = JSON.parse(json);
@@ -102,7 +106,10 @@ export async function clearCrashReport(): Promise<void> {
     if (Platform.OS === "web") {
       localStorage.removeItem(CRASH_STORAGE_KEY);
     } else {
-      await FileSystem.deleteAsync(CRASH_FILE, { idempotent: true });
+      const file = getCrashFile();
+      if (file.exists) {
+        file.delete();
+      }
     }
   } catch {
     // ignore
