@@ -117,7 +117,7 @@ function FeedPostCardComponent({
     () =>
       Boolean(
         extractGifEmbedUrl(item.url) ??
-          extractGifEmbedUrlFromContent(item.content)
+        extractGifEmbedUrlFromContent(item.content)
       ),
     [item.url, item.content]
   );
