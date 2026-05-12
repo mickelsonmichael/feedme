@@ -119,7 +119,7 @@ export default function FeedItemScreen({ route, navigation }: Props) {
 
   const handleViewXml = async () => {
     let rawXml: string | null = null;
-    if (item.itemId !== null) {
+    if (item.itemId != null) {
       try {
         rawXml = await getItemRawXml(item.itemId);
       } catch {
