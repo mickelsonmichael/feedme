@@ -28,7 +28,7 @@ import {
   RedditFetchError,
   RedditVideoMedia,
 } from "../redditGallery";
-import { extractGifEmbedUrl } from "../gifUtils";
+import { extractGifEmbedUrl, extractGifEmbedUrlFromContent } from "../gifUtils";
 import { proxiedImageUrl } from "../proxyFetch";
 import { useTheme } from "../context/ThemeContext";
 import {
@@ -111,7 +111,10 @@ export function ExpandedFeedMedia({
     [itemUrl, content]
   );
   const redditPostUrl = redditGalleryUrl ?? redditVideoPostUrl;
-  const gifEmbedUrl = useMemo(() => extractGifEmbedUrl(itemUrl), [itemUrl]);
+  const gifEmbedUrl = useMemo(
+    () => extractGifEmbedUrl(itemUrl) ?? extractGifEmbedUrlFromContent(content),
+    [itemUrl, content]
+  );
   const shouldLoadGallery = Boolean(redditPostUrl) && hasRequestedGalleryLoad;
 
   useEffect(() => {

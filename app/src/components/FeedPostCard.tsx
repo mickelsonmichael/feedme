@@ -16,7 +16,7 @@ import {
   extractRedditGalleryUrl,
   fetchRedditGalleryImageUrlsCached,
 } from "../redditGallery";
-import { extractGifEmbedUrl } from "../gifUtils";
+import { extractGifEmbedUrl, extractGifEmbedUrlFromContent } from "../gifUtils";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { MetaText } from "./ui";
 import { fonts, fontSize, NSFW_BLUR_RADIUS, radii, spacing } from "../theme";
@@ -114,8 +114,12 @@ function FeedPostCardComponent({
   );
   const isRedditGallery = Boolean(redditGalleryUrl);
   const isGif = useMemo(
-    () => Boolean(extractGifEmbedUrl(item.url)),
-    [item.url]
+    () =>
+      Boolean(
+        extractGifEmbedUrl(item.url) ??
+          extractGifEmbedUrlFromContent(item.content)
+      ),
+    [item.url, item.content]
   );
   const showCardRevealOverlay = isCardMediaBlurred;
   // For card NSFW galleries we want to show the first image (blurred) under
@@ -155,7 +159,7 @@ function FeedPostCardComponent({
               blur={showCardRevealOverlay}
               nsfw={nsfw}
               deferGalleryLoad={cardGalleryDeferred}
-              deferGifLoad={isGif && (!nsfw || !cardMediaRevealed)}
+              deferGifLoad={isGif}
               useProxy={useProxy}
             />
             {showCardRevealOverlay ? (

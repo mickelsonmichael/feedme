@@ -363,6 +363,7 @@ export default function FeedItemScreen({ route, navigation }: Props) {
               useProxy={item.useProxy ?? false}
               nsfw={item.nsfw ?? false}
               deferGalleryLoad={false}
+              deferGifLoad={item.nsfw ?? false}
             />
           ) : null}
 
