@@ -118,7 +118,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const selectedTagId = route.params?.selectedTagId;
   const scrollToTopParam = route.params?.scrollToTop;
 
-  const flatListRef = useRef<FlashListRef<FeedItemWithFeed>>(null);
+  const flatListRef = useRef<FlashListRef<FeedListRow>>(null);
   const markAsReadOnScrollRef = useRef(
     loadConfig().markAsReadOnScroll ?? false
   );
@@ -891,7 +891,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   ]}
                 >
                   <Text
-                    style={[styles.groupDividerLabel, { color: colors.inkSoft }]}
+                    style={[
+                      styles.groupDividerLabel,
+                      { color: colors.inkSoft },
+                    ]}
                   >
                     {item.label}
                   </Text>

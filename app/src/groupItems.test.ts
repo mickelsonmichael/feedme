@@ -10,10 +10,7 @@ import { FeedItemWithFeed } from "./types";
 // 2024-05-15 14:30:00 UTC
 const NOW = new Date("2024-05-15T14:30:00Z").getTime();
 
-function makeItem(
-  id: number,
-  publishedAt: number | null
-): FeedItemWithFeed {
+function makeItem(id: number, publishedAt: number | null): FeedItemWithFeed {
   return {
     id,
     feed_id: 1,
@@ -40,7 +37,9 @@ describe("getTimeBucketKey", () => {
     const key = getTimeBucketKey(ts, "hourly");
     // Two items in the same hour must share the same key.
     const ts2 = new Date("2024-05-15T14:59:00Z").getTime();
-    expect(getTimeBucketKey(ts, "hourly")).toBe(getTimeBucketKey(ts2, "hourly"));
+    expect(getTimeBucketKey(ts, "hourly")).toBe(
+      getTimeBucketKey(ts2, "hourly")
+    );
     // A different hour must produce a different key.
     const ts3 = new Date("2024-05-15T15:00:00Z").getTime();
     expect(key).not.toBe(getTimeBucketKey(ts3, "hourly"));
@@ -62,7 +61,9 @@ describe("getTimeBucketKey", () => {
     const sun = new Date("2024-05-19T20:00:00Z").getTime();
     // 2024-05-20 is the next Monday — different week.
     const nextMon = new Date("2024-05-20T00:01:00Z").getTime();
-    expect(getTimeBucketKey(mon, "weekly")).toBe(getTimeBucketKey(sun, "weekly"));
+    expect(getTimeBucketKey(mon, "weekly")).toBe(
+      getTimeBucketKey(sun, "weekly")
+    );
     expect(getTimeBucketKey(mon, "weekly")).not.toBe(
       getTimeBucketKey(nextMon, "weekly")
     );
@@ -197,7 +198,9 @@ describe("injectGroupDividers", () => {
     const items = [makeItem(1, ts1), makeItem(2, ts2)];
     const result = injectGroupDividers(items, "daily", NOW);
     const dividers = result.filter(isGroupDivider);
-    const keys = dividers.map((d) => (d as import("./groupItems").GroupDivider).key);
+    const keys = dividers.map(
+      (d) => (d as import("./groupItems").GroupDivider).key
+    );
     expect(new Set(keys).size).toBe(keys.length);
   });
 

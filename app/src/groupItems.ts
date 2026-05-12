@@ -1,5 +1,7 @@
 import { FeedItemWithFeed, GroupFeedsMode } from "./types";
 
+export type { GroupFeedsMode };
+
 export type GroupDivider = {
   type: "group-divider";
   label: string;
@@ -121,7 +123,7 @@ export function getTimeBucketLabel(
 
       // Find this week's Monday for comparison.
       const thisMonday = new Date(today);
-      thisMonday.setDate(today.getDate() - (today.getDay() + 6) % 7);
+      thisMonday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
       thisMonday.setHours(0, 0, 0, 0);
       monday.setHours(0, 0, 0, 0);
 
@@ -132,7 +134,9 @@ export function getTimeBucketLabel(
           month: "short",
           day: "numeric",
           year:
-            monday.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+            monday.getFullYear() !== today.getFullYear()
+              ? "numeric"
+              : undefined,
         })
       );
     }
