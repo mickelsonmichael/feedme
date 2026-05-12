@@ -46,6 +46,8 @@ export function SanitizedHtmlContent({ html }: Props) {
         originWhitelist={["*"]}
         javaScriptEnabled={false}
         domStorageEnabled={false}
+        allowFileAccess={false}
+        allowUniversalAccessFromFileURLs={false}
         scrollEnabled
         nestedScrollEnabled
         style={styles.webview}

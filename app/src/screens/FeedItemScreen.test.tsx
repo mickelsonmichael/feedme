@@ -297,8 +297,7 @@ describe("FeedItemScreen", () => {
       await Promise.resolve();
     });
 
-    const htmlNode = tree!
-      .root
+    const htmlNode = tree!.root
       .findAllByType(Text)
       .find((node: renderer.ReactTestInstance) =>
         String(node.props.children).includes("HTML:")
