@@ -170,3 +170,12 @@ export type FeedLayoutMode = (typeof FEED_LAYOUT_MODES)[number];
 
 export const LINK_OPEN_MODES = ["embedded", "external"] as const;
 export type LinkOpenMode = (typeof LINK_OPEN_MODES)[number];
+
+export const GROUP_FEEDS_MODES = [
+  "none",
+  "hourly",
+  "daily",
+  "weekly",
+  "monthly",
+] as const;
+export type GroupFeedsMode = (typeof GROUP_FEEDS_MODES)[number];

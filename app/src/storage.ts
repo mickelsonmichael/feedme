@@ -2,9 +2,11 @@ import { Platform } from "react-native";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import {
   FEED_LAYOUT_MODES,
+  GROUP_FEEDS_MODES,
   LINK_OPEN_MODES,
   THEME_MODES,
   type FeedLayoutMode,
+  type GroupFeedsMode,
   type LinkOpenMode,
   type ThemeMode,
 } from "./types";
@@ -19,6 +21,7 @@ export type WebConfig = {
   hideReadByDefault?: boolean;
   defaultSort?: "newest" | "stacked";
   bionicReading?: boolean;
+  groupFeeds?: GroupFeedsMode;
 };
 
 let cachedConfig: WebConfig | null = null;
@@ -83,6 +86,14 @@ function validateConfig(raw: unknown): WebConfig {
     const bionicReading = (raw as Record<string, unknown>).bionicReading;
     if (typeof bionicReading === "boolean") {
       config.bionicReading = bionicReading;
+    }
+
+    const groupFeeds = (raw as Record<string, unknown>).groupFeeds;
+    if (
+      typeof groupFeeds === "string" &&
+      GROUP_FEEDS_MODES.includes(groupFeeds as GroupFeedsMode)
+    ) {
+      config.groupFeeds = groupFeeds as GroupFeedsMode;
     }
   }
   return config;

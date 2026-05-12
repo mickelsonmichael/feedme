@@ -188,6 +188,7 @@ The set of bottom tabs depends on screen size:
 - Appearance: Light / Dark / System theme (segmented control)
 - Reading: "Mark as read on scroll" toggle, "Hide read items by default" toggle, "Bionic Reading" toggle
 - Default sort: Newest / Stacked (segmented)
+- Group Feeds: None / Hourly / Daily / Weekly / Monthly (segmented, full-width); only applies to Newest sort
 - Feed layout: Compact / Card (segmented, with visual icon previews)
 - Link open mode: Embedded (in-app browser) / External browser
 - Navigation link to ImportExportScreen
