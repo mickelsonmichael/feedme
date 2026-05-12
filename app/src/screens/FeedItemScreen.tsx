@@ -21,6 +21,7 @@ import {
   savePost,
   unsavePost,
 } from "../database";
+import { getItemRawXml } from "../database";
 import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -114,6 +115,18 @@ export default function FeedItemScreen({ route, navigation }: Props) {
       navigation,
       title: item.title,
     });
+  };
+
+  const handleViewXml = async () => {
+    let rawXml: string | null = null;
+    if (item.itemId !== null) {
+      try {
+        rawXml = await getItemRawXml(item.itemId);
+      } catch {
+        // Fetch failure — navigate anyway to show the empty state
+      }
+    }
+    navigation.navigate("RawXml", { rawXml, title: item.title ?? "Raw XML" });
   };
 
   const handleOpenContentLink = (url: string) => {
@@ -345,6 +358,18 @@ export default function FeedItemScreen({ route, navigation }: Props) {
                 </Text>
               </TouchableOpacity>
             ) : null}
+
+            <TouchableOpacity
+              style={[styles.actionBtn, { borderColor: colors.border }]}
+              onPress={handleViewXml}
+              activeOpacity={0.7}
+              accessibilityLabel="View raw XML"
+            >
+              <Feather name="code" size={16} color={colors.ink} />
+              <Text style={[styles.actionText, { color: colors.ink }]}>
+                View XML
+              </Text>
+            </TouchableOpacity>
           </View>
 
           <Text style={[styles.meta, { color: colors.inkSoft }]}>

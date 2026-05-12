@@ -41,6 +41,7 @@ import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
 import InAppBrowserScreen from "./src/screens/InAppBrowserScreen";
 import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
+import RawXmlScreen from "./src/screens/RawXmlScreen";
 import { Feed, Tag, TabParamList } from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
@@ -536,6 +537,11 @@ function Tabs() {
       <Tab.Screen
         name="NotificationSettings"
         component={NotificationSettingsScreen}
+        options={HIDDEN_TAB_OPTIONS}
+      />
+      <Tab.Screen
+        name="RawXml"
+        component={RawXmlScreen}
         options={HIDDEN_TAB_OPTIONS}
       />
     </Tab.Navigator>
