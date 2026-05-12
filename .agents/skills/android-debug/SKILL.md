@@ -8,17 +8,68 @@ argument-hint: "Describe the issue or behavior to verify on Android"
 
 The `mobile-mcp` MCP server provides device interaction. Tools are prefixed `mcp_mobile-mcp_`.
 
-Before you begin, ensure the expo dev server is running using `npm expo start` from the `app/` directory.
-You should check for an existing process in the terminals before starting a new one to avoid duplicates.
+## Step 1 – Start the emulator
 
-Once started, you can use the `mobile_list_available_devices` tool to confirm the emulator is detected.
-
-If the tool returns an empty list, the MCP server likely can't find `adb`.
-Ask the user for their `ANDROID_HOME` path if it isn't already known, then ensure it is set in `.vscode/mcp.json`:
-
-```json
-"env": { "ANDROID_HOME": "<path-to-android-sdk>" }
+```bash
+start-emulator
 ```
+
+This boots the AVD, waits for `sys.boot_completed`, and then waits for the Android Package Manager service to be ready before returning. It typically takes 30–60 seconds.
+
+## Step 2 – Ensure the app is installed
+
+Check whether the app is already installed:
+
+```bash
+adb shell pm path com.feedme.app
+```
+
+- If it prints `package:...` → the app is already installed. Skip to Step 3.
+- If it prints nothing or errors → install it now.
+
+**Install from the pre-built APK** (fastest, provided by the setup cache):
+
+```bash
+adb install -r app/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+If the APK file doesn't exist yet (cache miss), do a full build and install:
+
+```bash
+cd app
+npm ci
+npx expo run:android   # generates android/, builds, installs, AND starts Metro
+```
+
+`expo run:android` handles everything in one step. Skip Step 3 if you used this command — Metro is already running.
+
+> **Important**: Never use `--no-bundler` with `expo run:android`. The Metro bundler must be running for the app to load JavaScript. Without it the app will show a "Unable to connect to Metro" error.
+
+## Step 3 – Start the Expo Metro dev server
+
+Check whether Metro is already running:
+
+```bash
+curl -s 127.0.0.1:8081/status   # returns "packager-status:running" if up
+```
+
+If it is not running, start it (from the `app/` directory):
+
+```bash
+cd app && npm start
+```
+
+Expo uses **Fast Refresh** — JS/TypeScript changes are pushed to the device instantly without reinstalling the APK. Only reinstall if native code or `app.json` changes.
+
+## Step 4 – Launch the app on the emulator
+
+```bash
+adb shell am start -n com.feedme.app/.MainActivity
+```
+
+Wait 2–4 seconds for it to render before taking screenshots or simulating taps.
+
+---
 
 ## Interacting with the Device
 
@@ -73,4 +124,6 @@ to be accidentally clicked. If the dev menu is open, it will interfere with all 
 | Pull-to-refresh does nothing | Empty state is a plain `View` | Wrap in `ScrollView` + `RefreshControl` |
 | Dev menu won't open | App may not have focus | Tap the app screen first, then keyevent 82 |
 | MCP server returns "device not found" | Stale device list or `ANDROID_HOME` missing | Restart MCP server, verify `mcp.json` env |
+| `adb install` returns "Can't find service: package" | Package Manager not ready yet (emulator booted recently) | `start-emulator` now waits for PM; if you started emulator manually, run: `until adb shell pm path android >/dev/null 2>&1; do sleep 2; done` |
+| "Unable to connect to Metro" in app | Metro dev server not running, or `expo run:android --no-bundler` was used | Start Metro with `cd app && npm start` |
 | Submit button click does nothing on web forms | `onBlur` on a field triggered an async fetch, setting `loading = true` and disabling the button before the click registered | Click another field first to trigger blur and wait for the async operation to complete (watch for the field to populate), then click the submit button |

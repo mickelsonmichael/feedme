@@ -39,6 +39,9 @@ jobs:
         if: hashFiles('package-lock.json') != ''
         run: npm ci
 
+      - name: Install app npm dependencies
+        run: cd app && npm ci
+
       - name: Enable KVM (hardware acceleration for emulator)
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -63,6 +66,25 @@ jobs:
       - name: Make any Gradle wrappers executable
         run: |
           find . -maxdepth 3 -name gradlew -type f -exec chmod +x {} \; || true
+
+      - name: Cache pre-built Expo Android APK
+        uses: actions/cache@v5
+        id: apk-cache
+        with:
+          path: app/android/app/build/outputs/apk/debug/app-debug.apk
+          key: expo-apk-${{ hashFiles('app/package.json', 'app/app.json', 'app/index.ts') }}
+
+      - name: Expo prebuild (generate android/ native project)
+        if: steps.apk-cache.outputs.cache-hit != 'true'
+        run: cd app && npx expo prebuild --platform android --no-install
+
+      - name: Make generated Gradle wrapper executable
+        if: steps.apk-cache.outputs.cache-hit != 'true'
+        run: chmod +x app/android/gradlew
+
+      - name: Build Expo debug APK
+        if: steps.apk-cache.outputs.cache-hit != 'true'
+        run: cd app/android && ./gradlew assembleDebug --no-daemon
 
       - name: Cache AVD snapshot
         uses: actions/cache@v5
@@ -101,6 +123,12 @@ jobs:
             > /tmp/emulator.log 2>&1 &
           adb wait-for-device
           until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+            sleep 2
+          done
+          # Wait for the Package Manager service to be ready — sys.boot_completed=1
+          # fires before Android's package manager service starts, so adb install
+          # immediately after boot returns "Can't find service: package".
+          until adb shell pm path android >/dev/null 2>&1; do
             sleep 2
           done
           adb shell input keyevent 82 || true
