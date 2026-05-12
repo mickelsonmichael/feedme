@@ -17,6 +17,8 @@ import {
   markItemRead,
   markItemUnread,
   getSavedItemIds,
+  getFeedsForTag,
+  getFeedTagMap,
 } from "../database";
 import { refreshFeeds } from "../feedRefresher";
 import { openUrlWithPreference } from "../linkOpening";
@@ -1109,6 +1111,144 @@ describe("FeedListScreen", () => {
     expect(visibleText).toContain("Brew notes");
     expect(visibleText).not.toContain("Local update");
     expect(tree!.root.findAllByType(TextInput)).toHaveLength(1);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("keeps a navigated post visible in unread filter until manual refresh", async () => {
+    // Arrange: a single unread item in a single feed.  The user is on the
+    // unread-filtered view, taps the post title (handleOpenItem), which adds
+    // the post to retainedUnreadIds.  When the screen re-focuses (simulated by
+    // a non-remote loadData call via tree.update) and the DB now reports the
+    // item as read=1, the post must STILL appear because it is retained.  Only
+    // an explicit pull-to-refresh (which clears retainedUnreadIds) should hide it.
+    const now = Date.now();
+    const feed = {
+      id: 1,
+      title: "Alpha",
+      url: "https://alpha.example/rss.xml",
+      description: null,
+      last_fetched: now,
+      error: null,
+    };
+    (getFeeds as jest.Mock).mockResolvedValue([feed]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    const unreadItem = {
+      id: 801,
+      feed_id: 1,
+      feed_title: "Alpha",
+      title: "Retained post",
+      url: "https://alpha.example/retained",
+      content: null,
+      image_url: null,
+      published_at: now - 1000,
+      read: 0,
+    };
+    (getAllItems as jest.Mock).mockResolvedValue([unreadItem]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-retain-nav",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act – initial render
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Activate the unread filter.
+    const unreadFilter = tree!.root
+      .findAllByType(TouchableOpacity)
+      .find((node: renderer.ReactTestInstance) => {
+        const labels = node.findAllByType(Text);
+        return labels.some(
+          (label: renderer.ReactTestInstance) =>
+            label.props.children === "Unread"
+        );
+      });
+    await act(async () => {
+      await unreadFilter!.props.onPress();
+    });
+
+    // Item should be visible in the unread filter.
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Open post: Retained post" })
+    ).toBeTruthy();
+
+    // User taps the post title – this is the handleOpenItem path.
+    // It adds the item to retainedUnreadIds and calls navigation.navigate.
+    await act(async () => {
+      tree!.root
+        .findByProps({ accessibilityLabel: "Open post: Retained post" })
+        .props.onPress();
+    });
+
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      "FeedItemView",
+      expect.objectContaining({ item: expect.objectContaining({ itemId: 801 }) })
+    );
+
+    // The item was marked read in FeedItemScreen (simulated here by updating
+    // the mock so the next getAllItems call returns read=1).
+    (getAllItems as jest.Mock).mockResolvedValue([{ ...unreadItem, read: 1 }]);
+    // Set up tag mocks so that scopedItems still includes the item when
+    // selectedTagId=1 is used to re-trigger the focus-return loadData call.
+    (getFeedTagMap as jest.Mock).mockResolvedValue(new Map([[1, [1]]]));
+    (getFeedsForTag as jest.Mock).mockResolvedValue([feed]);
+
+    // Simulate the screen re-focusing after navigation.back().  Changing
+    // selectedTagId mutates loadData's dependency array, which causes the
+    // useFocusEffect callback (mocked as useEffect) to re-fire with
+    // refreshRemote=false – the same as on a native focus return.
+    const returnRoute = {
+      key: "Feed-retain-nav-2",
+      name: "Feed",
+      params: { selectedTagId: 1 },
+    } as FeedScreenProps["route"];
+    await act(async () => {
+      tree!.update(
+        <HeaderContentProvider>
+          <FeedListScreen
+            {...({ navigation, route: returnRoute } as FeedScreenProps)}
+          />
+        </HeaderContentProvider>
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Even though the DB now reports the item as read, it must still be
+    // visible because retainedUnreadIds was not cleared on a focus return.
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Open post: Retained post" })
+    ).toBeTruthy();
+
+    // An explicit pull-to-refresh clears retainedUnreadIds and reloads data,
+    // at which point the now-read item must disappear from the unread filter.
+    const list = tree!.root.findByType(FlashList);
+    await act(async () => {
+      await list.props.onRefresh();
+    });
+
+    expect(refreshFeeds).toHaveBeenCalled();
+    expect(() =>
+      tree!.root.findByProps({ accessibilityLabel: "Open post: Retained post" })
+    ).toThrow();
 
     await act(async () => {
       tree!.unmount();

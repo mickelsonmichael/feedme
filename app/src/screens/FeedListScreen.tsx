@@ -229,10 +229,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
           getFeedTagMap(),
         ]);
         const readLaterIdsLoaded = await getReadLaterItemIds();
-        // Generate a new sort seed so the stacked-sort ordering changes on
-        // each fresh load while remaining stable for in-place updates (e.g.
-        // marking an item read) within the same session.
-        sortSeedRef.current = Math.random();
+        // Only regenerate the sort seed on remote refreshes (pull-to-refresh).
+        // Keeping the seed stable when re-focusing after navigation (e.g.
+        // returning from a detail view) prevents the list from shuffling and
+        // makes the just-viewed item stay at its original position.
+        if (refreshRemote) {
+          sortSeedRef.current = Math.random();
+        }
         setItems(itemData);
         setSavedIds(ids);
         setReadLaterIds(readLaterIdsLoaded);
