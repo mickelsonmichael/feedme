@@ -22,7 +22,7 @@ import { extractFeedTitle } from "../feedParser";
 import { RootStackParamList, Tag, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
-import { buildRedditFeedUrl, getSubreddit } from "../redditUtils";
+import { buildRedditFeedUrl, getRedditFeedTarget } from "../redditUtils";
 import {
   extractYouTubeRssFeedUrl,
   getYouTubeChannelUrl,
@@ -107,8 +107,12 @@ export default function AddFeedScreen({ navigation, route }: Props) {
   const handleSubredditChange = (value: string) => {
     setSubreddit(value);
     if (!titleManuallyEdited) {
-      const cleaned = getSubreddit(value);
-      setTitle(cleaned ? `Reddit - r/${cleaned}` : "");
+      const target = getRedditFeedTarget(value);
+      setTitle(
+        target
+          ? `Reddit - ${target.type === "user" ? "u" : "r"}/${target.name}`
+          : ""
+      );
     }
   };
 
@@ -179,13 +183,15 @@ export default function AddFeedScreen({ navigation, route }: Props) {
     };
 
     if (source === "reddit") {
-      const cleanedSubreddit = getSubreddit(subreddit);
-      if (!cleanedSubreddit) {
-        Alert.alert("Validation", "Please enter a subreddit name.");
+      const target = getRedditFeedTarget(subreddit);
+      if (!target) {
+        Alert.alert("Validation", "Please enter a subreddit or user name.");
         return;
       }
-      const redditUrl = buildRedditFeedUrl(cleanedSubreddit);
-      const feedTitle = title.trim() || `Reddit - r/${cleanedSubreddit}`;
+      const redditUrl = buildRedditFeedUrl(subreddit);
+      const feedTitle =
+        title.trim() ||
+        `Reddit - ${target.type === "user" ? "u" : "r"}/${target.name}`;
       setLoading(true);
       try {
         const { response, usedProxy } = await fetchWithProxyFallback(redditUrl);
@@ -194,8 +200,12 @@ export default function AddFeedScreen({ navigation, route }: Props) {
         }
         if (!response.ok) {
           if (response.status === 404) {
+            const redditPath =
+              target.type === "user"
+                ? `https://www.reddit.com/user/${target.name}`
+                : `https://www.reddit.com/r/${target.name}`;
             setFeedError(
-              `The subreddit https://www.reddit.com/r/${cleanedSubreddit} was not found. Check the subreddit name and try again.`
+              `The Reddit ${target.type} ${redditPath} was not found. Check the name and try again.`
             );
           } else {
             setFeedError(
@@ -534,7 +544,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           >
             <Text style={[styles.hintText, { color: colors.inkSoft }]}>
               {source === "reddit"
-                ? "Enter a subreddit name to subscribe to its RSS feed."
+                ? "Enter a subreddit or user (e.g. r/pics, u/spez, or https://reddit.com/user/spez) to subscribe to its RSS feed."
                 : source === "youtube"
                   ? "Enter a YouTube channel name or URL to subscribe to its RSS feed."
                   : source === "github"
@@ -573,7 +583,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           ) : source === "reddit" ? (
             <>
               <Text style={[styles.label, { color: colors.inkSoft }]}>
-                Subreddit *
+                Subreddit or User *
               </Text>
               <TextInput
                 style={[
@@ -584,7 +594,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                     color: colors.ink,
                   },
                 ]}
-                placeholder="pics"
+                placeholder="pics or u/spez"
                 placeholderTextColor={colors.inkFaint}
                 value={subreddit}
                 onChangeText={handleSubredditChange}
@@ -678,7 +688,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
             ]}
             placeholder={
               source === "reddit"
-                ? "Reddit - r/subreddit"
+                ? "Reddit - r/subreddit or u/username"
                 : source === "youtube"
                   ? "YouTube - ChannelName"
                   : source === "github"
