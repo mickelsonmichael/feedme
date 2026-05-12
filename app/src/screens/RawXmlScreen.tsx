@@ -139,7 +139,8 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   toolbarRight: {
-    marginLeft: "auto" as unknown as number,
+    flex: 1,
+    alignItems: "flex-end",
   },
   toolbarBtn: {
     borderWidth: 1,
