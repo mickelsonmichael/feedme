@@ -186,14 +186,16 @@ function parseRss(
     const rawXml = match[0];
     const title = extractCData(block, "title") ?? "Untitled";
     const link = extractTagText(block, "link") ?? extractTagText(block, "guid");
+    const encodedContent = extractCData(block, "content:encoded");
     const description = extractCData(block, "description");
+    const content = encodedContent ?? description;
     const pubDate = extractTagText(block, "pubDate");
     const parsedTs = pubDate ? new Date(pubDate).getTime() : null;
     items.push({
       title,
       url: link ?? null,
-      content: description ?? null,
-      imageUrl: extractImageUrl(block, description) ?? null,
+      content: content ?? null,
+      imageUrl: extractImageUrl(block, content) ?? null,
       rawXml,
       publishedAt: parsedTs !== null ? Math.min(parsedTs, now()) : null,
     });
