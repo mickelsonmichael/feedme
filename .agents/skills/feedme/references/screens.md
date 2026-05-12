@@ -95,6 +95,7 @@ The set of bottom tabs depends on screen size:
 
 **Primary features:**
 - Renders parsed content text and extracted links
+- Renders HTML summaries/content as rich formatted content with sanitization safeguards
 - `ExpandedFeedMedia` component for images, GIFs, video
 - Reddit-specific: surfaces a dedicated "Comments" link for Reddit posts
 - Save/unsave button, read/unread toggle (auto-marks read on open)

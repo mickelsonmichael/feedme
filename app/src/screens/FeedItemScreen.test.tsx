@@ -1,4 +1,5 @@
 import React from "react";
+import { Text } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedItemScreen from "../screens/FeedItemScreen";
@@ -63,6 +64,15 @@ jest.mock("../components/ExpandedFeedMedia", () => {
 jest.mock("../linkOpening", () => ({
   openUrlWithPreference: jest.fn(),
 }));
+
+jest.mock("../components/SanitizedHtmlContent", () => {
+  const React = require("react");
+  const { Text } = require("react-native");
+  return {
+    SanitizedHtmlContent: ({ html }: { html: string }) =>
+      React.createElement(Text, null, `HTML:${html}`),
+  };
+});
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
 
@@ -268,6 +278,37 @@ describe("FeedItemScreen", () => {
         url: "https://www.reddit.com/r/EarthPorn/comments/1sw5nrw/grand_canyon_of_the_yellowstone_and_the_lower/",
       })
     );
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("renders sanitized HTML content when item content includes HTML", async () => {
+    // Arrange
+    const props = buildPropsWithContent(
+      `<p>Hello</p><script>alert("xss")</script><a href="javascript:alert('x')">click</a>`
+    );
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<FeedItemScreen {...props} />);
+      await Promise.resolve();
+    });
+
+    const htmlNode = tree!
+      .root
+      .findAllByType(Text)
+      .find((node: renderer.ReactTestInstance) =>
+        String(node.props.children).includes("HTML:")
+      );
+
+    // Assert
+    expect(htmlNode).toBeTruthy();
+    expect(String(htmlNode!.props.children)).toContain("HTML:<p>Hello</p>");
+    expect(String(htmlNode!.props.children)).not.toContain("<script>");
+    expect(String(htmlNode!.props.children)).toContain('href="#"');
 
     await act(async () => {
       tree!.unmount();

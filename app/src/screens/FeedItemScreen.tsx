@@ -30,6 +30,8 @@ import { parseContentAndLinks } from "../utils/contentActions";
 import { toBionic } from "../utils/bionicReading";
 import { openUrlWithPreference } from "../linkOpening";
 import { loadConfig } from "../storage";
+import { SanitizedHtmlContent } from "../components/SanitizedHtmlContent";
+import { hasRenderableHtml, sanitizeHtml } from "../utils/sanitizeHtml";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
 
@@ -49,6 +51,14 @@ export default function FeedItemScreen({ route, navigation }: Props) {
   );
   const { text: contentText, links: contentLinks } = React.useMemo(
     () => parseContentAndLinks(item.content),
+    [item.content]
+  );
+  const shouldRenderHtmlContent = React.useMemo(
+    () => hasRenderableHtml(item.content),
+    [item.content]
+  );
+  const sanitizedHtmlContent = React.useMemo(
+    () => sanitizeHtml(item.content ?? ""),
     [item.content]
   );
   const redditCommentsLink = React.useMemo(
@@ -392,21 +402,25 @@ export default function FeedItemScreen({ route, navigation }: Props) {
             />
           ) : null}
 
-          <Text style={[styles.article, { color: colors.ink }]}>
-            {bionicReading
-              ? toBionic(contentText || "No content available.").map(
-                  (token, i) =>
-                    token.kind === "space" ? (
-                      token.text
-                    ) : (
-                      <Text key={i}>
-                        <Text style={styles.bionicBold}>{token.bold}</Text>
-                        {token.rest}
-                      </Text>
-                    )
-                )
-              : contentText || "No content available."}
-          </Text>
+          {shouldRenderHtmlContent ? (
+            <SanitizedHtmlContent html={sanitizedHtmlContent} />
+          ) : (
+            <Text style={[styles.article, { color: colors.ink }]}>
+              {bionicReading
+                ? toBionic(contentText || "No content available.").map(
+                    (token, i) =>
+                      token.kind === "space" ? (
+                        token.text
+                      ) : (
+                        <Text key={i}>
+                          <Text style={styles.bionicBold}>{token.bold}</Text>
+                          {token.rest}
+                        </Text>
+                      )
+                  )
+                : contentText || "No content available."}
+            </Text>
+          )}
 
           {visibleContentLinks.length ? (
             <View style={styles.contentLinkRow}>
