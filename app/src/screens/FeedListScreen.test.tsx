@@ -1198,7 +1198,9 @@ describe("FeedListScreen", () => {
 
     expect(navigation.navigate).toHaveBeenCalledWith(
       "FeedItemView",
-      expect.objectContaining({ item: expect.objectContaining({ itemId: 801 }) })
+      expect.objectContaining({
+        item: expect.objectContaining({ itemId: 801 }),
+      })
     );
 
     // The item was marked read in FeedItemScreen (simulated here by updating

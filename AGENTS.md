@@ -19,7 +19,7 @@ These are gates, not suggestions. Do not open a PR, mark a task done, or stop wo
 1. **Android emulator verification** — run the app on the emulator using the Expo dev server and attach a screenshot. See the `android-emulator-adb` skill for setup. `start-emulator` must succeed and the app must visibly launch before you proceed.
 2. **Web browser verification** — open the web app in the embedded browser and confirm the relevant behaviour works.
 3. **Tests pass** — all pre-existing tests must still pass. Add or update tests for the changed behaviour. Do not disable or delete tests to make this green.
-4. **Code quality** — run the `code quality` skill before finalising.
+4. **Code quality** — run the `code quality` skill **as the very last step** before submitting. This must include running `npm run format:check` (and fixing any issues with `npm run format`) followed by `npm run typecheck`. Both must exit cleanly.
 
 > If the emulator fails to boot, fix the boot problem before doing anything else. Do not substitute code reading, test suites, or your own reasoning for live verification on the target platform. Settings persistence, data loading, navigation, and any runtime behaviour can only be confirmed by actually running the app.
 
@@ -34,7 +34,7 @@ Follow these steps in order. Repeat as necessary until the hard requirements abo
 3. **Test** — write or update tests following Arrange–Act–Assert. Test requirements and edge cases, not code paths.
 4. **Verify on Android** — `start-emulator` → Expo dev server → confirm the change → `adb exec-out screencap -p > screenshot-android.png`.
 5. **Verify on Web** — open the embedded browser → confirm the change → capture a screenshot.
-6. **Quality check** — run the `code quality` skill.
+6. **Quality check** — run the `code quality` skill **as the very last step before `report_progress`**. Run `npm run format:check` from `app/` and fix any issues with `npm run format`, then re-confirm with `npm run format:check`. Also run `npm run typecheck`. Both must exit with no errors.
 7. **Submit** — attach both screenshots to the PR description.
 
 ---
