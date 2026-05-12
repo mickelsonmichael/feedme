@@ -61,7 +61,7 @@ export function getSubreddit(rawValue: string): string {
 export function buildRedditFeedUrl(rawValue: string): string {
   const target = getRedditFeedTarget(rawValue);
   if (!target) {
-    return "https://www.reddit.com/r/.rss";
+    return "";
   }
   return `https://www.reddit.com/${target.type === "user" ? "user" : "r"}/${target.name}.rss`;
 }
