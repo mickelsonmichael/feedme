@@ -2,6 +2,9 @@
 
 Use Prettier to check that the code meets the project's formatting standards, and TypeScript to verify type correctness.
 
+> **This skill must be run as the very last step before calling `report_progress` / submitting the PR.**
+> Do not skip or defer it — unformatted code will fail CI.
+
 ## How to Run
 
 Run the following command to check for Prettier issues:
@@ -16,11 +19,22 @@ If there are issues, run the following command to automatically fix them:
 npm run format
 ```
 
+Then re-run `npm run format:check` to confirm there are no remaining issues before continuing.
+
 Run the following command to check for TypeScript type errors:
 
 ```bash
 npm run typecheck
 ```
+
+## Mandatory final checklist
+
+Before finishing any task, confirm **all** of the following pass from the `app/` directory:
+
+1. `npm run format:check` — exits with no warnings ("All matched files use Prettier code style!")
+2. `npm run typecheck` — exits with no errors
+
+If either check fails, fix the issues and re-run before submitting.
 
 ## Requirements
 
