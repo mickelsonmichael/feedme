@@ -16,6 +16,7 @@ import {
   RootStackParamList,
   TabParamList,
   type FeedLayoutMode,
+  type GroupFeedsMode,
   type LinkOpenMode,
 } from "../types";
 import { useTheme, type ThemeMode } from "../context/ThemeContext";
@@ -87,10 +88,14 @@ function Segmented<T extends string>({
   value,
   options,
   onChange,
+  style,
+  stretched,
 }: {
   value: T;
   options: readonly { value: T; label: string; icon?: React.ReactNode }[];
   onChange: (v: T) => void;
+  style?: object;
+  stretched?: boolean;
 }) {
   const { colors } = useTheme();
   return (
@@ -98,6 +103,7 @@ function Segmented<T extends string>({
       style={[
         styles.segmented,
         { borderColor: colors.border, backgroundColor: colors.paper },
+        style,
       ]}
     >
       {options.map((opt) => {
@@ -107,6 +113,7 @@ function Segmented<T extends string>({
             key={opt.value}
             style={[
               styles.segment,
+              stretched && styles.segmentFlex,
               active && { backgroundColor: colors.accent },
             ]}
             onPress={() => onChange(opt.value)}
@@ -284,6 +291,9 @@ export default function SettingsScreen({ navigation }: Props) {
   const [bionicReading, setBionicReading] = React.useState(
     () => loadConfig().bionicReading ?? false
   );
+  const [groupFeeds, setGroupFeeds] = React.useState<GroupFeedsMode>(
+    () => loadConfig().groupFeeds ?? "none"
+  );
 
   const handleLayoutChange = React.useCallback((nextLayout: FeedLayoutMode) => {
     setFeedLayout(nextLayout);
@@ -345,6 +355,15 @@ export default function SettingsScreen({ navigation }: Props) {
     }
   }, []);
 
+  const handleGroupFeedsChange = React.useCallback((value: GroupFeedsMode) => {
+    setGroupFeeds(value);
+    try {
+      saveConfig({ groupFeeds: value });
+    } catch (e) {
+      console.warn("[feedme] Failed to persist groupFeeds:", e);
+    }
+  }, []);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
       <ScrollView contentContainerStyle={styles.content}>
@@ -384,6 +403,24 @@ export default function SettingsScreen({ navigation }: Props) {
             { value: "stacked", label: "Stacked" },
           ]}
           onChange={handleDefaultSortChange}
+        />
+
+        <SectionHeading label="Group feeds" />
+        <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
+          Insert time-bucket dividers in the feed. Only applies to Newest sort.
+        </Text>
+        <Segmented
+          value={groupFeeds}
+          options={[
+            { value: "none", label: "None" },
+            { value: "hourly", label: "Hourly" },
+            { value: "daily", label: "Daily" },
+            { value: "weekly", label: "Weekly" },
+            { value: "monthly", label: "Monthly" },
+          ]}
+          onChange={handleGroupFeedsChange}
+          style={styles.segmentedStretched}
+          stretched
         />
 
         <SectionHeading label="Feed layout" />
@@ -462,10 +499,22 @@ const styles = StyleSheet.create({
     padding: 3,
     alignSelf: "flex-start",
   },
+  segmentedStretched: {
+    alignSelf: "stretch",
+  },
+  settingHint: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+    marginBottom: spacing.xs,
+  },
   segment: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: 2,
+  },
+  segmentFlex: {
+    flex: 1,
+    alignItems: "center",
   },
   segmentContent: {
     alignItems: "center",
