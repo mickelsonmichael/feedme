@@ -58,8 +58,8 @@ export default function FeedItemScreen({ route, navigation }: Props) {
     [item.content]
   );
   const sanitizedHtmlContent = React.useMemo(
-    () => sanitizeHtml(item.content ?? ""),
-    [item.content]
+    () => (shouldRenderHtmlContent ? sanitizeHtml(item.content ?? "") : ""),
+    [item.content, shouldRenderHtmlContent]
   );
   const redditCommentsLink = React.useMemo(
     () =>
