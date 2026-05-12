@@ -25,6 +25,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDLIST-011 | In card layout, items from NSFW feeds shall show a "Reveal images" overlay instead of unblurred media (images or GIFs); tapping the overlay reveals the media. For GIF posts, tapping reveal also auto-loads the GIF. Reddit galleries use a separate deferred-load mechanism and are excluded from this overlay. |
 | REQ-FEEDLIST-012 | Opening an item's original link via the external-link button shall mark the item as read if it is not already read. |
 | REQ-FEEDLIST-013 | Pressing the Feed tab button while already on the Feed screen shall scroll to the top (and reset any active scope). Pressing it while on any other screen shall navigate to the Feed screen at the same scroll position the user left it at. |
+| REQ-FEEDLIST-014 | When the **Group Feeds** setting is set to a value other than None (Hourly / Daily / Weekly / Monthly) and the active sort is **Newest**, the feed list shall display labeled time-bucket dividers between posts. A divider is shown only if at least one post belongs to that bucket. The setting has no effect when any sort other than Newest is active. |
 
 ---
 
@@ -141,6 +142,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-SETTINGS-007 | All settings shall persist across app restarts. |
 | REQ-SETTINGS-008 | The settings screen shall provide navigation to ImportExportScreen. |
 | REQ-SETTINGS-009 | The user shall be able to toggle "Bionic Reading" in the Reading section. When enabled, the leading characters of each word in the article body (FeedItemScreen) shall be displayed in bold. |
+| REQ-SETTINGS-010 | The user shall be able to choose a **Group Feeds** interval (None / Hourly / Daily / Weekly / Monthly). When set to a non-None value and Newest sort is active, time-bucket dividers are injected into the FeedListScreen feed list. The setting note shall indicate it only applies to Newest sort. All values shall persist across app restarts. |
 
 ---
 

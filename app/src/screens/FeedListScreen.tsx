@@ -55,6 +55,12 @@ import { useTheme } from "../context/ThemeContext";
 import { useHeaderContent } from "../context/HeaderContentContext";
 import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
+import {
+  type GroupFeedsMode,
+  type FeedListRow,
+  injectGroupDividers,
+  isGroupDivider,
+} from "../groupItems";
 import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { parseContentAndLinks } from "../utils/contentActions";
 import { FeedPostCard } from "../components/FeedPostCard";
@@ -88,6 +94,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
   const [sort, setSort] = useState<SortMode>(
     () => loadConfig().defaultSort ?? "stacked"
+  );
+  const [groupFeeds, setGroupFeeds] = useState<GroupFeedsMode>(
+    () => loadConfig().groupFeeds ?? "none"
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -129,7 +138,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (!markAsReadOnScrollRef.current) return;
       for (const token of viewableItems) {
-        const item = token.item as FeedItemWithFeed;
+        const row = token.item as FeedListRow;
+        if (isGroupDivider(row)) continue;
+        const item = row as FeedItemWithFeed;
         if (!item.read) {
           setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
           markItemRead(item.id)
@@ -252,6 +263,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
     useCallback(() => {
       const config = loadConfig();
       setFeedLayout(config.feedLayout ?? "compact");
+      setGroupFeeds(config.groupFeeds ?? "none");
       markAsReadOnScrollRef.current = config.markAsReadOnScroll ?? false;
       if (shouldRefreshOnFocus) {
         setRefreshing(true);
@@ -641,6 +653,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
     );
   }, [sortedItems, filter, savedIds, retainedUnreadIds]);
 
+  // Inject time-bucket group dividers when grouping is active and sort is newest.
+  const displayItems = useMemo<FeedListRow[]>(() => {
+    if (sort !== "newest" || groupFeeds === "none") return visibleItems;
+    return injectGroupDividers(visibleItems, groupFeeds);
+  }, [visibleItems, sort, groupFeeds]);
+
   if (loading) {
     const totalLoading = refreshProgress?.total ?? 0;
     const completed = refreshProgress?.completed ?? 0;
@@ -852,8 +870,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
       ) : (
         <FlashList
           ref={flatListRef}
-          data={visibleItems}
+          data={displayItems}
           keyExtractor={keyExtractor}
+          getItemType={(item) => (isGroupDivider(item) ? "divider" : "item")}
           onRefresh={handleRefreshAll}
           refreshing={refreshing}
           viewabilityConfig={viewabilityConfig}
@@ -863,6 +882,23 @@ export default function FeedListScreen({ navigation, route }: Props) {
             feedLayout === "card" ? styles.cardList : null,
           ]}
           renderItem={({ item }) => {
+            if (isGroupDivider(item)) {
+              return (
+                <View
+                  style={[
+                    styles.groupDivider,
+                    { borderBottomColor: colors.border },
+                  ]}
+                >
+                  <Text
+                    style={[styles.groupDividerLabel, { color: colors.inkSoft }]}
+                  >
+                    {item.label}
+                  </Text>
+                </View>
+              );
+            }
+
             const sourceFeed = feedDetailsById.get(item.feed_id);
             const isFeedNsfw = sourceFeed?.nsfw === 1;
             const feedUseProxy = sourceFeed?.use_proxy === 1;
@@ -939,7 +975,8 @@ function isRedditCommentsUrl(url: string): boolean {
   }
 }
 
-const keyExtractor = (item: FeedItemWithFeed) => String(item.id);
+const keyExtractor = (item: FeedListRow) =>
+  isGroupDivider(item) ? item.key : String(item.id);
 
 function Separator() {
   return <View style={styles.separator} />;
@@ -1045,6 +1082,20 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
   },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
+  groupDivider: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+    marginTop: spacing.xs,
+    borderBottomWidth: 1,
+    borderStyle: "dashed",
+  },
+  groupDividerLabel: {
+    fontSize: fontSize.xs,
+    fontFamily: fonts.sans,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    fontWeight: "600",
+  },
   cardList: {
     alignItems: "center",
   },
