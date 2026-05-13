@@ -60,7 +60,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 
 | ID | Requirement |
 |----|-------------|
-| REQ-FEEDITEM-001 | [modified] The screen shall render the full parsed content and media for a single feed item. When item content contains HTML markup, the article body shall render the sanitized HTML content (including formatting links/images) and strip unsafe markup such as `<script>` tags, inline event handler attributes, and `javascript:` URLs. For RSS items that include both `<description>` and `<content:encoded>`, the rendered content shall use `<content:encoded>` as the source body. |
+| REQ-FEEDITEM-001 | [modified] The screen shall render the full parsed content and media for a single feed item. When item content contains HTML markup, the article body shall render the sanitized HTML content (including formatting links/images) and strip unsafe markup such as `<script>` tags, inline event handler attributes, and `javascript:` URLs. For RSS items that include both `<description>` and `<content:encoded>`, the rendered content shall use `<content:encoded>` as the source body. In native rendering, HTML text/background colors shall follow the app theme and the content card shall grow to fit rendered HTML so the parent screen scrolls instead of a nested HTML viewport. |
 | REQ-FEEDITEM-002 | Opening a feed item shall automatically mark it as read. |
 | REQ-FEEDITEM-003 | The user shall be able to save/unsave the item from this screen. |
 | REQ-FEEDITEM-004 | The user shall be able to open the item's link in the browser (using their preferred link-open mode). |
