@@ -7,12 +7,39 @@ type Props = {
   html: string;
 };
 
+const MIN_WEBVIEW_HEIGHT = 220;
+const IMMEDIATE_HEIGHT_CHECK_MS = 0;
+const HEIGHT_REMEASURE_DELAY_MS = 150;
+const INJECTED_HEIGHT_SCRIPT = `
+  (function () {
+    function reportHeight() {
+      var body = document.body;
+      var doc = document.documentElement;
+      if (!body || !doc || !window.ReactNativeWebView) return;
+      var height = Math.max(
+        body.scrollHeight,
+        body.offsetHeight,
+        doc.clientHeight,
+        doc.scrollHeight,
+        doc.offsetHeight
+      );
+      window.ReactNativeWebView.postMessage(String(height));
+    }
+    window.addEventListener("load", reportHeight);
+    window.addEventListener("resize", reportHeight);
+    setTimeout(reportHeight, ${IMMEDIATE_HEIGHT_CHECK_MS});
+    setTimeout(reportHeight, ${HEIGHT_REMEASURE_DELAY_MS});
+    true;
+  })();
+`;
+
 export function SanitizedHtmlContent({ html }: Props) {
   const { colors } = useTheme();
-  const [contentHeight, setContentHeight] = React.useState(220);
+  const [contentHeight, setContentHeight] = React.useState(MIN_WEBVIEW_HEIGHT);
   const { WebView } =
     require("react-native-webview") as typeof import("react-native-webview");
 
+  // Inline CSS is required for injecting runtime theme colors into the HTML.
   const sourceHtml = `<!doctype html>
 <html>
   <head>
@@ -51,29 +78,6 @@ export function SanitizedHtmlContent({ html }: Props) {
   </head>
   <body><div id="feedme-content">${html}</div></body>
 </html>`;
-  const injectedJavaScript = `
-    (function () {
-      function reportHeight() {
-        var body = document.body;
-        var doc = document.documentElement;
-        if (!body || !doc || !window.ReactNativeWebView) return;
-        var height = Math.max(
-          body.scrollHeight,
-          body.offsetHeight,
-          doc.clientHeight,
-          doc.scrollHeight,
-          doc.offsetHeight
-        );
-        window.ReactNativeWebView.postMessage(String(height));
-      }
-      window.addEventListener("load", reportHeight);
-      window.addEventListener("resize", reportHeight);
-      setTimeout(reportHeight, 0);
-      setTimeout(reportHeight, 150);
-      true;
-    })();
-  `;
-
   return (
     <View
       style={[
@@ -88,13 +92,13 @@ export function SanitizedHtmlContent({ html }: Props) {
         domStorageEnabled={false}
         allowFileAccess={false}
         allowUniversalAccessFromFileURLs={false}
-        injectedJavaScript={injectedJavaScript}
+        injectedJavaScript={INJECTED_HEIGHT_SCRIPT}
         scrollEnabled={false}
         nestedScrollEnabled={false}
         onMessage={(event) => {
           const parsed = Number(event.nativeEvent.data);
           if (!Number.isFinite(parsed) || parsed <= 0) return;
-          setContentHeight(Math.max(220, Math.ceil(parsed)));
+          setContentHeight(Math.max(MIN_WEBVIEW_HEIGHT, Math.ceil(parsed)));
         }}
         style={[styles.webview, { height: contentHeight }]}
       />
@@ -107,10 +111,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     overflow: "hidden",
-    minHeight: 220,
+    minHeight: MIN_WEBVIEW_HEIGHT,
   },
   webview: {
-    minHeight: 220,
+    minHeight: MIN_WEBVIEW_HEIGHT,
     marginTop: spacing.xs,
   },
 });
