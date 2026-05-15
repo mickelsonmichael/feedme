@@ -14,8 +14,13 @@ import { useFocusEffect } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { getFeeds, getTagsWithFeedCounts } from "../database";
 import {
+  getFeeds,
+  getTagsWithFeedCounts,
+  getCustomFeedsWithMemberCounts,
+} from "../database";
+import {
+  CustomFeedWithMemberCount,
   Feed,
   RootStackParamList,
   TabParamList,
@@ -25,6 +30,7 @@ import { DashedDivider } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { getFeedIconUrl } from "../feedIcon";
+import { resolveCustomFeedIcon } from "../customFeedIcons";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feeds">,
@@ -35,18 +41,23 @@ export default function FeedsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [tags, setTags] = useState<TagWithFeedCount[]>([]);
+  const [customFeeds, setCustomFeeds] = useState<CustomFeedWithMemberCount[]>(
+    []
+  );
   const [failedIconUris, setFailedIconUris] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
 
   const loadData = useCallback(async () => {
     try {
-      const [feedData, tagData] = await Promise.all([
+      const [feedData, tagData, cfData] = await Promise.all([
         getFeeds(),
         getTagsWithFeedCounts(),
+        getCustomFeedsWithMemberCounts(),
       ]);
       setFeeds(feedData);
       setTags(tagData);
+      setCustomFeeds(cfData);
     } finally {
       setLoading(false);
     }
@@ -165,6 +176,82 @@ export default function FeedsScreen({ navigation }: Props) {
                   Read Later
                 </Text>
               </TouchableOpacity>
+            </View>
+
+            <View
+              style={[
+                styles.tagsSection,
+                { borderBottomColor: colors.inkFaint },
+              ]}
+            >
+              <View style={styles.tagsHeader}>
+                <Text style={[styles.sectionLabel, { color: colors.inkFaint }]}>
+                  CUSTOM FEEDS
+                </Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    navigation.navigate("CustomFeedEdit", { from: "Feeds" })
+                  }
+                  hitSlop={8}
+                  accessibilityLabel="Add custom feed"
+                  activeOpacity={0.7}
+                  style={styles.tagAddBtn}
+                >
+                  <Feather name="plus" size={14} color={colors.inkSoft} />
+                </TouchableOpacity>
+              </View>
+              {customFeeds.length === 0 ? (
+                <Text style={[styles.tagEmpty, { color: colors.inkFaint }]}>
+                  No custom feeds yet. Tap + to create one.
+                </Text>
+              ) : (
+                customFeeds.map((cf) => (
+                  <View key={cf.id} style={styles.tagRow}>
+                    <TouchableOpacity
+                      style={styles.tagRowMain}
+                      onPress={() =>
+                        navigation.navigate("Feed", {
+                          selectedCustomFeedId: cf.id,
+                          selectedCustomFeedName: cf.name,
+                        })
+                      }
+                      accessibilityLabel={`Open custom feed ${cf.name}`}
+                      activeOpacity={0.7}
+                    >
+                      <Feather
+                        name={resolveCustomFeedIcon(cf.icon)}
+                        size={14}
+                        color={colors.inkSoft}
+                      />
+                      <Text style={[styles.tagText, { color: colors.ink }]}>
+                        {cf.name}
+                      </Text>
+                      <Text
+                        style={[styles.tagCount, { color: colors.inkFaint }]}
+                      >
+                        {cf.member_count}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[
+                        styles.editBtn,
+                        { borderColor: colors.border, marginRight: 0 },
+                      ]}
+                      onPress={() =>
+                        navigation.navigate("CustomFeedEdit", {
+                          customFeedId: cf.id,
+                          from: "Feeds",
+                        })
+                      }
+                      hitSlop={8}
+                      accessibilityLabel={`Edit ${cf.name}`}
+                      activeOpacity={0.8}
+                    >
+                      <Feather name="edit-2" size={16} color={colors.inkSoft} />
+                    </TouchableOpacity>
+                  </View>
+                ))
+              )}
             </View>
 
             <View

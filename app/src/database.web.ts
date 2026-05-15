@@ -12,6 +12,7 @@
 // the `web` platform thanks to the `.web.ts` extension.
 
 import {
+  CustomFeed,
   Feed,
   FeedItem,
   FeedItemWithFeed,
@@ -25,6 +26,7 @@ import {
 const STORAGE_KEY = "feedme_db_v1";
 
 type FeedTagRow = { feed_id: number; tag_id: number };
+type CustomFeedMemberRow = { custom_feed_id: number; feed_id: number };
 
 type DbState = {
   feeds: Feed[];
@@ -38,11 +40,14 @@ type DbState = {
   readLaterPosts: ReadLaterPost[];
   tags: Tag[];
   feedTags: FeedTagRow[];
+  customFeeds: CustomFeed[];
+  customFeedMembers: CustomFeedMemberRow[];
   nextFeedId: number;
   nextItemId: number;
   nextSavedPostId: number;
   nextReadLaterPostId: number;
   nextTagId: number;
+  nextCustomFeedId: number;
 };
 
 function normalizeFeed(raw: Feed): Feed {
@@ -75,11 +80,14 @@ function emptyState(): DbState {
     readLaterPosts: [],
     tags: [],
     feedTags: [],
+    customFeeds: [],
+    customFeedMembers: [],
     nextFeedId: 1,
     nextItemId: 1,
     nextSavedPostId: 1,
     nextReadLaterPostId: 1,
     nextTagId: 1,
+    nextCustomFeedId: 1,
   };
 }
 
@@ -133,6 +141,19 @@ function loadState(): DbState {
         parsed && Array.isArray(parsed.feedTags)
           ? (parsed.feedTags as FeedTagRow[])
           : [];
+      const customFeeds =
+        parsed && Array.isArray(parsed.customFeeds)
+          ? (parsed.customFeeds as CustomFeed[]).map((cf) => ({
+              id: cf.id,
+              name: cf.name,
+              icon: cf.icon || "list",
+              nsfw: cf.nsfw === 1 ? 1 : 0,
+            }))
+          : [];
+      const customFeedMembers =
+        parsed && Array.isArray(parsed.customFeedMembers)
+          ? (parsed.customFeedMembers as CustomFeedMemberRow[])
+          : [];
       cachedState = {
         feeds,
         items,
@@ -143,6 +164,8 @@ function loadState(): DbState {
         readLaterPosts,
         tags,
         feedTags,
+        customFeeds,
+        customFeedMembers,
         nextFeedId:
           typeof parsed?.nextFeedId === "number" && parsed.nextFeedId > 0
             ? parsed.nextFeedId
@@ -165,6 +188,11 @@ function loadState(): DbState {
           typeof parsed?.nextTagId === "number" && parsed.nextTagId > 0
             ? parsed.nextTagId
             : Math.max(1, ...tags.map((t) => t.id + 1)),
+        nextCustomFeedId:
+          typeof parsed?.nextCustomFeedId === "number" &&
+          parsed.nextCustomFeedId > 0
+            ? parsed.nextCustomFeedId
+            : Math.max(1, ...customFeeds.map((c) => c.id + 1)),
       };
       return cachedState;
     }
@@ -264,6 +292,9 @@ export async function deleteFeed(feedId: number): Promise<void> {
   // ON DELETE CASCADE: drop matching items too.
   state.items = state.items.filter((i) => i.feed_id !== feedId);
   state.feedTags = state.feedTags.filter((ft) => ft.feed_id !== feedId);
+  state.customFeedMembers = state.customFeedMembers.filter(
+    (m) => m.feed_id !== feedId
+  );
   saveState(state);
 }
 
@@ -823,4 +854,133 @@ export async function setTagNotificationEnabled(
     tag.notify_enabled = enabled ? 1 : 0;
     saveState(state);
   }
+}
+
+// ── Custom Feeds ──────────────────────────────────────────────────────────
+
+export async function getCustomFeeds(): Promise<CustomFeed[]> {
+  const state = loadState();
+  return [...state.customFeeds].sort((a, b) =>
+    a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+  );
+}
+
+export async function getCustomFeedsWithMemberCounts(): Promise<
+  (CustomFeed & { member_count: number })[]
+> {
+  const state = loadState();
+  return [...state.customFeeds]
+    .map((cf) => ({
+      ...cf,
+      member_count: state.customFeedMembers.reduce(
+        (n, m) => (m.custom_feed_id === cf.id ? n + 1 : n),
+        0
+      ),
+    }))
+    .sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+}
+
+export async function getCustomFeedById(
+  customFeedId: number
+): Promise<CustomFeed | null> {
+  const state = loadState();
+  const cf = state.customFeeds.find((entry) => entry.id === customFeedId);
+  return cf ? { ...cf } : null;
+}
+
+export async function addCustomFeed(fields: {
+  name: string;
+  icon: string;
+  nsfw: number;
+}): Promise<number> {
+  const state = loadState();
+  const trimmed = fields.name.trim();
+  if (!trimmed) {
+    throw new Error("Custom feed name cannot be empty.");
+  }
+  const id = state.nextCustomFeedId;
+  state.customFeeds.push({
+    id,
+    name: trimmed,
+    icon: fields.icon || "list",
+    nsfw: fields.nsfw ? 1 : 0,
+  });
+  state.nextCustomFeedId = id + 1;
+  saveState(state);
+  return id;
+}
+
+export async function updateCustomFeed(
+  customFeedId: number,
+  fields: { name: string; icon: string; nsfw: number }
+): Promise<void> {
+  const state = loadState();
+  const trimmed = fields.name.trim();
+  if (!trimmed) {
+    throw new Error("Custom feed name cannot be empty.");
+  }
+  const cf = state.customFeeds.find((entry) => entry.id === customFeedId);
+  if (cf) {
+    cf.name = trimmed;
+    cf.icon = fields.icon || "list";
+    cf.nsfw = fields.nsfw ? 1 : 0;
+    saveState(state);
+  }
+}
+
+export async function deleteCustomFeed(customFeedId: number): Promise<void> {
+  const state = loadState();
+  state.customFeeds = state.customFeeds.filter((cf) => cf.id !== customFeedId);
+  state.customFeedMembers = state.customFeedMembers.filter(
+    (m) => m.custom_feed_id !== customFeedId
+  );
+  saveState(state);
+}
+
+export async function getCustomFeedMembers(
+  customFeedId: number
+): Promise<number[]> {
+  const state = loadState();
+  return state.customFeedMembers
+    .filter((m) => m.custom_feed_id === customFeedId)
+    .map((m) => m.feed_id);
+}
+
+export async function setCustomFeedMembers(
+  customFeedId: number,
+  feedIds: number[]
+): Promise<void> {
+  const state = loadState();
+  const unique = Array.from(new Set(feedIds));
+  state.customFeedMembers = state.customFeedMembers.filter(
+    (m) => m.custom_feed_id !== customFeedId
+  );
+  for (const feedId of unique) {
+    if (state.feeds.some((f) => f.id === feedId)) {
+      state.customFeedMembers.push({
+        custom_feed_id: customFeedId,
+        feed_id: feedId,
+      });
+    }
+  }
+  saveState(state);
+}
+
+export async function getFeedsForCustomFeed(
+  customFeedId: number
+): Promise<Feed[]> {
+  const state = loadState();
+  const feedIds = new Set(
+    state.customFeedMembers
+      .filter((m) => m.custom_feed_id === customFeedId)
+      .map((m) => m.feed_id)
+  );
+  return state.feeds
+    .filter((f) => feedIds.has(f.id))
+    .map(normalizeFeed)
+    .sort((a, b) =>
+      a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+    );
 }

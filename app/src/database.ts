@@ -1,5 +1,7 @@
 import * as SQLite from "expo-sqlite";
 import {
+  CustomFeed,
+  CustomFeedWithMemberCount,
   Feed,
   FeedItem,
   FeedItemWithFeed,
@@ -132,6 +134,21 @@ async function initializeSchema(
       PRIMARY KEY (feed_id, tag_id),
       FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE,
       FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS custom_feeds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      icon TEXT NOT NULL DEFAULT 'list',
+      nsfw INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE TABLE IF NOT EXISTS custom_feed_members (
+      custom_feed_id INTEGER NOT NULL,
+      feed_id INTEGER NOT NULL,
+      PRIMARY KEY (custom_feed_id, feed_id),
+      FOREIGN KEY (custom_feed_id) REFERENCES custom_feeds(id) ON DELETE CASCADE,
+      FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE
     );
   `);
 
@@ -268,6 +285,8 @@ async function initializeSchema(
     CREATE INDEX IF NOT EXISTS idx_read_later_posts_item_id ON read_later_posts(item_id);
     CREATE INDEX IF NOT EXISTS idx_feed_tags_tag_id ON feed_tags(tag_id);
     CREATE INDEX IF NOT EXISTS idx_feed_tags_feed_id ON feed_tags(feed_id);
+    CREATE INDEX IF NOT EXISTS idx_custom_feed_members_feed_id ON custom_feed_members(feed_id);
+    CREATE INDEX IF NOT EXISTS idx_custom_feed_members_custom_feed_id ON custom_feed_members(custom_feed_id);
   `);
 }
 
@@ -904,4 +923,127 @@ export async function setTagFeeds(
       );
     }
   });
+}
+
+// ── Custom Feeds ──────────────────────────────────────────────────────────
+
+export async function getCustomFeeds(): Promise<CustomFeed[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<CustomFeed>(
+    "SELECT id, name, icon, nsfw FROM custom_feeds ORDER BY name COLLATE NOCASE ASC"
+  );
+}
+
+export async function getCustomFeedsWithMemberCounts(): Promise<
+  CustomFeedWithMemberCount[]
+> {
+  const database = await getDatabase();
+  return database.getAllAsync<CustomFeedWithMemberCount>(
+    `SELECT cf.id, cf.name, cf.icon, cf.nsfw,
+            COUNT(cfm.feed_id) AS member_count
+     FROM custom_feeds cf
+     LEFT JOIN custom_feed_members cfm ON cfm.custom_feed_id = cf.id
+     GROUP BY cf.id
+     ORDER BY cf.name COLLATE NOCASE ASC`
+  );
+}
+
+export async function getCustomFeedById(
+  customFeedId: number
+): Promise<CustomFeed | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<CustomFeed>(
+    "SELECT id, name, icon, nsfw FROM custom_feeds WHERE id = ?",
+    [customFeedId]
+  );
+  return row ?? null;
+}
+
+export async function addCustomFeed(fields: {
+  name: string;
+  icon: string;
+  nsfw: number;
+}): Promise<number> {
+  const trimmed = fields.name.trim();
+  if (!trimmed) {
+    throw new Error("Custom feed name cannot be empty.");
+  }
+  const database = await getDatabase();
+  const result = await withWriteLock(() =>
+    database.runAsync(
+      "INSERT INTO custom_feeds (name, icon, nsfw) VALUES (?, ?, ?)",
+      [trimmed, fields.icon || "list", fields.nsfw ? 1 : 0]
+    )
+  );
+  return result.lastInsertRowId;
+}
+
+export async function updateCustomFeed(
+  customFeedId: number,
+  fields: { name: string; icon: string; nsfw: number }
+): Promise<void> {
+  const trimmed = fields.name.trim();
+  if (!trimmed) {
+    throw new Error("Custom feed name cannot be empty.");
+  }
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "UPDATE custom_feeds SET name = ?, icon = ?, nsfw = ? WHERE id = ?",
+      [trimmed, fields.icon || "list", fields.nsfw ? 1 : 0, customFeedId]
+    )
+  );
+}
+
+export async function deleteCustomFeed(customFeedId: number): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync("DELETE FROM custom_feeds WHERE id = ?", [customFeedId])
+  );
+}
+
+export async function getCustomFeedMembers(
+  customFeedId: number
+): Promise<number[]> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{ feed_id: number }>(
+    "SELECT feed_id FROM custom_feed_members WHERE custom_feed_id = ?",
+    [customFeedId]
+  );
+  return rows.map((r) => r.feed_id);
+}
+
+export async function setCustomFeedMembers(
+  customFeedId: number,
+  feedIds: number[]
+): Promise<void> {
+  const database = await getDatabase();
+  const unique = Array.from(new Set(feedIds));
+  await withWriteLock(async () => {
+    await database.runAsync(
+      "DELETE FROM custom_feed_members WHERE custom_feed_id = ?",
+      [customFeedId]
+    );
+    if (unique.length > 0) {
+      const placeholders = unique.map(() => "(?, ?)").join(", ");
+      const values = unique.flatMap((feedId) => [customFeedId, feedId]);
+      await database.runAsync(
+        `INSERT OR IGNORE INTO custom_feed_members (custom_feed_id, feed_id) VALUES ${placeholders}`,
+        values
+      );
+    }
+  });
+}
+
+export async function getFeedsForCustomFeed(
+  customFeedId: number
+): Promise<Feed[]> {
+  const database = await getDatabase();
+  return database.getAllAsync<Feed>(
+    `SELECT feeds.* FROM feeds
+     JOIN custom_feed_members cfm ON cfm.feed_id = feeds.id
+     WHERE cfm.custom_feed_id = ?
+     ORDER BY feeds.title COLLATE NOCASE ASC`,
+    [customFeedId]
+  );
 }

@@ -48,6 +48,15 @@ import {
   updateFeedLastFetched,
   updateTag,
   upsertItems,
+  addCustomFeed,
+  updateCustomFeed,
+  deleteCustomFeed,
+  getCustomFeeds,
+  getCustomFeedsWithMemberCounts,
+  getCustomFeedById,
+  getCustomFeedMembers,
+  setCustomFeedMembers,
+  getFeedsForCustomFeed,
 } from "./database.web";
 
 // jsdom provides `localStorage`; jest-expo's default environment is node, so
@@ -911,5 +920,83 @@ describe("database.web — tags", () => {
     // Assert
     const tags = await getTags();
     expect(tags[0].notify_enabled).toBe(1);
+  });
+});
+
+describe("custom feeds", () => {
+  async function makeFeed(title: string, url: string) {
+    return addFeed({
+      title,
+      url,
+      description: null,
+      use_proxy: 0,
+      nsfw: 0,
+      show_only_in_tag: 0,
+    });
+  }
+
+  it("creates, lists, and counts members", async () => {
+    const f1 = await makeFeed("A", "https://a.example/feed");
+    const f2 = await makeFeed("B", "https://b.example/feed");
+    const cfId = await addCustomFeed({
+      name: "Morning",
+      icon: "coffee",
+      nsfw: 0,
+    });
+    await setCustomFeedMembers(cfId, [f1, f2]);
+
+    const list = await getCustomFeeds();
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ name: "Morning", icon: "coffee", nsfw: 0 });
+
+    const counts = await getCustomFeedsWithMemberCounts();
+    expect(counts[0].member_count).toBe(2);
+
+    const members = await getCustomFeedMembers(cfId);
+    expect(new Set(members)).toEqual(new Set([f1, f2]));
+
+    const feeds = await getFeedsForCustomFeed(cfId);
+    expect(feeds.map((f) => f.id).sort()).toEqual([f1, f2].sort());
+  });
+
+  it("setCustomFeedMembers is idempotent and de-duplicates", async () => {
+    const f1 = await makeFeed("A", "https://a.example/feed");
+    const cfId = await addCustomFeed({ name: "X", icon: "list", nsfw: 0 });
+    await setCustomFeedMembers(cfId, [f1, f1, f1]);
+    expect(await getCustomFeedMembers(cfId)).toEqual([f1]);
+    await setCustomFeedMembers(cfId, [f1, f1]);
+    expect(await getCustomFeedMembers(cfId)).toEqual([f1]);
+  });
+
+  it("updateCustomFeed changes name/icon/nsfw", async () => {
+    const cfId = await addCustomFeed({ name: "Old", icon: "list", nsfw: 0 });
+    await updateCustomFeed(cfId, { name: "New", icon: "star", nsfw: 1 });
+    const cf = await getCustomFeedById(cfId);
+    expect(cf).toMatchObject({ name: "New", icon: "star", nsfw: 1 });
+  });
+
+  it("deleteCustomFeed cascades members", async () => {
+    const f1 = await makeFeed("A", "https://a.example/feed");
+    const cfId = await addCustomFeed({ name: "X", icon: "list", nsfw: 0 });
+    await setCustomFeedMembers(cfId, [f1]);
+    await deleteCustomFeed(cfId);
+    expect(await getCustomFeeds()).toEqual([]);
+    expect(await getCustomFeedMembers(cfId)).toEqual([]);
+  });
+
+  it("deleting a feed removes it from any custom feed", async () => {
+    const f1 = await makeFeed("A", "https://a.example/feed");
+    const f2 = await makeFeed("B", "https://b.example/feed");
+    const cfId = await addCustomFeed({ name: "X", icon: "list", nsfw: 0 });
+    await setCustomFeedMembers(cfId, [f1, f2]);
+    await deleteFeed(f1);
+    const members = await getCustomFeedMembers(cfId);
+    expect(members).toEqual([f2]);
+  });
+
+  it("rejects empty names", async () => {
+    await expect(
+      addCustomFeed({ name: "  ", icon: "list", nsfw: 0 })
+    ).rejects.toThrow(/empty/i);
   });
 });
