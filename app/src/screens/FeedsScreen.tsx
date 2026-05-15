@@ -18,6 +18,7 @@ import {
   getFeeds,
   getTagsWithFeedCounts,
   getCustomFeedsWithMemberCounts,
+  getFeedItemStats,
 } from "../database";
 import {
   CustomFeedWithMemberCount,
@@ -31,6 +32,13 @@ import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { getFeedIconUrl } from "../feedIcon";
 import { resolveCustomFeedIcon } from "../customFeedIcons";
+import { buildFeedsWithHealth, FeedFlag, FeedWithHealth } from "../feedHealth";
+
+const HEALTH_DOT_COLORS: Record<FeedFlag, string> = {
+  dead: "#b44b4b",
+  spammy: "#c07a1a",
+  erroring: "#7e78c4",
+};
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feeds">,
@@ -40,6 +48,9 @@ type Props = CompositeScreenProps<
 export default function FeedsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [feedsWithHealth, setFeedsWithHealth] = useState<
+    Map<number, FeedWithHealth>
+  >(new Map());
   const [tags, setTags] = useState<TagWithFeedCount[]>([]);
   const [customFeeds, setCustomFeeds] = useState<CustomFeedWithMemberCount[]>(
     []
@@ -50,14 +61,18 @@ export default function FeedsScreen({ navigation }: Props) {
 
   const loadData = useCallback(async () => {
     try {
-      const [feedData, tagData, cfData] = await Promise.all([
+      const [feedData, tagData, cfData, stats] = await Promise.all([
         getFeeds(),
         getTagsWithFeedCounts(),
         getCustomFeedsWithMemberCounts(),
+        getFeedItemStats(),
       ]);
       setFeeds(feedData);
       setTags(tagData);
       setCustomFeeds(cfData);
+      const statsMap = new Map(stats.map((s) => [s.feedId, s]));
+      const healthList = buildFeedsWithHealth(feedData, statsMap);
+      setFeedsWithHealth(new Map(healthList.map((f) => [f.id, f])));
     } finally {
       setLoading(false);
     }
@@ -174,6 +189,18 @@ export default function FeedsScreen({ navigation }: Props) {
                 <Feather name="clock" size={16} color={colors.inkSoft} />
                 <Text style={[styles.quickLinkText, { color: colors.ink }]}>
                   Read Later
+                </Text>
+              </TouchableOpacity>
+              <DashedDivider />
+              <TouchableOpacity
+                style={styles.quickLinkRow}
+                onPress={() => navigation.navigate("FeedHealth")}
+                accessibilityLabel="Go to feed health"
+                activeOpacity={0.8}
+              >
+                <Feather name="activity" size={16} color={colors.inkSoft} />
+                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+                  Feed Health
                 </Text>
               </TouchableOpacity>
             </View>
@@ -362,6 +389,8 @@ export default function FeedsScreen({ navigation }: Props) {
         renderItem={({ item }) => {
           const iconUri = getFeedIconUrl(item.url);
           const showIcon = Boolean(iconUri && !failedIconUris.has(iconUri));
+          const health = feedsWithHealth.get(item.id);
+          const flags = health?.flags ?? [];
 
           return (
             <View style={styles.row}>
@@ -395,6 +424,20 @@ export default function FeedsScreen({ navigation }: Props) {
                     {item.title}
                   </Text>
                 </View>
+                {flags.length > 0 && (
+                  <View style={styles.healthDots}>
+                    {(flags as FeedFlag[]).map((flag) => (
+                      <View
+                        key={flag}
+                        style={[
+                          styles.healthDot,
+                          { backgroundColor: HEALTH_DOT_COLORS[flag] },
+                        ]}
+                        accessibilityLabel={`Feed status: ${flag}`}
+                      />
+                    ))}
+                  </View>
+                )}
                 {item.error ? (
                   <View
                     style={[
@@ -530,6 +573,16 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontWeight: "600",
     fontFamily: fonts.sans,
+  },
+  healthDots: {
+    flexDirection: "row",
+    gap: 4,
+    alignItems: "center",
+  },
+  healthDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
   },
   badge: {
     paddingHorizontal: spacing.sm,

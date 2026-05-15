@@ -13,6 +13,7 @@ jest.mock("../database", () => ({
   getFeeds: jest.fn(),
   getTagsWithFeedCounts: jest.fn(() => Promise.resolve([])),
   getCustomFeedsWithMemberCounts: jest.fn(() => Promise.resolve([])),
+  getFeedItemStats: jest.fn(() => Promise.resolve([])),
 }));
 
 jest.mock("../context/ThemeContext", () => ({

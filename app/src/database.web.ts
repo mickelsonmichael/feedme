@@ -22,6 +22,7 @@ import {
   Tag,
   TagWithFeedCount,
 } from "./types";
+import { FeedItemStats } from "./feedHealth";
 
 const STORAGE_KEY = "feedme_db_v1";
 
@@ -480,6 +481,38 @@ export async function getRecentPublishedAtForFeed(
 export async function getItemCountForFeed(feedId: number): Promise<number> {
   const state = loadState();
   return state.items.reduce((n, i) => (i.feed_id === feedId ? n + 1 : n), 0);
+}
+
+/**
+ * Returns aggregated item statistics for every feed.
+ * Web counterpart of the native database.ts implementation.
+ */
+export async function getFeedItemStats(): Promise<FeedItemStats[]> {
+  const state = loadState();
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const statsMap = new Map<
+    number,
+    { totalItems: number; itemsLast30Days: number }
+  >();
+  for (const item of state.items) {
+    const entry = statsMap.get(item.feed_id) ?? {
+      totalItems: 0,
+      itemsLast30Days: 0,
+    };
+    entry.totalItems += 1;
+    if (
+      typeof item.published_at === "number" &&
+      item.published_at >= thirtyDaysAgo
+    ) {
+      entry.itemsLast30Days += 1;
+    }
+    statsMap.set(item.feed_id, entry);
+  }
+  return Array.from(statsMap.entries()).map(([feedId, s]) => ({
+    feedId,
+    totalItems: s.totalItems,
+    itemsLast30Days: s.itemsLast30Days,
+  }));
 }
 
 // ── Items ──────────────────────────────────────────────────────────────────

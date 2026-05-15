@@ -43,6 +43,7 @@ import ImportExportScreen from "./src/screens/ImportExportScreen";
 import InAppBrowserScreen from "./src/screens/InAppBrowserScreen";
 import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
 import RawXmlScreen from "./src/screens/RawXmlScreen";
+import FeedHealthScreen from "./src/screens/FeedHealthScreen";
 import {
   Feed,
   Tag,
@@ -646,6 +647,11 @@ function Tabs() {
       <Tab.Screen
         name="RawXml"
         component={RawXmlScreen}
+        options={HIDDEN_TAB_OPTIONS}
+      />
+      <Tab.Screen
+        name="FeedHealth"
+        component={FeedHealthScreen}
         options={HIDDEN_TAB_OPTIONS}
       />
     </Tab.Navigator>

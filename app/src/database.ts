@@ -11,6 +11,7 @@ import {
   Tag,
   TagWithFeedCount,
 } from "./types";
+import { FeedItemStats } from "./feedHealth";
 
 // Serialises all write operations on the shared SQLite connection.
 // Prevents concurrent writes from racing and leaving the DB in an
@@ -546,6 +547,33 @@ export async function getItemCountForFeed(feedId: number): Promise<number> {
     [feedId]
   );
   return row?.count ?? 0;
+}
+
+/**
+ * Returns aggregated item statistics for every feed in a single query.
+ * Used by the Feed Health screen and FeedsScreen flag indicators.
+ */
+export async function getFeedItemStats(): Promise<FeedItemStats[]> {
+  const database = await getDatabase();
+  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const rows = await database.getAllAsync<{
+    feed_id: number;
+    total_items: number;
+    items_last_30_days: number;
+  }>(
+    `SELECT
+       feed_id,
+       COUNT(*) AS total_items,
+       COUNT(CASE WHEN published_at >= ? THEN 1 END) AS items_last_30_days
+     FROM items
+     GROUP BY feed_id`,
+    [thirtyDaysAgo]
+  );
+  return rows.map((r) => ({
+    feedId: r.feed_id,
+    totalItems: r.total_items,
+    itemsLast30Days: r.items_last_30_days,
+  }));
 }
 
 // ── Items ──────────────────────────────────────────────────────────────────

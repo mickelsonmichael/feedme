@@ -115,6 +115,7 @@ export type RootStackParamList = {
   Tabs: undefined;
   AddFeed: { from?: string } | undefined;
   CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
+  FeedHealth: undefined;
   FeedItems: { feed: Feed };
   FeedItemView: {
     item: {
@@ -160,6 +161,7 @@ export type TabParamList = {
   Settings: undefined;
   AddFeed: { from?: string } | undefined;
   CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
+  FeedHealth: undefined;
   FeedItems: { feed: Feed };
   FeedItemView: {
     item: {
