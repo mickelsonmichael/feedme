@@ -37,17 +37,28 @@ import DiscoverScreen from "./src/screens/DiscoverScreen";
 import FeedSearchScreen from "./src/screens/FeedSearchScreen";
 import FeedDetailScreen from "./src/screens/FeedDetailScreen";
 import TagDetailScreen from "./src/screens/TagDetailScreen";
+import CustomFeedEditScreen from "./src/screens/CustomFeedEditScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
 import InAppBrowserScreen from "./src/screens/InAppBrowserScreen";
 import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
 import RawXmlScreen from "./src/screens/RawXmlScreen";
-import { Feed, Tag, TabParamList } from "./src/types";
+import {
+  Feed,
+  Tag,
+  TabParamList,
+  CustomFeedWithMemberCount,
+} from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
 import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { AppHeader } from "./src/components/AppHeader";
 import { HeaderContentProvider } from "./src/context/HeaderContentContext";
-import { getFeeds, getTags } from "./src/database";
+import {
+  getFeeds,
+  getTags,
+  getCustomFeedsWithMemberCounts,
+} from "./src/database";
+import { resolveCustomFeedIcon } from "./src/customFeedIcons";
 import { getFeedIconUrl } from "./src/feedIcon";
 import {
   initializeNotificationSystem,
@@ -119,6 +130,9 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = React.useState<Feed[]>([]);
   const [tags, setTags] = React.useState<Tag[]>([]);
+  const [customFeeds, setCustomFeeds] = React.useState<
+    CustomFeedWithMemberCount[]
+  >([]);
   const [failedIconUris, setFailedIconUris] = React.useState<Set<string>>(
     new Set()
   );
@@ -127,6 +141,7 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const feedRouteParams = (feedRoute?.params ?? {}) as {
     selectedFeedId?: number;
     selectedTagId?: number;
+    selectedCustomFeedId?: number;
   };
   const selectedFeedId =
     typeof feedRouteParams.selectedFeedId === "number"
@@ -136,15 +151,25 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
     typeof feedRouteParams.selectedTagId === "number"
       ? feedRouteParams.selectedTagId
       : undefined;
+  const selectedCustomFeedId =
+    typeof feedRouteParams.selectedCustomFeedId === "number"
+      ? feedRouteParams.selectedCustomFeedId
+      : undefined;
 
   const loadData = React.useCallback(async () => {
     try {
-      const [feedData, tagData] = await Promise.all([getFeeds(), getTags()]);
+      const [feedData, tagData, cfData] = await Promise.all([
+        getFeeds(),
+        getTags(),
+        getCustomFeedsWithMemberCounts(),
+      ]);
       setFeeds(feedData);
       setTags(tagData);
+      setCustomFeeds(cfData);
     } catch {
       setFeeds([]);
       setTags([]);
+      setCustomFeeds([]);
     }
   }, []);
 
@@ -160,7 +185,9 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
       currentRoute === name &&
       !(
         name === "Feed" &&
-        (selectedFeedId !== undefined || selectedTagId !== undefined)
+        (selectedFeedId !== undefined ||
+          selectedTagId !== undefined ||
+          selectedCustomFeedId !== undefined)
       );
     return (
       <TouchableOpacity
@@ -213,6 +240,78 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
         </Text>
         <View style={styles.sidebarTop}>
           {MAIN_NAV.map((item) => renderItem(item, 16))}
+        </View>
+        <View style={styles.sidebarFeedSpacer} />
+        <View style={styles.sidebarSectionRow}>
+          <Text
+            style={[styles.sidebarSectionHeader, { color: colors.inkFaint }]}
+          >
+            CUSTOM FEEDS
+          </Text>
+          <TouchableOpacity
+            style={styles.sidebarSectionAddButton}
+            onPress={() =>
+              navigation.navigate("CustomFeedEdit", {
+                from: currentRoute as string,
+              })
+            }
+            accessibilityLabel="Add custom feed"
+            activeOpacity={0.7}
+          >
+            <Feather name="plus" size={14} color={colors.inkSoft} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.tagList}>
+          {customFeeds.length === 0 ? (
+            <Text style={[styles.tagEmpty, { color: colors.inkFaint }]}>
+              No custom feeds yet
+            </Text>
+          ) : (
+            customFeeds.map((cf) => {
+              const focused =
+                currentRoute === "Feed" && selectedCustomFeedId === cf.id;
+              return (
+                <TouchableOpacity
+                  key={cf.id}
+                  style={[
+                    styles.feedItem,
+                    focused && { backgroundColor: colors.paperWarm },
+                  ]}
+                  onPress={() =>
+                    navigation.navigate("Feed", {
+                      selectedCustomFeedId: cf.id,
+                      selectedCustomFeedName: cf.name,
+                    })
+                  }
+                  onLongPress={() =>
+                    navigation.navigate("CustomFeedEdit", {
+                      customFeedId: cf.id,
+                      from: currentRoute as string,
+                    })
+                  }
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.feedItemRow}>
+                    <Feather
+                      name={resolveCustomFeedIcon(cf.icon)}
+                      size={12}
+                      color={focused ? colors.ink : colors.inkSoft}
+                    />
+                    <Text
+                      style={[
+                        styles.feedItemLabel,
+                        { color: focused ? colors.ink : colors.inkSoft },
+                        focused && { fontWeight: "600" },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {cf.name}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </View>
         <View style={styles.sidebarFeedSpacer} />
         <View style={styles.sidebarSectionRow}>
@@ -522,6 +621,11 @@ function Tabs() {
       <Tab.Screen
         name="TagDetail"
         component={TagDetailScreen}
+        options={HIDDEN_TAB_OPTIONS}
+      />
+      <Tab.Screen
+        name="CustomFeedEdit"
+        component={CustomFeedEditScreen}
         options={HIDDEN_TAB_OPTIONS}
       />
       <Tab.Screen

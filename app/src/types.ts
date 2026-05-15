@@ -40,6 +40,25 @@ export type Tag = {
 
 export type TagWithFeedCount = Tag & { feed_count: number };
 
+/** A user-defined "custom feed": a named, filtered view over a subset of the
+ *  user's existing feed subscriptions. Subscriptions remain the single source
+ *  of truth — refresh state, read/unread, and saved/read-later status are
+ *  shared with the main feed and any other custom feed referencing the same
+ *  underlying subscription. */
+export type CustomFeed = {
+  id: number;
+  name: string;
+  /** Feather icon name. Stored as a string rather than a typed icon name so
+   *  the column doesn't need to enumerate every Feather glyph; the UI falls
+   *  back to a default if the value isn't a known glyph. */
+  icon: string;
+  /** When 1, every post viewed inside this custom feed is treated as NSFW
+   *  regardless of the underlying subscription's nsfw flag. */
+  nsfw: number;
+};
+
+export type CustomFeedWithMemberCount = CustomFeed & { member_count: number };
+
 /** Maximum number of tags that can be attached to a single feed. */
 export const MAX_TAGS_PER_FEED = 25;
 
@@ -95,6 +114,7 @@ export type ParsedFeedItem = {
 export type RootStackParamList = {
   Tabs: undefined;
   AddFeed: { from?: string } | undefined;
+  CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
   FeedItems: { feed: Feed };
   FeedItemView: {
     item: {
@@ -127,6 +147,8 @@ export type TabParamList = {
         selectedFeedTitle?: string;
         selectedTagId?: number;
         selectedTagName?: string;
+        selectedCustomFeedId?: number;
+        selectedCustomFeedName?: string;
         scrollToTop?: number;
       }
     | undefined;
@@ -137,6 +159,7 @@ export type TabParamList = {
   FeedSearch: { initialUrl?: string } | undefined;
   Settings: undefined;
   AddFeed: { from?: string } | undefined;
+  CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
   FeedItems: { feed: Feed };
   FeedItemView: {
     item: {

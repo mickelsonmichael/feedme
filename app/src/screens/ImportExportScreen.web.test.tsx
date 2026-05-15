@@ -10,6 +10,10 @@ import * as Sharing from "expo-sharing";
 jest.mock("../database", () => ({
   getFeeds: jest.fn(),
   addFeed: jest.fn(),
+  getCustomFeedsWithMemberCounts: jest.fn(() => Promise.resolve([])),
+  getFeedsForCustomFeed: jest.fn(() => Promise.resolve([])),
+  addCustomFeed: jest.fn(),
+  setCustomFeedMembers: jest.fn(),
 }));
 
 jest.mock("expo-document-picker", () => ({

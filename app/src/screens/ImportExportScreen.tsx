@@ -1,8 +1,10 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
+  Switch,
   Alert,
   StyleSheet,
   ActivityIndicator,
@@ -15,11 +17,19 @@ import { Feather } from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
-import { getFeeds, addFeed } from "../database";
+import {
+  getFeeds,
+  addFeed,
+  getCustomFeedsWithMemberCounts,
+  getFeedsForCustomFeed,
+  addCustomFeed,
+  setCustomFeedMembers,
+} from "../database";
 import { generateOpml, parseOpml } from "../opml";
-import { Feed, RootStackParamList } from "../types";
+import { CustomFeedWithMemberCount, Feed, RootStackParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { resolveCustomFeedIcon } from "../customFeedIcons";
 
 type Props = NativeStackScreenProps<RootStackParamList, "ImportExport">;
 
@@ -28,65 +38,110 @@ export default function ImportExportScreen({ navigation }: Props) {
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
   const [feeds, setFeeds] = useState<Feed[]>([]);
+  const [customFeeds, setCustomFeeds] = useState<CustomFeedWithMemberCount[]>(
+    []
+  );
   const [loading, setLoading] = useState(true);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [statusIsError, setStatusIsError] = useState(false);
+  const [importAsCustom, setImportAsCustom] = useState(false);
+  const [customFeedName, setCustomFeedName] = useState("");
 
   const setStatus = (message: string | null, isError = false) => {
     setStatusMessage(message);
     setStatusIsError(isError);
   };
 
+  const reloadAll = useCallback(async () => {
+    const [feedList, cfs] = await Promise.all([
+      getFeeds(),
+      getCustomFeedsWithMemberCounts(),
+    ]);
+    setFeeds(feedList);
+    setCustomFeeds(cfs);
+  }, []);
+
   useEffect(() => {
-    getFeeds()
-      .then(setFeeds)
+    reloadAll()
       .catch((err: Error) => {
         Alert.alert("Error", "Failed to load feeds: " + err.message);
         setStatus(`Failed to load feeds: ${err.message}`, true);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [reloadAll]);
+
+  const writeOpmlFile = async (
+    opmlContent: string,
+    filename: string,
+    successMessage: string
+  ) => {
+    if (Platform.OS === "web" && typeof document !== "undefined") {
+      const blob = new Blob([opmlContent], {
+        type: "text/x-opml;charset=utf-8",
+      });
+      const downloadUrl = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = downloadUrl;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(downloadUrl);
+      setStatus(successMessage);
+      return;
+    }
+    const file = new ExpoFile(Paths.cache, filename);
+    file.write(opmlContent);
+    const canShare = await Sharing.isAvailableAsync();
+    if (canShare) {
+      await Sharing.shareAsync(file.uri, {
+        mimeType: "text/x-opml",
+        dialogTitle: "Export OPML",
+      });
+      setStatus(successMessage);
+    } else {
+      Alert.alert("Exported", "OPML saved to: " + file.uri);
+      setStatus(`OPML saved to: ${file.uri}`);
+    }
+  };
 
   const handleExportOpml = async () => {
     setStatus(null);
-
     if (feeds.length === 0) {
       setStatus("Add some feeds before exporting.", true);
       return;
     }
-
     try {
-      const opmlContent = generateOpml(feeds);
+      const opml = generateOpml(feeds);
+      await writeOpmlFile(
+        opml,
+        "feedme-subscriptions.opml",
+        "Exported OPML successfully."
+      );
+    } catch (err) {
+      Alert.alert("Export Error", (err as Error).message);
+      setStatus("Export failed: " + (err as Error).message, true);
+    }
+  };
 
-      if (Platform.OS === "web" && typeof document !== "undefined") {
-        const blob = new Blob([opmlContent], {
-          type: "text/x-opml;charset=utf-8",
-        });
-        const downloadUrl = URL.createObjectURL(blob);
-        const anchor = document.createElement("a");
-        anchor.href = downloadUrl;
-        anchor.download = "feedme-subscriptions.opml";
-        document.body.appendChild(anchor);
-        anchor.click();
-        document.body.removeChild(anchor);
-        URL.revokeObjectURL(downloadUrl);
-        setStatus("Exported OPML to your downloads folder.");
+  const handleExportCustomFeed = async (cf: CustomFeedWithMemberCount) => {
+    setStatus(null);
+    try {
+      const members = await getFeedsForCustomFeed(cf.id);
+      if (members.length === 0) {
+        setStatus(
+          `"${cf.name}" has no subscriptions yet — nothing to export.`,
+          true
+        );
         return;
       }
-
-      const file = new ExpoFile(Paths.cache, "feedme-subscriptions.opml");
-      file.write(opmlContent);
-      const canShare = await Sharing.isAvailableAsync();
-      if (canShare) {
-        await Sharing.shareAsync(file.uri, {
-          mimeType: "text/x-opml",
-          dialogTitle: "Export OPML",
-        });
-        setStatus("Exported OPML successfully.");
-      } else {
-        Alert.alert("Exported", "OPML saved to: " + file.uri);
-        setStatus(`OPML saved to: ${file.uri}`);
-      }
+      const opml = generateOpml(members);
+      const safe = cf.name.replace(/[^a-z0-9-_]+/gi, "-").toLowerCase();
+      await writeOpmlFile(
+        opml,
+        `feedme-${safe || "custom-feed"}.opml`,
+        `Exported "${cf.name}" with ${members.length} subscription(s).`
+      );
     } catch (err) {
       Alert.alert("Export Error", (err as Error).message);
       setStatus("Export failed: " + (err as Error).message, true);
@@ -98,7 +153,6 @@ export default function ImportExportScreen({ navigation }: Props) {
 
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        // Put .opml first so web file pickers default to OPML files instead of generic XML.
         type: [".opml", "text/x-opml", "application/xml", "text/xml", "*/*"],
         copyToCacheDirectory: true,
       });
@@ -122,32 +176,69 @@ export default function ImportExportScreen({ navigation }: Props) {
 
       let added = 0;
       let skipped = 0;
+      const allMemberIds: number[] = [];
+      const existingByUrl = new Map(feeds.map((f) => [f.url, f.id]));
+
       for (const feed of parsedFeeds) {
         try {
-          await addFeed({
+          const newId = await addFeed({
             title: feed.title,
             url: feed.url,
             description: feed.description ?? null,
             use_proxy: 0,
           });
+          allMemberIds.push(newId);
           added++;
         } catch (err) {
-          // Skip feeds that already exist; rethrow unexpected errors.
           if (!isDuplicateFeedError(err)) {
             throw err;
+          }
+          const existingId = existingByUrl.get(feed.url);
+          if (existingId !== undefined) {
+            allMemberIds.push(existingId);
           }
           skipped++;
         }
       }
+
+      const updatedFeeds = await getFeeds();
+      setFeeds(updatedFeeds);
+
+      let customFeedSummary = "";
+      if (importAsCustom) {
+        const trimmed = customFeedName.trim();
+        if (!trimmed) {
+          Alert.alert(
+            "Custom feed",
+            "Imports added, but the custom feed name was empty — no custom feed was created."
+          );
+        } else {
+          // Re-resolve member ids after fresh getFeeds() in case any were
+          // freshly inserted with newly assigned ids.
+          const urlToId = new Map(updatedFeeds.map((f) => [f.url, f.id]));
+          const memberIds = parsedFeeds
+            .map((p) => urlToId.get(p.url))
+            .filter((id): id is number => typeof id === "number");
+          const cfId = await addCustomFeed({
+            name: trimmed,
+            icon: "list",
+            nsfw: 0,
+          });
+          await setCustomFeedMembers(cfId, memberIds);
+          setCustomFeedName("");
+          setImportAsCustom(false);
+          customFeedSummary = ` Created custom feed "${trimmed}" with ${memberIds.length} member(s).`;
+          setCustomFeeds(await getCustomFeedsWithMemberCounts());
+        }
+      }
+
       Alert.alert(
         "Import Complete",
-        `Added ${added} of ${parsedFeeds.length} feeds.`
+        `Added ${added} of ${parsedFeeds.length} feeds.${customFeedSummary}`
       );
       setStatus(
-        `Import complete. Added ${added}, skipped ${skipped} duplicates.`
+        `Import complete. Added ${added}, skipped ${skipped} duplicates.${customFeedSummary}`
       );
-      const updated = await getFeeds();
-      setFeeds(updated);
     } catch (err) {
       Alert.alert("Import Error", (err as Error).message);
       setStatus("Import failed: " + (err as Error).message, true);
@@ -210,6 +301,43 @@ export default function ImportExportScreen({ navigation }: Props) {
             Use OPML to move your subscriptions between feed readers.
           </Text>
 
+          <View style={styles.importRow}>
+            <View style={styles.importLabelWrap}>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                IMPORT AS CUSTOM FEED
+              </Text>
+              <Text style={[styles.hintSmall, { color: colors.inkFaint }]}>
+                When on, the imported subscriptions are also grouped into a new
+                custom feed with the name below.
+              </Text>
+            </View>
+            <Switch
+              value={importAsCustom}
+              onValueChange={setImportAsCustom}
+              accessibilityLabel="Import as custom feed"
+              testID="import-as-custom-feed-switch"
+            />
+          </View>
+          {importAsCustom ? (
+            <TextInput
+              style={[
+                styles.input,
+                {
+                  backgroundColor: colors.paper,
+                  borderColor: colors.border,
+                  color: colors.ink,
+                },
+              ]}
+              placeholder="Custom feed name"
+              placeholderTextColor={colors.inkFaint}
+              value={customFeedName}
+              onChangeText={setCustomFeedName}
+              autoCapitalize="words"
+              autoCorrect={false}
+              accessibilityLabel="Custom feed name for import"
+            />
+          ) : null}
+
           <TouchableOpacity
             style={[
               styles.btn,
@@ -245,6 +373,46 @@ export default function ImportExportScreen({ navigation }: Props) {
               Add some feeds before exporting.
             </Text>
           )}
+
+          {customFeeds.length > 0 ? (
+            <View style={styles.customSection}>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                EXPORT A CUSTOM FEED
+              </Text>
+              <Text style={[styles.hintSmall, { color: colors.inkFaint }]}>
+                Export just the subscriptions in a specific custom feed.
+              </Text>
+              {customFeeds.map((cf) => (
+                <TouchableOpacity
+                  key={cf.id}
+                  style={[
+                    styles.customRow,
+                    { borderColor: colors.border },
+                    cf.member_count === 0 && styles.btnDisabled,
+                  ]}
+                  onPress={() => handleExportCustomFeed(cf)}
+                  disabled={cf.member_count === 0}
+                  activeOpacity={0.7}
+                  accessibilityLabel={`Export ${cf.name}`}
+                >
+                  <Feather
+                    name={resolveCustomFeedIcon(cf.icon)}
+                    size={16}
+                    color={colors.inkSoft}
+                  />
+                  <Text style={[styles.customRowText, { color: colors.ink }]}>
+                    {cf.name}
+                  </Text>
+                  <Text
+                    style={[styles.customRowCount, { color: colors.inkFaint }]}
+                  >
+                    {cf.member_count}
+                  </Text>
+                  <Feather name="download" size={16} color={colors.inkSoft} />
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
 
           {statusMessage ? (
             <Text
@@ -329,6 +497,34 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     marginBottom: spacing.lg,
   },
+  label: {
+    fontSize: fontSize.xs,
+    fontFamily: fonts.sans,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  hintSmall: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+    marginBottom: spacing.sm,
+  },
+  importRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  importLabelWrap: { flex: 1 },
+  input: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+    fontSize: fontSize.body,
+    marginBottom: spacing.md,
+  },
   btn: {
     borderWidth: 1,
     borderRadius: radii.md,
@@ -345,6 +541,28 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     textAlign: "center",
     marginTop: spacing.sm,
+  },
+  customSection: {
+    marginTop: spacing.lg,
+  },
+  customRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.xs,
+  },
+  customRowText: {
+    flex: 1,
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+  },
+  customRowCount: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
   },
   status: {
     marginTop: spacing.md,

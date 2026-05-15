@@ -29,6 +29,8 @@ import {
   getAllItems,
   getFeedTagMap,
   getFeedsForTag,
+  getCustomFeedById,
+  getCustomFeedMembers,
   markItemRead,
   markItemUnread,
   savePost,
@@ -66,6 +68,7 @@ import { parseContentAndLinks } from "../utils/contentActions";
 import { FeedPostCard } from "../components/FeedPostCard";
 import { loadConfig, saveConfig } from "../storage";
 import { openUrlWithPreference } from "../linkOpening";
+import { resolveCustomFeedIcon } from "../customFeedIcons";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -116,6 +119,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
   const selectedFeedId = route.params?.selectedFeedId;
   const selectedTagId = route.params?.selectedTagId;
+  const selectedCustomFeedId = route.params?.selectedCustomFeedId;
+  const [customFeedMemberIds, setCustomFeedMemberIds] = useState<Set<number>>(
+    new Set()
+  );
+  const [customFeedNsfw, setCustomFeedNsfw] = useState(false);
+  const [customFeedIcon, setCustomFeedIcon] = useState<string | null>(null);
   const scrollToTopParam = route.params?.scrollToTop;
 
   const flatListRef = useRef<FlashListRef<FeedListRow>>(null);
@@ -197,13 +206,29 @@ export default function FeedListScreen({ navigation, route }: Props) {
         // Otherwise -> all feeds (excluding nothing; the hide-from-main-feed
         // filter is applied client-side at render time).
         let feedsToRefresh: Feed[] = feedData;
+        let cfMemberIds: Set<number> | null = null;
+        let cfNsfw = false;
         if (selectedFeedId !== undefined) {
           feedsToRefresh = feedData.filter((f) => f.id === selectedFeedId);
         } else if (selectedTagId !== undefined) {
           const tagged = await getFeedsForTag(selectedTagId);
           const taggedIds = new Set(tagged.map((f) => f.id));
           feedsToRefresh = feedData.filter((f) => taggedIds.has(f.id));
+        } else if (selectedCustomFeedId !== undefined) {
+          const [cf, members] = await Promise.all([
+            getCustomFeedById(selectedCustomFeedId),
+            getCustomFeedMembers(selectedCustomFeedId),
+          ]);
+          const memberIdSet = new Set(members);
+          cfMemberIds = memberIdSet;
+          cfNsfw = cf?.nsfw === 1;
+          setCustomFeedIcon(cf?.icon ?? null);
+          feedsToRefresh = feedData.filter((f) => memberIdSet.has(f.id));
+        } else {
+          setCustomFeedIcon(null);
         }
+        setCustomFeedMemberIds(cfMemberIds ?? new Set());
+        setCustomFeedNsfw(cfNsfw);
 
         if (!refreshRemote) {
           setRefreshProgress(null);
@@ -259,7 +284,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         setRefreshProgress(null);
       }
     },
-    [selectedFeedId, selectedTagId]
+    [selectedFeedId, selectedTagId, selectedCustomFeedId]
   );
 
   useFocusEffect(
@@ -303,11 +328,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
           feedTitle: item.feed_title,
           read: item.read,
           useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
-          nsfw: feedDetailsById.get(item.feed_id)?.nsfw === 1,
+          nsfw: feedDetailsById.get(item.feed_id)?.nsfw === 1 || customFeedNsfw,
         },
       });
     },
-    [filter, navigation, feedDetailsById]
+    [filter, navigation, feedDetailsById, customFeedNsfw]
   );
 
   const toggleSave = useCallback(
@@ -484,12 +509,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     if (
-      (selectedFeedId !== undefined || selectedTagId !== undefined) &&
+      (selectedFeedId !== undefined ||
+        selectedTagId !== undefined ||
+        selectedCustomFeedId !== undefined) &&
       sort === "stacked"
     ) {
       setSort("newest");
     }
-  }, [selectedFeedId, selectedTagId, sort]);
+  }, [selectedFeedId, selectedTagId, selectedCustomFeedId, sort]);
 
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const hasSearch = normalizedSearch.length > 0;
@@ -500,6 +527,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   }, [filter]);
 
   const selectedFeedTitle = useMemo(() => {
+    if (selectedCustomFeedId !== undefined) {
+      return route.params?.selectedCustomFeedName ?? null;
+    }
     if (selectedTagId !== undefined) {
       return route.params?.selectedTagName ?? null;
     }
@@ -515,8 +545,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
     feedDetailsById,
     route.params?.selectedFeedTitle,
     route.params?.selectedTagName,
+    route.params?.selectedCustomFeedName,
     selectedFeedId,
     selectedTagId,
+    selectedCustomFeedId,
   ]);
 
   const searchField = useMemo(
@@ -590,6 +622,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
       return items.filter((item) => taggedFeedIds.has(item.feed_id));
     }
 
+    if (selectedCustomFeedId !== undefined) {
+      return items.filter((item) => customFeedMemberIds.has(item.feed_id));
+    }
+
     // Default "all feeds" view: hide items belonging to feeds flagged
     // "show only on tag feeds".
     const hiddenFeedIds = new Set(
@@ -597,7 +633,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
     );
     if (hiddenFeedIds.size === 0) return items;
     return items.filter((item) => !hiddenFeedIds.has(item.feed_id));
-  }, [items, selectedFeedId, selectedTagId, feedTagMap, feeds, hasSearch]);
+  }, [
+    items,
+    selectedFeedId,
+    selectedTagId,
+    selectedCustomFeedId,
+    customFeedMemberIds,
+    feedTagMap,
+    feeds,
+    hasSearch,
+  ]);
 
   const searchHaystacks = useMemo(() => {
     const map = new Map<number, string>();
@@ -724,7 +769,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
       {selectedFeedTitle ? (
         <View style={[styles.scopeRow, { borderBottomColor: colors.inkFaint }]}>
           <Feather
-            name={selectedTagId !== undefined ? "tag" : "rss"}
+            name={
+              selectedCustomFeedId !== undefined
+                ? resolveCustomFeedIcon(customFeedIcon)
+                : selectedTagId !== undefined
+                  ? "tag"
+                  : "rss"
+            }
             size={14}
             color={colors.inkSoft}
           />
@@ -778,7 +829,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
               variant={sort === "newest" ? "accent" : "soft"}
             />
           </TouchableOpacity>
-          {selectedFeedId === undefined && selectedTagId === undefined ? (
+          {selectedFeedId === undefined &&
+          selectedTagId === undefined &&
+          selectedCustomFeedId === undefined ? (
             <TouchableOpacity
               onPress={() => setSort("stacked")}
               activeOpacity={0.7}
@@ -906,7 +959,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             }
 
             const sourceFeed = feedDetailsById.get(item.feed_id);
-            const isFeedNsfw = sourceFeed?.nsfw === 1;
+            const isFeedNsfw = sourceFeed?.nsfw === 1 || customFeedNsfw;
             const feedUseProxy = sourceFeed?.use_proxy === 1;
 
             if (feedLayout === "card") {
