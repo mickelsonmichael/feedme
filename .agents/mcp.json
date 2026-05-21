@@ -6,7 +6,7 @@
                 "@mobilenext/mobile-mcp@latest"
             ],
             "env": {
-                "ANDROID_HOME": "C:\\Program Files\\android-sdk"
+                "ANDROID_HOME": "C:\\Users\\micke\\AppData\\Local\\Android\\Sdk"
             }
         }
     }

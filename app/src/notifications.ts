@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import * as BackgroundFetch from "expo-background-fetch";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
 import type { EventSubscription } from "expo-modules-core";
@@ -38,7 +39,15 @@ let taskDefined = false;
 let taskRegistered = false;
 
 function isNativeNotificationsSupported(): boolean {
-  return Platform.OS !== "web";
+  if (Platform.OS === "web") {
+    return false;
+  }
+  // expo-notifications Android push notifications were removed from Expo Go in SDK 53.
+  // Skip the entire notification system when running in Expo Go to avoid crashes.
+  if (Constants.executionEnvironment === ExecutionEnvironment.StoreClient) {
+    return false;
+  }
+  return true;
 }
 
 export async function ensureNotificationPermissions(): Promise<boolean> {
