@@ -45,6 +45,8 @@ export default function FeedItemScreen({ route, navigation }: Props) {
   const [updatingReadLater, setUpdatingReadLater] = React.useState(false);
   const [read, setRead] = React.useState(item.read === 1);
   const [updatingRead, setUpdatingRead] = React.useState(false);
+  const [showMoreMenu, setShowMoreMenu] = React.useState(false);
+  const [toolbarHeight, setToolbarHeight] = React.useState(0);
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
   const [bionicReading] = React.useState(
     () => loadConfig().bionicReading ?? false
@@ -226,6 +228,168 @@ export default function FeedItemScreen({ route, navigation }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
+      {/* Toolbar */}
+      <View
+        style={[styles.toolbar, { borderBottomColor: colors.border }]}
+        onLayout={(e) => setToolbarHeight(e.nativeEvent.layout.height)}
+      >
+        <TouchableOpacity
+          style={styles.toolbarButton}
+          onPress={() => navigation.goBack()}
+          activeOpacity={0.7}
+          accessibilityLabel="Back"
+        >
+          <Feather name="arrow-left" size={16} color={colors.ink} />
+          <Text style={[styles.toolbarButtonLabel, { color: colors.ink }]}>
+            Back
+          </Text>
+        </TouchableOpacity>
+
+        <View style={styles.toolbarRight}>
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={handleToggleSave}
+            activeOpacity={0.7}
+            disabled={item.itemId === null || saving}
+            accessibilityLabel={saved ? "Unsave" : "Save"}
+          >
+            <Feather
+              name="bookmark"
+              size={16}
+              color={saved ? colors.accent : colors.ink}
+            />
+            <Text
+              style={[
+                styles.toolbarButtonLabel,
+                { color: saved ? colors.accent : colors.ink },
+              ]}
+            >
+              {saved ? "Saved" : "Save"}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={handleOpenExternal}
+            activeOpacity={0.7}
+            disabled={!item.url}
+            accessibilityLabel="Open Link"
+          >
+            <Feather name="external-link" size={16} color={colors.ink} />
+            <Text style={[styles.toolbarButtonLabel, { color: colors.ink }]}>
+              Open
+            </Text>
+          </TouchableOpacity>
+
+          {redditCommentsLink ? (
+            <TouchableOpacity
+              style={styles.toolbarButton}
+              onPress={() => handleOpenContentLink(redditCommentsLink.url)}
+              activeOpacity={0.7}
+              accessibilityLabel="Open Reddit comments"
+            >
+              <Feather name="message-circle" size={16} color={colors.ink} />
+              <Text style={[styles.toolbarButtonLabel, { color: colors.ink }]}>
+                Comments
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          <TouchableOpacity
+            style={styles.toolbarButton}
+            onPress={() => setShowMoreMenu((v) => !v)}
+            activeOpacity={0.7}
+            accessibilityLabel="More options"
+          >
+            <Feather name="more-horizontal" size={18} color={colors.ink} />
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      {/* Overflow menu — rendered inside the screen View, positioned below toolbar */}
+      {showMoreMenu ? (
+        <TouchableOpacity
+          style={[styles.moreOverlay, { top: toolbarHeight }]}
+          onPress={() => setShowMoreMenu(false)}
+          activeOpacity={1}
+        >
+          <View
+            style={[
+              styles.moreMenuContainer,
+              {
+                backgroundColor: colors.paper,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            <TouchableOpacity
+              style={[
+                styles.moreMenuItem,
+                { borderBottomColor: colors.border },
+              ]}
+              onPress={() => {
+                handleToggleRead();
+                setShowMoreMenu(false);
+              }}
+              disabled={item.itemId === null || updatingRead}
+              activeOpacity={0.7}
+              accessibilityLabel={read ? "Mark as unread" : "Mark as read"}
+            >
+              <Feather
+                name={read ? "eye-off" : "eye"}
+                size={16}
+                color={colors.ink}
+              />
+              <Text style={[styles.moreMenuItemText, { color: colors.ink }]}>
+                {read ? "Mark Unread" : "Mark Read"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.moreMenuItem,
+                { borderBottomColor: colors.border },
+              ]}
+              onPress={() => {
+                handleToggleReadLater();
+                setShowMoreMenu(false);
+              }}
+              disabled={item.itemId === null || updatingReadLater}
+              activeOpacity={0.7}
+            >
+              <Feather
+                name="clock"
+                size={16}
+                color={readLater ? colors.accent : colors.ink}
+              />
+              <Text
+                style={[
+                  styles.moreMenuItemText,
+                  { color: readLater ? colors.accent : colors.ink },
+                ]}
+              >
+                {readLater ? "Remove from Later" : "Read Later"}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.moreMenuItem}
+              onPress={() => {
+                handleViewXml();
+                setShowMoreMenu(false);
+              }}
+              activeOpacity={0.7}
+            >
+              <Feather name="code" size={16} color={colors.ink} />
+              <Text style={[styles.moreMenuItemText, { color: colors.ink }]}>
+                View XML
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      ) : null}
+
+      {/* Scrollable content */}
       <ScrollView
         contentContainerStyle={[
           styles.content,
@@ -235,153 +399,10 @@ export default function FeedItemScreen({ route, navigation }: Props) {
       >
         <View
           style={[
-            styles.card,
-            {
-              backgroundColor: colors.paper,
-              borderColor: colors.border,
-              shadowColor: colors.ink,
-            },
+            styles.articleInner,
+            isDesktopWeb ? styles.desktopInner : null,
           ]}
         >
-          <View style={styles.actionRow}>
-            <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: colors.border }]}
-              onPress={() => navigation.goBack()}
-              activeOpacity={0.7}
-              accessibilityLabel="Back"
-            >
-              <Feather name="arrow-left" size={16} color={colors.ink} />
-              <Text style={[styles.actionText, { color: colors.ink }]}>
-                Back
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                {
-                  borderColor: read ? colors.border : colors.accent,
-                  backgroundColor: read ? colors.paper : colors.accent,
-                },
-              ]}
-              onPress={handleToggleRead}
-              activeOpacity={0.7}
-              disabled={item.itemId === null || updatingRead}
-              accessibilityLabel={read ? "Mark as unread" : "Mark as read"}
-            >
-              <Feather
-                name={read ? "eye-off" : "eye"}
-                size={16}
-                color={read ? colors.ink : colors.paper}
-              />
-              <Text
-                style={[
-                  styles.actionText,
-                  { color: read ? colors.ink : colors.paper },
-                ]}
-              >
-                {read ? "Unread" : "Read"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                {
-                  borderColor: saved ? colors.ink : colors.border,
-                  backgroundColor: saved ? colors.ink : colors.paper,
-                },
-              ]}
-              onPress={handleToggleSave}
-              activeOpacity={0.7}
-              disabled={item.itemId === null || saving}
-              accessibilityLabel={saved ? "Unsave" : "Save"}
-            >
-              <Feather
-                name="bookmark"
-                size={16}
-                color={saved ? colors.paper : colors.ink}
-              />
-              <Text
-                style={[
-                  styles.actionText,
-                  { color: saved ? colors.paper : colors.ink },
-                ]}
-              >
-                {saved ? "Saved" : "Save"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                {
-                  borderColor: readLater ? colors.ink : colors.border,
-                  backgroundColor: readLater ? colors.ink : colors.paper,
-                },
-              ]}
-              onPress={handleToggleReadLater}
-              activeOpacity={0.7}
-              disabled={item.itemId === null || updatingReadLater}
-              accessibilityLabel={
-                readLater ? "Remove from read later" : "Add to read later"
-              }
-            >
-              <Feather
-                name="clock"
-                size={16}
-                color={readLater ? colors.paper : colors.ink}
-              />
-              <Text
-                style={[
-                  styles.actionText,
-                  { color: readLater ? colors.paper : colors.ink },
-                ]}
-              >
-                {readLater ? "Later" : "Read Later"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: colors.border }]}
-              onPress={handleOpenExternal}
-              activeOpacity={0.7}
-              disabled={!item.url}
-              accessibilityLabel="Open Link"
-            >
-              <Feather name="external-link" size={16} color={colors.ink} />
-              <Text style={[styles.actionText, { color: colors.ink }]}>
-                Open Link
-              </Text>
-            </TouchableOpacity>
-
-            {redditCommentsLink ? (
-              <TouchableOpacity
-                style={[styles.actionBtn, { borderColor: colors.border }]}
-                onPress={() => handleOpenContentLink(redditCommentsLink.url)}
-                activeOpacity={0.7}
-                accessibilityLabel="Open Reddit comments"
-              >
-                <Feather name="message-circle" size={16} color={colors.ink} />
-                <Text style={[styles.actionText, { color: colors.ink }]}>
-                  Comments
-                </Text>
-              </TouchableOpacity>
-            ) : null}
-
-            <TouchableOpacity
-              style={[styles.actionBtn, { borderColor: colors.border }]}
-              onPress={handleViewXml}
-              activeOpacity={0.7}
-              accessibilityLabel="View raw XML"
-            >
-              <Feather name="code" size={16} color={colors.ink} />
-              <Text style={[styles.actionText, { color: colors.ink }]}>
-                View XML
-              </Text>
-            </TouchableOpacity>
-          </View>
-
           <Text style={[styles.meta, { color: colors.inkSoft }]}>
             {item.feedTitle} - {formatDate(item.publishedAt)}
           </Text>
@@ -389,6 +410,10 @@ export default function FeedItemScreen({ route, navigation }: Props) {
           <Text style={[styles.title, { color: colors.ink }]}>
             {item.title}
           </Text>
+
+          <View
+            style={[styles.separator, { backgroundColor: colors.border }]}
+          />
 
           {item.imageUrl || item.url || item.content ? (
             <ExpandedFeedMedia
@@ -482,49 +507,75 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  toolbar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+  },
+  toolbarButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  toolbarButtonLabel: {
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+    fontSize: fontSize.body,
+  },
+  toolbarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  moreOverlay: {
+    position: "absolute",
+    top: 0, // offset by toolbarHeight is applied inline
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
+  moreMenuContainer: {
+    position: "absolute",
+    top: spacing.xs,
+    right: spacing.md,
+    minWidth: 170,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.md,
+    overflow: "hidden",
+    elevation: 3,
+  },
+  moreMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  moreMenuItemText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+  },
   content: {
     padding: spacing.md,
-    gap: spacing.md,
     paddingBottom: spacing.xxl,
   },
   desktopContent: {
     alignItems: "center",
     paddingHorizontal: spacing.xl,
   },
-  card: {
+  articleInner: {
     width: "100%",
-    maxWidth: 920,
-    borderWidth: 1,
-    borderRadius: radii.md,
-    padding: spacing.lg,
     gap: spacing.md,
-    shadowOpacity: 0.08,
-    shadowOffset: { width: 0, height: 6 },
-    shadowRadius: 16,
-    elevation: 2,
   },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    columnGap: spacing.xs,
-    rowGap: spacing.xs,
-    flexWrap: "wrap",
-  },
-  actionBtn: {
-    borderWidth: 1,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    flexShrink: 1,
-    minWidth: 0,
-  },
-  actionText: {
-    fontFamily: fonts.sans,
-    fontWeight: "600",
-    fontSize: fontSize.meta,
+  desktopInner: {
+    maxWidth: 920,
   },
   meta: {
     fontFamily: fonts.sans,
@@ -535,6 +586,9 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     fontSize: fontSize.h1,
     lineHeight: 34,
+  },
+  separator: {
+    height: StyleSheet.hairlineWidth,
   },
   article: {
     fontSize: fontSize.bodyLg,

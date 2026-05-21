@@ -65,6 +65,10 @@ jest.mock("../linkOpening", () => ({
   openUrlWithPreference: jest.fn(),
 }));
 
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
+}));
+
 jest.mock("../components/SanitizedHtmlContent", () => {
   const React = require("react");
   const { Text } = require("react-native");
@@ -231,6 +235,14 @@ describe("FeedItemScreen", () => {
       await Promise.resolve();
     });
 
+    // Open the overflow menu first
+    const moreButton = tree!.root.findByProps({
+      accessibilityLabel: "More options",
+    });
+    await act(async () => {
+      moreButton.props.onPress();
+    });
+
     const unreadButton = tree!.root.findByProps({
       accessibilityLabel: "Mark as unread",
     });
@@ -242,9 +254,6 @@ describe("FeedItemScreen", () => {
 
     // Assert
     expect(markItemUnread).toHaveBeenCalledWith(22);
-    expect(
-      tree!.root.findByProps({ accessibilityLabel: "Mark as read" })
-    ).toBeTruthy();
 
     await act(async () => {
       tree!.unmount();

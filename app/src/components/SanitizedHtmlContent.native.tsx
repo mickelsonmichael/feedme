@@ -51,7 +51,7 @@ export function SanitizedHtmlContent({ html }: Props) {
         margin: 0;
         padding: 0;
         color: ${colors.ink} !important;
-        background: transparent !important;
+        background: ${colors.paper} !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, ${fonts.sans};
         font-size: 17px;
         line-height: 1.45;
@@ -79,12 +79,7 @@ export function SanitizedHtmlContent({ html }: Props) {
   <body><div id="feedme-content">${html}</div></body>
 </html>`;
   return (
-    <View
-      style={[
-        styles.wrap,
-        { borderColor: colors.border, backgroundColor: colors.paperWarm },
-      ]}
-    >
+    <View style={styles.wrap}>
       <WebView
         source={{ html: sourceHtml }}
         originWhitelist={["*"]}
@@ -95,6 +90,7 @@ export function SanitizedHtmlContent({ html }: Props) {
         injectedJavaScript={INJECTED_HEIGHT_SCRIPT}
         scrollEnabled={false}
         nestedScrollEnabled={false}
+        backgroundColor="transparent"
         onMessage={(event) => {
           const parsed = Number(event.nativeEvent.data);
           if (!Number.isFinite(parsed) || parsed <= 0) return;
@@ -108,9 +104,6 @@ export function SanitizedHtmlContent({ html }: Props) {
 
 const styles = StyleSheet.create({
   wrap: {
-    borderWidth: 1,
-    borderRadius: 8,
-    overflow: "hidden",
     minHeight: MIN_WEBVIEW_HEIGHT,
   },
   webview: {
