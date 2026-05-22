@@ -627,9 +627,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
     }
 
     // Default "all feeds" view: hide items belonging to feeds flagged
-    // "show only on tag feeds".
+    // "show only on tag feeds" or "show only on custom feeds".
     const hiddenFeedIds = new Set(
-      feeds.filter((f) => f.show_only_in_tag === 1).map((f) => f.id)
+      feeds
+        .filter(
+          (f) => f.show_only_in_tag === 1 || f.show_only_in_custom_feed === 1
+        )
+        .map((f) => f.id)
     );
     if (hiddenFeedIds.size === 0) return items;
     return items.filter((item) => !hiddenFeedIds.has(item.feed_id));

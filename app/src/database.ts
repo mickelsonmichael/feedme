@@ -43,11 +43,21 @@ let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 // real SQLite engine, so no fallback is needed here.
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
-    dbPromise = (async () => {
+    const attempt = (async () => {
       const database = await SQLite.openDatabaseAsync("feedme.db");
       await initializeSchema(database);
       return database;
     })();
+    dbPromise = attempt;
+    // If initialisation fails (e.g. due to a transient native NPE on first
+    // boot or after a Fast Refresh reload that races with a background task),
+    // reset the promise so the next caller can retry rather than getting the
+    // cached rejection forever.
+    attempt.catch(() => {
+      if (dbPromise === attempt) {
+        dbPromise = null;
+      }
+    });
   }
   return dbPromise;
 }
@@ -200,6 +210,18 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
+  // Migration: add show_only_in_custom_feed column to feeds. Feeds with
+  // this flag are hidden from the main "All Feeds" view and from the FEEDS
+  // list on the Feeds screen — they only surface inside custom feeds that
+  // contain them. Default 0 preserves existing behaviour for old rows.
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN show_only_in_custom_feed INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Migration: add etag column to feeds if it doesn't exist yet
   try {
     await database.execAsync("ALTER TABLE feeds ADD COLUMN etag TEXT");
@@ -276,7 +298,10 @@ async function initializeSchema(
   }
 
   // Indexes: ensure efficient sort/filter for the list screens.
-  await database.execAsync(`
+  // These are optional for correctness — wrap in try/catch so a transient
+  // failure here doesn't permanently poison dbPromise.
+  try {
+    await database.execAsync(`
     CREATE INDEX IF NOT EXISTS idx_items_published_at ON items(published_at DESC);
     CREATE INDEX IF NOT EXISTS idx_items_feed_id ON items(feed_id);
     CREATE INDEX IF NOT EXISTS idx_items_read ON items(read);
@@ -288,6 +313,9 @@ async function initializeSchema(
     CREATE INDEX IF NOT EXISTS idx_custom_feed_members_feed_id ON custom_feed_members(feed_id);
     CREATE INDEX IF NOT EXISTS idx_custom_feed_members_custom_feed_id ON custom_feed_members(custom_feed_id);
   `);
+  } catch {
+    // Indexes are non-critical — if creation fails the app still functions.
+  }
 }
 
 // ── Feeds ──────────────────────────────────────────────────────────────────
@@ -313,14 +341,21 @@ export async function addFeed({
   use_proxy,
   nsfw,
   show_only_in_tag,
+  show_only_in_custom_feed,
 }: Pick<
   Feed,
-  "title" | "url" | "description" | "use_proxy" | "nsfw" | "show_only_in_tag"
+  | "title"
+  | "url"
+  | "description"
+  | "use_proxy"
+  | "nsfw"
+  | "show_only_in_tag"
+  | "show_only_in_custom_feed"
 >): Promise<number> {
   const database = await getDatabase();
   const result = await withWriteLock(() =>
     database.runAsync(
-      "INSERT INTO feeds (title, url, description, use_proxy, nsfw, show_only_in_tag) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO feeds (title, url, description, use_proxy, nsfw, show_only_in_tag, show_only_in_custom_feed) VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
         title,
         url,
@@ -328,6 +363,7 @@ export async function addFeed({
         use_proxy ?? 0,
         nsfw ?? 0,
         show_only_in_tag ?? 0,
+        show_only_in_custom_feed ?? 0,
       ]
     )
   );
@@ -355,19 +391,25 @@ export async function updateFeed(
   feedId: number,
   fields: Pick<
     Feed,
-    "title" | "url" | "use_proxy" | "nsfw" | "show_only_in_tag"
+    | "title"
+    | "url"
+    | "use_proxy"
+    | "nsfw"
+    | "show_only_in_tag"
+    | "show_only_in_custom_feed"
   >
 ): Promise<void> {
   const database = await getDatabase();
   await withWriteLock(() =>
     database.runAsync(
-      "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ?, show_only_in_tag = ? WHERE id = ?",
+      "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ?, show_only_in_tag = ?, show_only_in_custom_feed = ? WHERE id = ?",
       [
         fields.title,
         fields.url,
         fields.use_proxy ?? 0,
         fields.nsfw ?? 0,
         fields.show_only_in_tag ?? 0,
+        fields.show_only_in_custom_feed ?? 0,
         feedId,
       ]
     )
@@ -579,8 +621,10 @@ export async function upsertItems(
 ): Promise<void> {
   if (items.length === 0) return;
   const database = await getDatabase();
-  const statement = await database.prepareAsync(
-    `INSERT INTO items (feed_id, title, url, content, image_url, raw_xml, published_at)
+  let statement: SQLite.SQLiteStatement;
+  try {
+    statement = await database.prepareAsync(
+      `INSERT INTO items (feed_id, title, url, content, image_url, raw_xml, published_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (feed_id, url) DO UPDATE SET
        title = excluded.title,
@@ -588,7 +632,14 @@ export async function upsertItems(
        image_url = excluded.image_url,
        raw_xml = excluded.raw_xml,
        published_at = excluded.published_at`
-  );
+    );
+  } catch (err) {
+    // If preparing the statement fails (e.g. a transient native NPE from
+    // expo-sqlite after Fast Refresh or a stale handle), drop the cached
+    // connection so the next caller re-opens the DB cleanly.
+    if (dbPromise) dbPromise = null;
+    throw err;
+  }
   try {
     await withWriteLock(() =>
       database.withTransactionAsync(async () => {
@@ -606,7 +657,12 @@ export async function upsertItems(
       })
     );
   } finally {
-    await statement.finalizeAsync();
+    try {
+      await statement.finalizeAsync();
+    } catch {
+      // Finalising a statement on a broken connection can itself throw —
+      // swallow so we don't mask the original error.
+    }
   }
 }
 
@@ -1033,6 +1089,37 @@ export async function setCustomFeedMembers(
       );
     }
   });
+}
+
+/** Add a single feed to a custom feed's membership. Idempotent — does
+ *  nothing if the row already exists. */
+export async function addCustomFeedMember(
+  customFeedId: number,
+  feedId: number
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "INSERT OR IGNORE INTO custom_feed_members (custom_feed_id, feed_id) VALUES (?, ?)",
+      [customFeedId, feedId]
+    )
+  );
+}
+
+/** Remove a single feed from a custom feed's membership. Does not delete
+ *  the underlying feed; the feed itself remains in the database and any
+ *  other custom-feed memberships are preserved. */
+export async function removeCustomFeedMember(
+  customFeedId: number,
+  feedId: number
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "DELETE FROM custom_feed_members WHERE custom_feed_id = ? AND feed_id = ?",
+      [customFeedId, feedId]
+    )
+  );
 }
 
 export async function getFeedsForCustomFeed(

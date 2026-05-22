@@ -161,6 +161,7 @@ describe("AddFeedScreen web", () => {
       use_proxy: 0,
       nsfw: 1,
       show_only_in_tag: 0,
+      show_only_in_custom_feed: 0,
     });
   });
 });

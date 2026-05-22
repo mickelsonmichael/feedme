@@ -56,6 +56,8 @@ import {
   getCustomFeedById,
   getCustomFeedMembers,
   setCustomFeedMembers,
+  addCustomFeedMember,
+  removeCustomFeedMember,
   getFeedsForCustomFeed,
 } from "./database.web";
 
@@ -877,6 +879,32 @@ describe("database.web — tags", () => {
     expect((await getFeeds())[0].show_only_in_tag).toBe(0);
   });
 
+  it("persists show_only_in_custom_feed flag on feeds", async () => {
+    // Arrange & Act
+    const feedId = await addFeed({
+      title: "G",
+      url: "https://example.com/g",
+      description: null,
+      show_only_in_custom_feed: 1,
+    });
+
+    // Assert
+    expect((await getFeeds())[0].show_only_in_custom_feed).toBe(1);
+
+    // Act
+    await updateFeed(feedId, {
+      title: "G",
+      url: "https://example.com/g",
+      use_proxy: 0,
+      nsfw: 0,
+      show_only_in_tag: 0,
+      show_only_in_custom_feed: 0,
+    });
+
+    // Assert
+    expect((await getFeeds())[0].show_only_in_custom_feed).toBe(0);
+  });
+
   it("persists feed notification settings and unseen-item checkpoint", async () => {
     // Arrange
     const feedId = await addFeed({
@@ -998,5 +1026,33 @@ describe("custom feeds", () => {
     await expect(
       addCustomFeed({ name: "  ", icon: "list", nsfw: 0 })
     ).rejects.toThrow(/empty/i);
+  });
+
+  it("addCustomFeedMember adds a single feed idempotently", async () => {
+    // Arrange
+    const f1 = await makeFeed("A", "https://a.example/feed");
+    const cfId = await addCustomFeed({ name: "X", icon: "list", nsfw: 0 });
+
+    // Act
+    await addCustomFeedMember(cfId, f1);
+    await addCustomFeedMember(cfId, f1);
+
+    // Assert
+    expect(await getCustomFeedMembers(cfId)).toEqual([f1]);
+  });
+
+  it("removeCustomFeedMember removes only the given feed and keeps the feed itself", async () => {
+    // Arrange
+    const f1 = await makeFeed("A", "https://a.example/feed");
+    const f2 = await makeFeed("B", "https://b.example/feed");
+    const cfId = await addCustomFeed({ name: "X", icon: "list", nsfw: 0 });
+    await setCustomFeedMembers(cfId, [f1, f2]);
+
+    // Act
+    await removeCustomFeedMember(cfId, f1);
+
+    // Assert
+    expect(await getCustomFeedMembers(cfId)).toEqual([f2]);
+    expect((await getFeeds()).map((f) => f.id).sort()).toEqual([f1, f2].sort());
   });
 });

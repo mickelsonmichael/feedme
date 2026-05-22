@@ -8,6 +8,12 @@ export type Feed = {
   use_proxy?: number;
   nsfw?: number;
   show_only_in_tag?: number;
+  /** When 1, hide this feed's posts from the main "All Feeds" view and the
+   *  main FEEDS list on the Feeds screen. Posts still appear when viewing
+   *  this feed directly or any custom feed that contains it. Used by feeds
+   *  added through a custom feed's "Add Feed" flow so that they don't leak
+   *  into the main subscription list. */
+  show_only_in_custom_feed?: number;
   /** HTTP `ETag` validator from the last successful refresh, used for
    *  conditional GETs (`If-None-Match`). */
   etag?: string | null;
@@ -113,8 +119,9 @@ export type ParsedFeedItem = {
 
 export type RootStackParamList = {
   Tabs: undefined;
-  AddFeed: { from?: string } | undefined;
+  AddFeed: { from?: string; customFeedId?: number } | undefined;
   CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
+  CustomFeedManage: { customFeedId: number; from?: string };
   FeedItems: { feed: Feed };
   FeedItemView: {
     item: {
@@ -158,8 +165,9 @@ export type TabParamList = {
   Discover: undefined;
   FeedSearch: { initialUrl?: string } | undefined;
   Settings: undefined;
-  AddFeed: { from?: string } | undefined;
+  AddFeed: { from?: string; customFeedId?: number } | undefined;
   CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
+  CustomFeedManage: { customFeedId: number; from?: string };
   FeedItems: { feed: Feed };
   FeedItemView: {
     item: {

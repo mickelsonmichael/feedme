@@ -38,6 +38,7 @@ import FeedSearchScreen from "./src/screens/FeedSearchScreen";
 import FeedDetailScreen from "./src/screens/FeedDetailScreen";
 import TagDetailScreen from "./src/screens/TagDetailScreen";
 import CustomFeedEditScreen from "./src/screens/CustomFeedEditScreen";
+import CustomFeedManageScreen from "./src/screens/CustomFeedManageScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
 import InAppBrowserScreen from "./src/screens/InAppBrowserScreen";
@@ -626,6 +627,11 @@ function Tabs() {
       <Tab.Screen
         name="CustomFeedEdit"
         component={CustomFeedEditScreen}
+        options={HIDDEN_TAB_OPTIONS}
+      />
+      <Tab.Screen
+        name="CustomFeedManage"
+        component={CustomFeedManageScreen}
         options={HIDDEN_TAB_OPTIONS}
       />
       <Tab.Screen

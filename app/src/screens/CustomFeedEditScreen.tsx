@@ -444,6 +444,21 @@ export default function CustomFeedEditScreen({ route, navigation }: Props) {
             Pick which of your existing feeds belong to this custom feed. Read /
             unread, saved, and refresh state is shared with the main feed.
           </Text>
+          <View
+            style={[
+              styles.infoBox,
+              {
+                borderColor: colors.border,
+                backgroundColor: colors.paperWarm,
+              },
+            ]}
+          >
+            <Feather name="info" size={14} color={colors.inkSoft} />
+            <Text style={[styles.infoBoxText, { color: colors.inkSoft }]}>
+              More feeds can be added later from this custom feed&apos;s manage
+              screen.
+            </Text>
+          </View>
 
           <View
             style={[
@@ -608,6 +623,21 @@ const styles = StyleSheet.create({
     fontSize: fontSize.meta,
     fontFamily: fonts.sans,
     marginBottom: spacing.sm,
+  },
+  infoBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: spacing.sm,
+    borderWidth: 1,
+    borderRadius: radii.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  infoBoxText: {
+    flex: 1,
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
   },
   input: {
     borderWidth: 1,

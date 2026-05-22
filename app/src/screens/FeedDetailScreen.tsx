@@ -71,6 +71,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
   const [useProxy, setUseProxy] = useState(false);
   const [isNsfw, setIsNsfw] = useState(false);
   const [showOnlyInTag, setShowOnlyInTag] = useState(false);
+  const [showOnlyInCustomFeed, setShowOnlyInCustomFeed] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
   const [originalTagIds, setOriginalTagIds] = useState<number[]>([]);
@@ -96,6 +97,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
       useProxy !== (feed.use_proxy === 1) ||
       isNsfw !== (feed.nsfw === 1) ||
       showOnlyInTag !== (feed.show_only_in_tag === 1) ||
+      showOnlyInCustomFeed !== (feed.show_only_in_custom_feed === 1) ||
       tagsChanged);
 
   const loadFeed = useCallback(async () => {
@@ -110,6 +112,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         setUseProxy(found.use_proxy === 1);
         setIsNsfw(found.nsfw === 1);
         setShowOnlyInTag(found.show_only_in_tag === 1);
+        setShowOnlyInCustomFeed(found.show_only_in_custom_feed === 1);
         const feedTags = await getTagsForFeed(found.id);
         setSelectedTags(feedTags.map((t) => ({ id: t.id, name: t.name })));
         setOriginalTagIds(feedTags.map((t) => t.id));
@@ -159,6 +162,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         use_proxy: useProxy ? 1 : 0,
         nsfw: isNsfw ? 1 : 0,
         show_only_in_tag: showOnlyInTag ? 1 : 0,
+        show_only_in_custom_feed: showOnlyInCustomFeed ? 1 : 0,
       });
 
       // Resolve any newly-created tags and persist the membership list.
@@ -507,6 +511,25 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             <Switch
               value={showOnlyInTag}
               onValueChange={setShowOnlyInTag}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.paper}
+            />
+          </View>
+
+          <View style={styles.proxyRow}>
+            <View style={styles.proxyLabelGroup}>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                show only on custom feeds
+              </Text>
+              <Text style={[styles.proxyHint, { color: colors.inkFaint }]}>
+                Hide this feed&apos;s posts from the main feed. Posts will only
+                appear when viewing this feed directly or any custom feed it
+                belongs to.
+              </Text>
+            </View>
+            <Switch
+              value={showOnlyInCustomFeed}
+              onValueChange={setShowOnlyInCustomFeed}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.paper}
             />

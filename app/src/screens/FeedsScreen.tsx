@@ -70,9 +70,13 @@ export default function FeedsScreen({ navigation }: Props) {
   );
 
   const visibleFeeds = useMemo(() => {
+    // Feeds flagged as "custom-feed only" should never appear in the main
+    // FEEDS list — they only show up inside their custom feed's manage
+    // screen.
+    const baseFeeds = feeds.filter((f) => f.show_only_in_custom_feed !== 1);
     const q = search.trim().toLowerCase();
-    if (!q) return feeds;
-    return feeds.filter(
+    if (!q) return baseFeeds;
+    return baseFeeds.filter(
       (f) =>
         f.title.toLowerCase().includes(q) || f.url.toLowerCase().includes(q)
     );
@@ -238,13 +242,13 @@ export default function FeedsScreen({ navigation }: Props) {
                         { borderColor: colors.border, marginRight: 0 },
                       ]}
                       onPress={() =>
-                        navigation.navigate("CustomFeedEdit", {
+                        navigation.navigate("CustomFeedManage", {
                           customFeedId: cf.id,
                           from: "Feeds",
                         })
                       }
                       hitSlop={8}
-                      accessibilityLabel={`Edit ${cf.name}`}
+                      accessibilityLabel={`Manage ${cf.name}`}
                       activeOpacity={0.8}
                     >
                       <Feather name="edit-2" size={16} color={colors.inkSoft} />

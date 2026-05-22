@@ -56,6 +56,7 @@ function normalizeFeed(raw: Feed): Feed {
     use_proxy: raw.use_proxy ?? 0,
     nsfw: raw.nsfw ?? 0,
     show_only_in_tag: raw.show_only_in_tag ?? 0,
+    show_only_in_custom_feed: raw.show_only_in_custom_feed ?? 0,
     etag: raw.etag ?? null,
     last_modified: raw.last_modified ?? null,
     // Migration: existing rows persisted before adaptive scheduling existed
@@ -250,9 +251,16 @@ export async function addFeed({
   use_proxy,
   nsfw,
   show_only_in_tag,
+  show_only_in_custom_feed,
 }: Pick<
   Feed,
-  "title" | "url" | "description" | "use_proxy" | "nsfw" | "show_only_in_tag"
+  | "title"
+  | "url"
+  | "description"
+  | "use_proxy"
+  | "nsfw"
+  | "show_only_in_tag"
+  | "show_only_in_custom_feed"
 >): Promise<number> {
   const state = loadState();
   if (state.feeds.some((f) => f.url === url)) {
@@ -270,6 +278,7 @@ export async function addFeed({
     use_proxy: use_proxy ?? 0,
     nsfw: nsfw ?? 0,
     show_only_in_tag: show_only_in_tag ?? 0,
+    show_only_in_custom_feed: show_only_in_custom_feed ?? 0,
     etag: null,
     last_modified: null,
     next_fetch_at: 0,
@@ -311,7 +320,12 @@ export async function updateFeed(
   feedId: number,
   fields: Pick<
     Feed,
-    "title" | "url" | "use_proxy" | "nsfw" | "show_only_in_tag"
+    | "title"
+    | "url"
+    | "use_proxy"
+    | "nsfw"
+    | "show_only_in_tag"
+    | "show_only_in_custom_feed"
   >
 ): Promise<void> {
   const state = loadState();
@@ -322,6 +336,7 @@ export async function updateFeed(
     feed.use_proxy = fields.use_proxy ?? 0;
     feed.nsfw = fields.nsfw ?? 0;
     feed.show_only_in_tag = fields.show_only_in_tag ?? 0;
+    feed.show_only_in_custom_feed = fields.show_only_in_custom_feed ?? 0;
     saveState(state);
   }
 }
@@ -966,6 +981,40 @@ export async function setCustomFeedMembers(
     }
   }
   saveState(state);
+}
+
+export async function addCustomFeedMember(
+  customFeedId: number,
+  feedId: number
+): Promise<void> {
+  const state = loadState();
+  if (!state.feeds.some((f) => f.id === feedId)) return;
+  if (
+    state.customFeedMembers.some(
+      (m) => m.custom_feed_id === customFeedId && m.feed_id === feedId
+    )
+  ) {
+    return;
+  }
+  state.customFeedMembers.push({
+    custom_feed_id: customFeedId,
+    feed_id: feedId,
+  });
+  saveState(state);
+}
+
+export async function removeCustomFeedMember(
+  customFeedId: number,
+  feedId: number
+): Promise<void> {
+  const state = loadState();
+  const before = state.customFeedMembers.length;
+  state.customFeedMembers = state.customFeedMembers.filter(
+    (m) => !(m.custom_feed_id === customFeedId && m.feed_id === feedId)
+  );
+  if (state.customFeedMembers.length !== before) {
+    saveState(state);
+  }
 }
 
 export async function getFeedsForCustomFeed(

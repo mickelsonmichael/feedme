@@ -17,7 +17,13 @@ import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Feather } from "@expo/vector-icons";
-import { addFeed, getOrCreateTag, getTags, setFeedTags } from "../database";
+import {
+  addCustomFeedMember,
+  addFeed,
+  getOrCreateTag,
+  getTags,
+  setFeedTags,
+} from "../database";
 import { extractFeedTitle } from "../feedParser";
 import { RootStackParamList, Tag, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -53,6 +59,8 @@ const PROXY_ALERT_MESSAGE =
 
 export default function AddFeedScreen({ navigation, route }: Props) {
   const from = route.params?.from ?? "Feeds";
+  const customFeedId = route.params?.customFeedId;
+  const isScopedToCustomFeed = customFeedId !== undefined;
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
@@ -182,6 +190,24 @@ export default function AddFeedScreen({ navigation, route }: Props) {
       await setFeedTags(feedId, tagIds);
     };
 
+    // When adding from within a custom feed, link the new feed to that
+    // custom feed and bounce the user back to the manage screen instead of
+    // the regular "from" destination.
+    const linkAndReturn = async (feedId: number) => {
+      await persistTagsForFeed(feedId);
+      if (isScopedToCustomFeed && customFeedId !== undefined) {
+        await addCustomFeedMember(customFeedId, feedId);
+        resetForm();
+        navigation.navigate("CustomFeedManage", {
+          customFeedId,
+          from: "Feeds",
+        });
+        return;
+      }
+      resetForm();
+      navigation.navigate(from as "Feeds");
+    };
+
     if (source === "reddit") {
       const target = getRedditFeedTarget(subreddit);
       if (!target) {
@@ -221,10 +247,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           use_proxy: usedProxy ? 1 : 0,
           nsfw: isNsfw ? 1 : 0,
           show_only_in_tag: showOnlyInTag ? 1 : 0,
+          show_only_in_custom_feed: isScopedToCustomFeed ? 1 : 0,
         });
-        await persistTagsForFeed(newFeedId);
-        resetForm();
-        navigation.navigate(from as "Feeds");
+        await linkAndReturn(newFeedId);
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
           Alert.alert("Duplicate", "This feed is already in your list.");
@@ -282,10 +307,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           use_proxy: usedProxy ? 1 : 0,
           nsfw: isNsfw ? 1 : 0,
           show_only_in_tag: showOnlyInTag ? 1 : 0,
+          show_only_in_custom_feed: isScopedToCustomFeed ? 1 : 0,
         });
-        await persistTagsForFeed(newFeedId);
-        resetForm();
-        navigation.navigate(from as "Feeds");
+        await linkAndReturn(newFeedId);
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
           Alert.alert("Duplicate", "This feed is already in your list.");
@@ -344,10 +368,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           use_proxy: usedProxy ? 1 : 0,
           nsfw: isNsfw ? 1 : 0,
           show_only_in_tag: showOnlyInTag ? 1 : 0,
+          show_only_in_custom_feed: isScopedToCustomFeed ? 1 : 0,
         });
-        await persistTagsForFeed(newFeedId);
-        resetForm();
-        navigation.navigate(from as "Feeds");
+        await linkAndReturn(newFeedId);
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
           Alert.alert("Duplicate", "This feed is already in your list.");
@@ -405,10 +428,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           use_proxy: usedProxy ? 1 : 0,
           nsfw: isNsfw ? 1 : 0,
           show_only_in_tag: showOnlyInTag ? 1 : 0,
+          show_only_in_custom_feed: isScopedToCustomFeed ? 1 : 0,
         });
-        await persistTagsForFeed(newFeedId);
-        resetForm();
-        navigation.navigate(from as "Feeds");
+        await linkAndReturn(newFeedId);
       } catch (err) {
         if ((err as Error).message?.includes("UNIQUE")) {
           Alert.alert("Duplicate", "This feed is already in your list.");
@@ -451,10 +473,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
         use_proxy: useProxy ? 1 : 0,
         nsfw: isNsfw ? 1 : 0,
         show_only_in_tag: showOnlyInTag ? 1 : 0,
+        show_only_in_custom_feed: isScopedToCustomFeed ? 1 : 0,
       });
-      await persistTagsForFeed(newFeedId);
-      resetForm();
-      navigation.navigate(from as "Feeds");
+      await linkAndReturn(newFeedId);
     } catch (err) {
       if ((err as Error).message?.includes("UNIQUE")) {
         Alert.alert("Duplicate", "This feed is already in your list.");

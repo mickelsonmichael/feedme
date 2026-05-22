@@ -148,7 +148,13 @@ export async function refreshFeeds(
 
     let timeoutId: ReturnType<typeof setTimeout>;
     const timedOut = await Promise.race([
-      work.then(() => false),
+      // Swallow any rejection from work (e.g. if the catch handler itself
+      // threw due to a transient native DB failure) so it doesn't surface
+      // as an uncaught promise after the timeout race has already settled.
+      work.then(
+        () => false,
+        () => false
+      ),
       new Promise<boolean>((resolve) => {
         timeoutId = setTimeout(() => resolve(true), REFRESH_ONE_TIMEOUT_MS);
       }),
