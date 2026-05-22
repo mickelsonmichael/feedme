@@ -7,6 +7,8 @@ import {
   Switch,
   TouchableOpacity,
   Platform,
+  Modal,
+  Pressable,
 } from "react-native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
@@ -137,6 +139,92 @@ function Segmented<T extends string>({
         );
       })}
     </View>
+  );
+}
+
+function Dropdown<T extends string>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: readonly { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  const { colors } = useTheme();
+  const [open, setOpen] = React.useState(false);
+  const selectedLabel =
+    options.find((o) => o.value === value)?.label ?? value;
+
+  return (
+    <>
+      <TouchableOpacity
+        style={[
+          styles.dropdown,
+          { borderColor: colors.border, backgroundColor: colors.paper },
+        ]}
+        onPress={() => setOpen(true)}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.dropdownText, { color: colors.ink }]}>
+          {selectedLabel}
+        </Text>
+        <Text style={[styles.dropdownChevron, { color: colors.inkSoft }]}>
+          ▾
+        </Text>
+      </TouchableOpacity>
+
+      <Modal
+        visible={open}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpen(false)}
+      >
+        <Pressable
+          style={styles.dropdownOverlay}
+          onPress={() => setOpen(false)}
+        >
+          <View
+            style={[
+              styles.dropdownMenu,
+              {
+                backgroundColor: colors.paper,
+                borderColor: colors.border,
+              },
+            ]}
+          >
+            {options.map((opt) => {
+              const active = opt.value === value;
+              return (
+                <TouchableOpacity
+                  key={opt.value}
+                  style={[
+                    styles.dropdownMenuItem,
+                    { borderBottomColor: colors.inkFaint },
+                    active && { backgroundColor: colors.accent },
+                  ]}
+                  onPress={() => {
+                    onChange(opt.value);
+                    setOpen(false);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownMenuItemText,
+                      { color: colors.ink },
+                      active && { color: colors.paper, fontWeight: "600" },
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
+    </>
   );
 }
 
@@ -409,7 +497,7 @@ export default function SettingsScreen({ navigation }: Props) {
         <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
           Insert time-bucket dividers in the feed. Only applies to Newest sort.
         </Text>
-        <Segmented
+        <Dropdown
           value={groupFeeds}
           options={[
             { value: "none", label: "None" },
@@ -419,8 +507,6 @@ export default function SettingsScreen({ navigation }: Props) {
             { value: "monthly", label: "Monthly" },
           ]}
           onChange={handleGroupFeedsChange}
-          style={styles.segmentedStretched}
-          stretched
         />
 
         <SectionHeading label="Feed layout" />
@@ -526,5 +612,43 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontSize: fontSize.body,
+  },
+  dropdown: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignSelf: "flex-start",
+    minWidth: 140,
+  },
+  dropdownText: {
+    flex: 1,
+    fontSize: fontSize.bodyLg,
+  },
+  dropdownChevron: {
+    fontSize: fontSize.bodyLg,
+    marginLeft: spacing.sm,
+  },
+  dropdownOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.35)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  dropdownMenu: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    overflow: "hidden",
+    minWidth: 180,
+  },
+  dropdownMenuItem: {
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  dropdownMenuItemText: {
+    fontSize: fontSize.bodyLg,
   },
 });
