@@ -26,10 +26,11 @@ Run all of these. Do not skip any. If something fails, fix it before pushing.
 1. **Build succeeds:** `./gradlew assembleDebug` (Android) and the static site builds without errors.
 2. **Lint and tests pass locally:** run whatever test command the repo uses (`npm test`, `./gradlew test`, etc.).
 3. **Functional verification on the emulator:** rebuild and install the APK (`./gradlew assembleDebug && adb install -r ...`), launch the app, exercise the path the issue describes, and confirm the bug is gone or the feature works. Always verify against the APK, not the dev server, even if you reproduced on the dev server — the APK is what ships.
-4. **Screenshots — three required:**
-   - **Android emulator** — `adb exec-out screencap -p > screenshots/<feature>-android.png`
-   - **Desktop web (large viewport)** — Use the Playwright MCP server to load the local static site at 1280×800 and screenshot the relevant page.
+4. **Visual verification — three viewports:**
+   - **Android emulator** — capture via the mobile-mcp screenshot tool (returns the image directly; do not write screenshot files into the repository).
+   - **Desktop web (large viewport)** — Use the Playwright MCP server to load the local static site at 1280×800 and capture the relevant page.
    - **Mobile web (small viewport)** — Same page, viewport set to 390×844 (iPhone 14 size) or similar.
+   - For changes that affect visuals, repeat each viewport in **both light and dark mode**.
 5. **Self-review the diff:** run `git diff main` and read it. Look for: leftover `console.log` / `Log.d`, commented-out code, debug flags, hardcoded test URLs, secrets, and whitespace-only changes in unrelated files. Remove anything that shouldn't ship.
 
 ## Opening the PR
@@ -39,7 +40,7 @@ Push the branch and open the PR with the GitHub MCP server (or `gh pr create`). 
 - **What changed and why** — one or two paragraphs in plain English.
 - **`Fixes #<issue-number>`** so the issue closes on merge.
 - **Verification section** listing the commands you ran and their outcomes.
-- **Screenshots** — the three from above, embedded inline.
+- **Screenshots** — attach the captured viewport images directly to the PR description (do not commit them to the repo).
 - **Known limitations or follow-ups** — anything you noticed but deliberately did not address.
 
 Keep the description scannable. No filler, no emoji headers, no "AI-generated" disclaimers.

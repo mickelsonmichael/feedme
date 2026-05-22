@@ -124,6 +124,15 @@ jest.mock("../linkOpening", () => ({
   openUrlWithPreference: jest.fn(),
 }));
 
+jest.mock("../components/SanitizedHtmlContent", () => {
+  const React = require("react");
+  const { Text } = require("react-native");
+  return {
+    SanitizedHtmlContent: ({ html }: { html: string }) =>
+      React.createElement(Text, null, `HTML:${html}`),
+  };
+});
+
 type FeedScreenProps = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
   NativeStackScreenProps<RootStackParamList>
@@ -216,7 +225,7 @@ describe("FeedListScreen", () => {
         .findAllByType(Text)
         .some(
           (node: renderer.ReactTestInstance) =>
-            node.props.children === "Expanded copy"
+            node.props.children === "HTML:<p>Expanded copy</p>"
         )
     ).toBe(true);
 

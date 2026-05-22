@@ -18,8 +18,10 @@ import {
 } from "../redditGallery";
 import { extractGifEmbedUrl, extractGifEmbedUrlFromContent } from "../gifUtils";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
+import { SanitizedHtmlContent } from "./SanitizedHtmlContent";
 import { MetaText } from "./ui";
 import { fonts, fontSize, NSFW_BLUR_RADIUS, radii, spacing } from "../theme";
+import { hasRenderableHtml, sanitizeHtml } from "../utils/sanitizeHtml";
 
 const CARD_IMAGE_WIDTH = 100;
 
@@ -90,6 +92,14 @@ function FeedPostCardComponent({
   const { text: contentText, links: contentLinks } = useMemo(
     () => parseContentAndLinks(item.content),
     [item.content]
+  );
+  const shouldRenderHtmlContent = useMemo(
+    () => hasRenderableHtml(item.content),
+    [item.content]
+  );
+  const sanitizedHtmlContent = useMemo(
+    () => (shouldRenderHtmlContent ? sanitizeHtml(item.content ?? "") : ""),
+    [item.content, shouldRenderHtmlContent]
   );
   const redditCommentsLink = useMemo(
     () =>
@@ -424,9 +434,13 @@ function FeedPostCardComponent({
             />
           ) : null}
           {item.content ? (
-            <Text style={[styles.expandContent, { color: colors.ink }]}>
-              {contentText}
-            </Text>
+            shouldRenderHtmlContent ? (
+              <SanitizedHtmlContent html={sanitizedHtmlContent} />
+            ) : (
+              <Text style={[styles.expandContent, { color: colors.ink }]}>
+                {contentText}
+              </Text>
+            )
           ) : null}
           {visibleContentLinks.length ? (
             <ContentLinkRow

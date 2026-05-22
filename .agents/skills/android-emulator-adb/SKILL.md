@@ -104,20 +104,15 @@ Wait 2–4 seconds after launching before screenshotting or interacting — the 
 
 ## Taking screenshots
 
-The fastest method, no temp file on the device:
+Prefer in-tool image capture (e.g. the mobile-mcp screenshot tool) so the image is returned to you directly without leaving a file in the workspace. **Do not commit screenshot files to the repository.**
+
+If you must shell out, write to a temp location outside the repo (for example `$env:TEMP\feedme-shot.png` on Windows, `/tmp/feedme-shot.png` on Unix) and clean it up afterward:
 
 ```bash
-adb exec-out screencap -p > screenshot.png
+adb exec-out screencap -p > "$env:TEMP\feedme-shot.png"
 ```
 
-If the app shows network-loaded content (such as feed items in this RSS reader), wait long enough for the network request to complete before screenshotting — usually 3–5 seconds is enough on a fast feed, longer for slow or paginated ones. When in doubt, take multiple screenshots at intervals:
-
-```bash
-sleep 3 && adb exec-out screencap -p > shot-3s.png
-sleep 5 && adb exec-out screencap -p > shot-8s.png
-```
-
-Save screenshots to a sensible path the user can find later, like `screenshots/feature-name.png`.
+If the app shows network-loaded content (such as feed items in this RSS reader), wait long enough for the network request to complete before screenshotting — usually 3–5 seconds is enough on a fast feed, longer for slow or paginated ones.
 
 ## Reading logs
 

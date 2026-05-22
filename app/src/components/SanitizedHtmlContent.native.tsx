@@ -51,7 +51,7 @@ export function SanitizedHtmlContent({ html }: Props) {
         margin: 0;
         padding: 0;
         color: ${colors.ink} !important;
-        background: ${colors.paper} !important;
+        background: transparent !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, ${fonts.sans};
         font-size: 17px;
         line-height: 1.45;
@@ -96,7 +96,10 @@ export function SanitizedHtmlContent({ html }: Props) {
           if (!Number.isFinite(parsed) || parsed <= 0) return;
           setContentHeight(Math.max(MIN_WEBVIEW_HEIGHT, Math.ceil(parsed)));
         }}
-        style={[styles.webview, { height: contentHeight }]}
+        style={[
+          styles.webview,
+          { height: contentHeight, backgroundColor: "transparent" },
+        ]}
       />
     </View>
   );

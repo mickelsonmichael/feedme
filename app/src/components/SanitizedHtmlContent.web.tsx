@@ -9,6 +9,11 @@ type Props = {
 
 export function SanitizedHtmlContent({ html }: Props) {
   const { colors } = useTheme();
+  const instanceClass = React.useId().replace(/[^a-zA-Z0-9_-]/g, "_");
+  const scopeClass = `feedme-html-${instanceClass}`;
+  const scopedCss = `
+    .${scopeClass} a, .${scopeClass} a * { color: ${colors.accent}; }
+  `;
 
   return (
     <View
@@ -17,7 +22,9 @@ export function SanitizedHtmlContent({ html }: Props) {
         { borderColor: colors.border, backgroundColor: colors.paperWarm },
       ]}
     >
+      <style dangerouslySetInnerHTML={{ __html: scopedCss }} />
       <div
+        className={scopeClass}
         style={{
           color: colors.ink,
           fontFamily: fonts.sans,
