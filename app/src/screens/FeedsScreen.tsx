@@ -139,58 +139,48 @@ export default function FeedsScreen({ navigation }: Props) {
         ItemSeparatorComponent={() => <DashedDivider />}
         ListHeaderComponent={() => (
           <>
-            <View
-              style={[
-                styles.quickLinksSection,
-                { borderBottomColor: colors.inkFaint },
-              ]}
-            >
+            <View style={styles.section}>
               <TouchableOpacity
-                style={styles.quickLinkRow}
+                style={styles.row}
                 onPress={() => navigation.navigate("Feed", {})}
                 accessibilityLabel="Go to all feeds"
-                activeOpacity={0.8}
+                activeOpacity={0.7}
               >
                 <Feather name="home" size={16} color={colors.inkSoft} />
-                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+                <Text style={[styles.rowTitle, { color: colors.ink }]}>
                   All Feeds
                 </Text>
               </TouchableOpacity>
               <DashedDivider />
               <TouchableOpacity
-                style={styles.quickLinkRow}
+                style={styles.row}
                 onPress={() => navigation.navigate("Saved")}
                 accessibilityLabel="Go to saved"
-                activeOpacity={0.8}
+                activeOpacity={0.7}
               >
                 <Feather name="bookmark" size={16} color={colors.inkSoft} />
-                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+                <Text style={[styles.rowTitle, { color: colors.ink }]}>
                   Saved
                 </Text>
               </TouchableOpacity>
               <DashedDivider />
               <TouchableOpacity
-                style={styles.quickLinkRow}
+                style={styles.row}
                 onPress={() => navigation.navigate("ReadLater")}
                 accessibilityLabel="Go to read later"
-                activeOpacity={0.8}
+                activeOpacity={0.7}
               >
                 <Feather name="clock" size={16} color={colors.inkSoft} />
-                <Text style={[styles.quickLinkText, { color: colors.ink }]}>
+                <Text style={[styles.rowTitle, { color: colors.ink }]}>
                   Read Later
                 </Text>
               </TouchableOpacity>
             </View>
 
-            <View
-              style={[
-                styles.tagsSection,
-                { borderBottomColor: colors.inkFaint },
-              ]}
-            >
-              <View style={styles.tagsHeader}>
-                <Text style={[styles.sectionLabel, { color: colors.inkFaint }]}>
-                  CUSTOM FEEDS
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionLabel, { color: colors.inkSoft }]}>
+                  Custom Feeds
                 </Text>
                 <TouchableOpacity
                   onPress={() =>
@@ -199,74 +189,76 @@ export default function FeedsScreen({ navigation }: Props) {
                   hitSlop={8}
                   accessibilityLabel="Add custom feed"
                   activeOpacity={0.7}
-                  style={styles.tagAddBtn}
+                  style={styles.sectionAddBtn}
                 >
-                  <Feather name="plus" size={14} color={colors.inkSoft} />
+                  <Feather name="plus" size={16} color={colors.inkSoft} />
                 </TouchableOpacity>
               </View>
               {customFeeds.length === 0 ? (
-                <Text style={[styles.tagEmpty, { color: colors.inkFaint }]}>
+                <Text style={[styles.sectionEmpty, { color: colors.inkSoft }]}>
                   No custom feeds yet. Tap + to create one.
                 </Text>
               ) : (
-                customFeeds.map((cf) => (
-                  <View key={cf.id} style={styles.tagRow}>
-                    <TouchableOpacity
-                      style={styles.tagRowMain}
-                      onPress={() =>
-                        navigation.navigate("Feed", {
-                          selectedCustomFeedId: cf.id,
-                          selectedCustomFeedName: cf.name,
-                        })
-                      }
-                      accessibilityLabel={`Open custom feed ${cf.name}`}
-                      activeOpacity={0.7}
-                    >
-                      <Feather
-                        name={resolveCustomFeedIcon(cf.icon)}
-                        size={14}
-                        color={colors.inkSoft}
-                      />
-                      <Text style={[styles.tagText, { color: colors.ink }]}>
-                        {cf.name}
-                      </Text>
-                      <Text
-                        style={[styles.tagCount, { color: colors.inkFaint }]}
+                customFeeds.map((cf, idx) => (
+                  <React.Fragment key={cf.id}>
+                    {idx > 0 ? <DashedDivider /> : null}
+                    <View style={styles.row}>
+                      <TouchableOpacity
+                        style={styles.rowTap}
+                        onPress={() =>
+                          navigation.navigate("Feed", {
+                            selectedCustomFeedId: cf.id,
+                            selectedCustomFeedName: cf.name,
+                          })
+                        }
+                        accessibilityLabel={`Open custom feed ${cf.name}`}
+                        activeOpacity={0.7}
                       >
-                        {cf.member_count}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.editBtn,
-                        { borderColor: colors.border, marginRight: 0 },
-                      ]}
-                      onPress={() =>
-                        navigation.navigate("CustomFeedManage", {
-                          customFeedId: cf.id,
-                          from: "Feeds",
-                        })
-                      }
-                      hitSlop={8}
-                      accessibilityLabel={`Manage ${cf.name}`}
-                      activeOpacity={0.8}
-                    >
-                      <Feather name="edit-2" size={16} color={colors.inkSoft} />
-                    </TouchableOpacity>
-                  </View>
+                        <Feather
+                          name={resolveCustomFeedIcon(cf.icon)}
+                          size={16}
+                          color={colors.inkSoft}
+                        />
+                        <Text
+                          style={[styles.rowTitle, { color: colors.ink }]}
+                          numberOfLines={1}
+                        >
+                          {cf.name}
+                        </Text>
+                        <Text
+                          style={[styles.rowCount, { color: colors.inkSoft }]}
+                        >
+                          {cf.member_count}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.editBtn}
+                        onPress={() =>
+                          navigation.navigate("CustomFeedManage", {
+                            customFeedId: cf.id,
+                            from: "Feeds",
+                          })
+                        }
+                        hitSlop={8}
+                        accessibilityLabel={`Manage ${cf.name}`}
+                        activeOpacity={0.6}
+                      >
+                        <Feather
+                          name="edit-2"
+                          size={15}
+                          color={colors.inkSoft}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </React.Fragment>
                 ))
               )}
             </View>
 
-            <View
-              style={[
-                styles.tagsSection,
-                { borderBottomColor: colors.inkFaint },
-              ]}
-            >
-              <View style={styles.tagsHeader}>
-                <Text style={[styles.sectionLabel, { color: colors.inkFaint }]}>
-                  TAGS
+            <View style={styles.section}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionLabel, { color: colors.inkSoft }]}>
+                  Tags
                 </Text>
                 <TouchableOpacity
                   onPress={() =>
@@ -275,70 +267,77 @@ export default function FeedsScreen({ navigation }: Props) {
                   hitSlop={8}
                   accessibilityLabel="Add tag"
                   activeOpacity={0.7}
-                  style={styles.tagAddBtn}
+                  style={styles.sectionAddBtn}
                 >
-                  <Feather name="plus" size={14} color={colors.inkSoft} />
+                  <Feather name="plus" size={16} color={colors.inkSoft} />
                 </TouchableOpacity>
               </View>
               {tags.length === 0 ? (
-                <Text style={[styles.tagEmpty, { color: colors.inkFaint }]}>
+                <Text style={[styles.sectionEmpty, { color: colors.inkSoft }]}>
                   No tags yet. Tap + to add one.
                 </Text>
               ) : (
-                tags.map((tag) => (
-                  <View key={tag.id} style={styles.tagRow}>
-                    <TouchableOpacity
-                      style={styles.tagRowMain}
-                      onPress={() =>
-                        navigation.navigate("Feed", {
-                          selectedTagId: tag.id,
-                          selectedTagName: tag.name,
-                        })
-                      }
-                      accessibilityLabel={`Open tag ${tag.name}`}
-                      activeOpacity={0.7}
-                    >
-                      <Feather name="tag" size={14} color={colors.inkSoft} />
-                      <Text style={[styles.tagText, { color: colors.ink }]}>
-                        {tag.name}
-                      </Text>
-                      <Text
-                        style={[styles.tagCount, { color: colors.inkFaint }]}
+                tags.map((tag, idx) => (
+                  <React.Fragment key={tag.id}>
+                    {idx > 0 ? <DashedDivider /> : null}
+                    <View style={styles.row}>
+                      <TouchableOpacity
+                        style={styles.rowTap}
+                        onPress={() =>
+                          navigation.navigate("Feed", {
+                            selectedTagId: tag.id,
+                            selectedTagName: tag.name,
+                          })
+                        }
+                        accessibilityLabel={`Open tag ${tag.name}`}
+                        activeOpacity={0.7}
                       >
-                        {tag.feed_count}
-                      </Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[
-                        styles.editBtn,
-                        { borderColor: colors.border, marginRight: 0 },
-                      ]}
-                      onPress={() =>
-                        navigation.navigate("TagDetail", {
-                          tagId: tag.id,
-                          from: "Feeds",
-                        })
-                      }
-                      hitSlop={8}
-                      accessibilityLabel={`Edit ${tag.name}`}
-                      activeOpacity={0.8}
-                    >
-                      <Feather name="edit-2" size={16} color={colors.inkSoft} />
-                    </TouchableOpacity>
-                  </View>
+                        <Feather name="tag" size={16} color={colors.inkSoft} />
+                        <Text
+                          style={[styles.rowTitle, { color: colors.ink }]}
+                          numberOfLines={1}
+                        >
+                          {tag.name}
+                        </Text>
+                        <Text
+                          style={[styles.rowCount, { color: colors.inkSoft }]}
+                        >
+                          {tag.feed_count}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.editBtn}
+                        onPress={() =>
+                          navigation.navigate("TagDetail", {
+                            tagId: tag.id,
+                            from: "Feeds",
+                          })
+                        }
+                        hitSlop={8}
+                        accessibilityLabel={`Edit ${tag.name}`}
+                        activeOpacity={0.6}
+                      >
+                        <Feather
+                          name="edit-2"
+                          size={15}
+                          color={colors.inkSoft}
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </React.Fragment>
                 ))
               )}
             </View>
 
-            <View
-              style={[
-                styles.feedsHeader,
-                { borderBottomColor: colors.inkFaint },
-              ]}
-            >
-              <Text style={[styles.sectionLabel, { color: colors.inkFaint }]}>
-                FEEDS
-              </Text>
+            <View style={[styles.section, styles.feedsSection]}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionLabel, { color: colors.inkSoft }]}>
+                  Feeds
+                </Text>
+                <Text style={[styles.rowCount, { color: colors.inkSoft }]}>
+                  {visibleFeeds.length}
+                </Text>
+              </View>
             </View>
           </>
         )}
@@ -368,9 +367,9 @@ export default function FeedsScreen({ navigation }: Props) {
           const showIcon = Boolean(iconUri && !failedIconUris.has(iconUri));
 
           return (
-            <View style={styles.row}>
+            <View style={[styles.row, styles.feedRow]}>
               <TouchableOpacity
-                style={styles.rowMain}
+                style={styles.rowTap}
                 onPress={() =>
                   navigation.navigate("Feed", {
                     selectedFeedId: item.id,
@@ -393,12 +392,21 @@ export default function FeedsScreen({ navigation }: Props) {
                       setFailedIconUris((prev) => new Set(prev).add(iconUri));
                     }}
                   />
-                ) : null}
-                <View style={styles.rowBody}>
-                  <Text style={[styles.feedTitle, { color: colors.ink }]}>
-                    {item.title}
-                  </Text>
-                </View>
+                ) : (
+                  <View
+                    style={[
+                      styles.feedIcon,
+                      styles.feedIconPlaceholder,
+                      { backgroundColor: colors.paperWarm },
+                    ]}
+                  />
+                )}
+                <Text
+                  style={[styles.rowTitle, { color: colors.ink }]}
+                  numberOfLines={1}
+                >
+                  {item.title}
+                </Text>
                 {item.error ? (
                   <View
                     style={[
@@ -416,15 +424,15 @@ export default function FeedsScreen({ navigation }: Props) {
                 ) : null}
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.editBtn, { borderColor: colors.border }]}
+                style={styles.editBtn}
                 onPress={() =>
                   navigation.navigate("FeedDetail", { feedId: item.id })
                 }
                 hitSlop={8}
                 accessibilityLabel={`Edit ${item.title}`}
-                activeOpacity={0.8}
+                activeOpacity={0.6}
               >
-                <Feather name="edit-2" size={16} color={colors.inkSoft} />
+                <Feather name="edit-2" size={15} color={colors.inkSoft} />
               </TouchableOpacity>
             </View>
           );
@@ -458,6 +466,12 @@ const styles = StyleSheet.create({
     borderRadius: radii.md,
     gap: spacing.sm,
   },
+  searchInput: {
+    flex: 1,
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    paddingVertical: 0,
+  },
   addBtn: {
     borderRadius: radii.md,
     borderWidth: 1,
@@ -472,69 +486,88 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontWeight: "600",
   },
-  quickLinksSection: {
-    marginHorizontal: 0,
-    marginBottom: spacing.xs,
-    borderBottomWidth: 1,
-    borderStyle: "dashed",
+  list: { paddingBottom: spacing.xl },
+
+  // Section: a grouped block (quick links, custom feeds, tags, feeds list).
+  // Sections are separated only by vertical spacing — no border boxes.
+  section: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
-  quickLinkRow: {
+  feedsSection: {
+    paddingBottom: 0,
+  },
+  sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-    minHeight: 44,
+    justifyContent: "space-between",
+    minHeight: 28,
+    marginBottom: spacing.xs,
   },
-  quickLinkText: {
-    flex: 1,
-    fontSize: fontSize.body,
+  sectionLabel: {
+    fontSize: fontSize.sm,
     fontFamily: fonts.sans,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
-  searchInput: {
-    flex: 1,
-    fontSize: fontSize.body,
-    fontFamily: fonts.sans,
-    paddingVertical: 0,
-  },
-  list: { paddingBottom: spacing.sm },
-  feedsHeader: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.xs,
-    borderBottomWidth: 1,
-    borderStyle: "dashed",
-  },
-  emptyState: {
+  sectionAddBtn: {
+    width: 28,
+    height: 28,
     alignItems: "center",
-    padding: spacing.xl,
+    justifyContent: "center",
+    marginRight: -spacing.xs,
   },
+  sectionEmpty: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+    fontStyle: "italic",
+    paddingVertical: spacing.sm,
+  },
+
+  // Unified row. Used by quick links, custom feeds, tags, and feed entries.
   row: {
     flexDirection: "row",
     alignItems: "center",
+    minHeight: 44,
     gap: spacing.sm,
   },
-  rowMain: {
+  rowTap: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    flex: 1,
     gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.sm,
     minHeight: 44,
   },
+  rowTitle: {
+    flex: 1,
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+  },
+  rowCount: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+    fontVariant: ["tabular-nums"],
+    paddingHorizontal: spacing.xs,
+  },
+
+  // Feed rows live in the FlatList body (outside `section` padding), so they
+  // get their own horizontal padding to match section content alignment.
+  feedRow: {
+    paddingHorizontal: spacing.lg,
+  },
   feedIcon: {
-    width: 16,
-    height: 16,
+    width: 18,
+    height: 18,
     borderRadius: 4,
   },
-  rowBody: { flex: 1, gap: 2 },
-  feedTitle: {
-    fontSize: fontSize.body,
-    fontWeight: "600",
-    fontFamily: fonts.sans,
+  feedIconPlaceholder: {
+    opacity: 0.6,
   },
+
   badge: {
     paddingHorizontal: spacing.sm,
     paddingVertical: 2,
@@ -546,70 +579,21 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontWeight: "600",
   },
+
+  // Ghost icon button — replaces the heavy bordered square. Sits on the
+  // right edge of editable rows and stays visually quiet so the row content
+  // reads first.
   editBtn: {
-    borderWidth: 1,
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
     borderRadius: radii.md,
-    width: 38,
-    height: 38,
-    marginRight: spacing.lg,
+  },
+
+  emptyState: {
     alignItems: "center",
-    justifyContent: "center",
-  },
-  tagsSection: {
-    paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderStyle: "dashed",
-  },
-  tagsHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  sectionLabel: {
-    fontSize: fontSize.xs,
-    fontFamily: fonts.sans,
-    fontWeight: "700",
-    letterSpacing: 0.7,
-  },
-  tagAddBtn: {
-    marginLeft: "auto",
-    width: 24,
-    height: 24,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  tagEmpty: {
-    fontSize: fontSize.meta,
-    fontFamily: fonts.sans,
-    fontStyle: "italic",
-    paddingVertical: spacing.xs,
-  },
-  tagRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  tagRowMain: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingVertical: spacing.sm,
-    minHeight: 40,
-  },
-  tagText: {
-    flex: 1,
-    fontSize: fontSize.body,
-    fontFamily: fonts.sans,
-    fontWeight: "600",
-  },
-  tagCount: {
-    fontSize: fontSize.meta,
-    fontFamily: fonts.sans,
-    paddingHorizontal: spacing.sm,
+    padding: spacing.xl,
   },
   emptyTitle: {
     fontSize: fontSize.h2,
