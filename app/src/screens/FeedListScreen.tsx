@@ -55,6 +55,7 @@ import { MetaText, Pill } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { useHeaderContent } from "../context/HeaderContentContext";
+import { useFeedScroll } from "../context/FeedScrollContext";
 import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
 import {
@@ -81,6 +82,7 @@ const CARD_LAYOUT_WIDTH = 760;
 export default function FeedListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const { setHeaderContent, clearHeaderContent } = useHeaderContent();
+  const { setIsFeedScrolled } = useFeedScroll();
   const { width: viewportWidth } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const shouldRefreshOnFocus = isWeb;
@@ -191,8 +193,31 @@ export default function FeedListScreen({ navigation, route }: Props) {
   useEffect(() => {
     if (scrollToTopParam) {
       flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      setIsFeedScrolled(false);
     }
-  }, [scrollToTopParam]);
+  }, [scrollToTopParam, setIsFeedScrolled]);
+
+  // Threshold (in px) past which we consider the feed "scrolled" — used to
+  // morph the Feed tab/nav icon into an up-arrow as an affordance for the
+  // tap-to-scroll-to-top behavior. Small enough to feel responsive after
+  // scrolling roughly one card; large enough to ignore tiny overscrolls.
+  const SCROLL_INDICATOR_THRESHOLD = 200;
+
+  const handleScroll = useCallback(
+    (event: { nativeEvent: { contentOffset: { y: number } } }) => {
+      const y = event.nativeEvent.contentOffset.y;
+      setIsFeedScrolled(y > SCROLL_INDICATOR_THRESHOLD);
+    },
+    [setIsFeedScrolled]
+  );
+
+  // Reset the scrolled indicator when the screen loses focus so other tabs
+  // don't show a stale up-arrow on the Feed button.
+  useEffect(() => {
+    if (!isFocused) {
+      setIsFeedScrolled(false);
+    }
+  }, [isFocused, setIsFeedScrolled]);
 
   const loadData = useCallback(
     async (refreshRemote: boolean) => {
@@ -937,6 +962,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
           refreshing={refreshing}
           viewabilityConfig={viewabilityConfig}
           onViewableItemsChanged={handleViewableItemsChanged}
+          onScroll={handleScroll}
+          scrollEventThrottle={64}
           contentContainerStyle={[
             styles.list,
             feedLayout === "card" ? styles.cardList : null,

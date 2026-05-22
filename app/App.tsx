@@ -55,6 +55,10 @@ import { ThemeProvider, useTheme } from "./src/context/ThemeContext";
 import { AppHeader } from "./src/components/AppHeader";
 import { HeaderContentProvider } from "./src/context/HeaderContentContext";
 import {
+  FeedScrollProvider,
+  useFeedScroll,
+} from "./src/context/FeedScrollContext";
+import {
   getFeeds,
   getTags,
   getCustomFeedsWithMemberCounts,
@@ -114,6 +118,15 @@ function FeatherTabIcon({
   );
 }
 
+function FeedTabIcon({ focused }: { focused: boolean }): React.ReactElement {
+  const { isFeedScrolled } = useFeedScroll();
+  // When the user is already on the Feed tab and has scrolled down, the tab
+  // button acts as a "scroll to top" shortcut — surface that affordance with
+  // an up-arrow icon.
+  const icon: FeatherIconName = focused && isFeedScrolled ? "arrow-up" : "list";
+  return <FeatherTabIcon icon={icon} focused={focused} />;
+}
+
 // Width breakpoint at which the web layout switches to the sidebar
 const WEB_BREAKPOINT = 768;
 
@@ -129,6 +142,7 @@ const HIDDEN_TAB_OPTIONS = {
 
 function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
+  const { isFeedScrolled } = useFeedScroll();
   const [feeds, setFeeds] = React.useState<Feed[]>([]);
   const [tags, setTags] = React.useState<Tag[]>([]);
   const [customFeeds, setCustomFeeds] = React.useState<
@@ -190,6 +204,8 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
           selectedTagId !== undefined ||
           selectedCustomFeedId !== undefined)
       );
+    const displayIcon: FeatherIconName =
+      name === "Feed" && focused && isFeedScrolled ? "arrow-up" : icon;
     return (
       <TouchableOpacity
         key={name}
@@ -211,7 +227,7 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
         activeOpacity={0.7}
       >
         <Feather
-          name={icon}
+          name={displayIcon}
           size={iconSize}
           color={focused ? colors.ink : colors.inkSoft}
         />
@@ -517,9 +533,7 @@ function Tabs() {
         name="Feed"
         component={FeedListScreen}
         options={{
-          tabBarIcon: ({ focused }) => (
-            <FeatherTabIcon icon="list" focused={focused} />
-          ),
+          tabBarIcon: ({ focused }) => <FeedTabIcon focused={focused} />,
         }}
         listeners={({ navigation }) => ({
           tabPress: (event) => {
@@ -725,9 +739,11 @@ export default function App() {
     <SafeAreaProvider>
       <ThemeProvider>
         <HeaderContentProvider>
-          <ErrorBoundary>
-            <AppContent />
-          </ErrorBoundary>
+          <FeedScrollProvider>
+            <ErrorBoundary>
+              <AppContent />
+            </ErrorBoundary>
+          </FeedScrollProvider>
         </HeaderContentProvider>
       </ThemeProvider>
     </SafeAreaProvider>
