@@ -17,6 +17,7 @@ jest.mock("./database", () => ({
   setFeedRefreshSuccess: jest.fn(),
   setFeedRefreshFailure: jest.fn(),
   getRecentPublishedAtForFeed: jest.fn(),
+  recordFeedFetchOutcome: jest.fn(),
 }));
 
 const mockFetchFeedWithMeta = fetchFeedWithMeta as jest.MockedFunction<

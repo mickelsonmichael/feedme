@@ -88,6 +88,8 @@ async function initializeSchema(
       next_fetch_at INTEGER NOT NULL DEFAULT 0,
       consecutive_failures INTEGER NOT NULL DEFAULT 0,
       fetch_interval_ms INTEGER,
+      fetch_success_count INTEGER NOT NULL DEFAULT 0,
+      fetch_failure_count INTEGER NOT NULL DEFAULT 0,
       notify_enabled INTEGER NOT NULL DEFAULT 0,
       notify_frequency TEXT NOT NULL DEFAULT 'off' CHECK (notify_frequency IN ('immediate', 'daily', 'off')),
       notify_last_seen_item_id INTEGER,
@@ -257,6 +259,23 @@ async function initializeSchema(
   try {
     await database.execAsync(
       "ALTER TABLE feeds ADD COLUMN fetch_interval_ms INTEGER"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+  // Migration: add cumulative fetch outcome counters. Used by the feed
+  // detail stats panel to compute a stability percentage. Existing rows
+  // start at 0 — the counters only reflect activity after this migration.
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN fetch_success_count INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN fetch_failure_count INTEGER NOT NULL DEFAULT 0"
     );
   } catch {
     // Column already exists — ignore
@@ -481,6 +500,25 @@ export async function setFeedRefreshFailure(
   );
 }
 
+/**
+ * Record a fetch outcome on the cumulative success/failure counters used by
+ * the feed detail stats panel. Counts every attempt — refresher loop,
+ * manual single-feed refresh, save-then-refetch in the edit screen.
+ */
+export async function recordFeedFetchOutcome(
+  feedId: number,
+  success: boolean
+): Promise<void> {
+  const database = await getDatabase();
+  const column = success ? "fetch_success_count" : "fetch_failure_count";
+  await withWriteLock(() =>
+    database.runAsync(
+      `UPDATE feeds SET ${column} = ${column} + 1 WHERE id = ?`,
+      [feedId]
+    )
+  );
+}
+
 export async function setFeedNotificationSettings(
   feedId: number,
   settings: {
@@ -588,6 +626,26 @@ export async function getItemCountForFeed(feedId: number): Promise<number> {
     [feedId]
   );
   return row?.count ?? 0;
+}
+
+/**
+ * Returns every `published_at` timestamp for a feed. Used by the stats
+ * panel to compute posting frequency and the typical posting window.
+ * Capped by `limit` (default 500) so heavy podcast archives don't blow
+ * up the query.
+ */
+export async function getAllPublishedAtForFeed(
+  feedId: number,
+  limit: number = 500
+): Promise<number[]> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{ published_at: number | null }>(
+    "SELECT published_at FROM items WHERE feed_id = ? AND published_at IS NOT NULL ORDER BY published_at DESC LIMIT ?",
+    [feedId, limit]
+  );
+  return rows
+    .map((r) => r.published_at)
+    .filter((t): t is number => typeof t === "number");
 }
 
 // ── Items ──────────────────────────────────────────────────────────────────

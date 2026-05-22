@@ -9,6 +9,7 @@ import {
 import {
   getItemCountForFeed,
   getRecentPublishedAtForFeed,
+  recordFeedFetchOutcome,
   setFeedError,
   setFeedRefreshFailure,
   setFeedRefreshSuccess,
@@ -120,6 +121,7 @@ export async function refreshFeeds(
           await updateFeedLastFetched(feed.id);
           await setFeedError(feed.id, null);
           await scheduleNextSuccess(feed);
+          await recordFeedFetchOutcome(feed.id, true);
           succeeded += 1;
           return;
         }
@@ -132,6 +134,7 @@ export async function refreshFeeds(
         await updateFeedLastFetched(feed.id);
         await setFeedError(feed.id, null);
         await scheduleNextSuccess(feed);
+        await recordFeedFetchOutcome(feed.id, true);
         succeeded += 1;
       } catch (error) {
         const cachedItemCount = await getItemCountForFeed(feed.id);
@@ -142,6 +145,7 @@ export async function refreshFeeds(
           `${(error as Error).message}${fallbackSuffix}`
         );
         await scheduleNextFailure(feed);
+        await recordFeedFetchOutcome(feed.id, false);
         failed += 1;
       }
     })();
@@ -169,6 +173,7 @@ export async function refreshFeeds(
       // counter when it lands.
       try {
         await scheduleNextFailure(feed);
+        await recordFeedFetchOutcome(feed.id, false);
       } catch {
         // Best-effort: never let scheduling errors mask the timeout itself.
       }

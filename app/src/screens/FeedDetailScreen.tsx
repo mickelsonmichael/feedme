@@ -23,12 +23,14 @@ import {
   deleteFeed,
   updateFeed,
   updateFeedLastFetched,
+  recordFeedFetchOutcome,
   setFeedError,
   upsertItems,
   getTags,
   getTagsForFeed,
   getOrCreateTag,
   setFeedTags,
+  getAllPublishedAtForFeed,
 } from "../database";
 import { fetchFeedWithMeta } from "../feedParser";
 import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
@@ -36,6 +38,10 @@ import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { SelectedTag, TagMultiSelect } from "../components/TagMultiSelect";
 import NotificationSettingsSection from "../components/NotificationSettingsSection";
+import FeedStatsSection, {
+  FeedStatusBadge,
+} from "../components/FeedStatsSection";
+import { computeFeedStats } from "../feedStats";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "FeedDetail">,
@@ -64,6 +70,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
   const { feedId } = route.params;
 
   const [feed, setFeed] = useState<Feed | null>(null);
+  const [publishedAts, setPublishedAts] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -114,9 +121,13 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         setIsNsfw(found.nsfw === 1);
         setShowOnlyInTag(found.show_only_in_tag === 1);
         setShowOnlyInCustomFeed(found.show_only_in_custom_feed === 1);
-        const feedTags = await getTagsForFeed(found.id);
+        const [feedTags, stamps] = await Promise.all([
+          getTagsForFeed(found.id),
+          getAllPublishedAtForFeed(found.id),
+        ]);
         setSelectedTags(feedTags.map((t) => ({ id: t.id, name: t.name })));
         setOriginalTagIds(feedTags.map((t) => t.id));
+        setPublishedAts(stamps);
       }
     } finally {
       setLoading(false);
@@ -187,11 +198,13 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         await upsertItems(feedId, items);
         await updateFeedLastFetched(feedId);
         await setFeedError(feedId, null);
+        await recordFeedFetchOutcome(feedId, true);
         if (usedProxy) {
           Alert.alert(PROXY_ALERT_TITLE, PROXY_ALERT_MESSAGE);
         }
       } catch (fetchErr) {
         await setFeedError(feedId, (fetchErr as Error).message);
+        await recordFeedFetchOutcome(feedId, false);
       }
 
       await loadFeed();
@@ -265,6 +278,8 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
       </View>
     );
   }
+
+  const stats = computeFeedStats(feed, publishedAts);
 
   return (
     <KeyboardAvoidingView
@@ -405,6 +420,12 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             </View>
           ) : null}
 
+          {stats.badge ? (
+            <View style={styles.titleBadgeRow}>
+              <FeedStatusBadge badge={stats.badge} />
+            </View>
+          ) : null}
+
           <Text style={[styles.label, { color: colors.inkSoft }]}>title</Text>
           <TextInput
             style={[
@@ -447,15 +468,6 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
           <Text style={[styles.lastFetch, { color: colors.inkSoft }]}>
             Last fetch: {formatDate(feed.last_fetched)}
           </Text>
-
-          {feed.consecutive_failures && feed.consecutive_failures > 0 ? (
-            <Text style={[styles.lastFetch, { color: colors.inkSoft }]}>
-              Consecutive failures: {feed.consecutive_failures}
-              {feed.next_fetch_at && feed.next_fetch_at > Date.now()
-                ? ` — next retry ${formatDate(feed.next_fetch_at)}`
-                : ""}
-            </Text>
-          ) : null}
 
           <View style={styles.proxyRow}>
             <View style={styles.proxyLabelGroup}>
@@ -537,6 +549,8 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
           </View>
 
           <NotificationSettingsSection source="feed" feedId={feed.id} />
+
+          <FeedStatsSection stats={stats} />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -601,6 +615,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.meta,
     fontFamily: fonts.sans,
     marginTop: spacing.xl,
+  },
+  titleBadgeRow: {
+    flexDirection: "row",
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
   proxyRow: {
     flexDirection: "row",

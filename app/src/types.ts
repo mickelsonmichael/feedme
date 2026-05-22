@@ -28,6 +28,12 @@ export type Feed = {
    *  any successful fetch (200 or 304). Drives the exponential backoff in
    *  `next_fetch_at`. */
   consecutive_failures?: number;
+  /** Cumulative count of successful fetch attempts (200 or 304) since the
+   *  feed was added. Used by the stats panel on the feed detail screen. */
+  fetch_success_count?: number;
+  /** Cumulative count of failed fetch attempts (network error, parse error,
+   *  or wall-clock timeout) since the feed was added. */
+  fetch_failure_count?: number;
   /** Learned base polling interval in ms — the median gap between recent
    *  `published_at` values, clamped to `[15 min, 24 h]`. Null until the
    *  first successful refresh after the migration. */

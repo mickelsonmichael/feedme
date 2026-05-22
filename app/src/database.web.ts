@@ -65,6 +65,8 @@ function normalizeFeed(raw: Feed): Feed {
     next_fetch_at: raw.next_fetch_at ?? 0,
     consecutive_failures: raw.consecutive_failures ?? 0,
     fetch_interval_ms: raw.fetch_interval_ms ?? null,
+    fetch_success_count: raw.fetch_success_count ?? 0,
+    fetch_failure_count: raw.fetch_failure_count ?? 0,
     notify_enabled: raw.notify_enabled ?? 0,
     notify_frequency: raw.notify_frequency ?? "off",
     notify_last_seen_item_id: raw.notify_last_seen_item_id ?? null,
@@ -284,6 +286,8 @@ export async function addFeed({
     next_fetch_at: 0,
     consecutive_failures: 0,
     fetch_interval_ms: null,
+    fetch_success_count: 0,
+    fetch_failure_count: 0,
     notify_enabled: 0,
     notify_frequency: "off",
     notify_last_seen_item_id: null,
@@ -396,6 +400,21 @@ export async function setFeedRefreshFailure(
   }
 }
 
+export async function recordFeedFetchOutcome(
+  feedId: number,
+  success: boolean
+): Promise<void> {
+  const state = loadState();
+  const feed = state.feeds.find((f) => f.id === feedId);
+  if (!feed) return;
+  if (success) {
+    feed.fetch_success_count = (feed.fetch_success_count ?? 0) + 1;
+  } else {
+    feed.fetch_failure_count = (feed.fetch_failure_count ?? 0) + 1;
+  }
+  saveState(state);
+}
+
 export async function setFeedNotificationSettings(
   feedId: number,
   settings: {
@@ -495,6 +514,21 @@ export async function getRecentPublishedAtForFeed(
 export async function getItemCountForFeed(feedId: number): Promise<number> {
   const state = loadState();
   return state.items.reduce((n, i) => (i.feed_id === feedId ? n + 1 : n), 0);
+}
+
+export async function getAllPublishedAtForFeed(
+  feedId: number,
+  limit: number = 500
+): Promise<number[]> {
+  const state = loadState();
+  const stamps: number[] = [];
+  for (const item of state.items) {
+    if (item.feed_id === feedId && typeof item.published_at === "number") {
+      stamps.push(item.published_at);
+    }
+  }
+  stamps.sort((a, b) => b - a);
+  return stamps.slice(0, limit);
 }
 
 // ── Items ──────────────────────────────────────────────────────────────────
