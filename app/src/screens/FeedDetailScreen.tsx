@@ -35,6 +35,7 @@ import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { SelectedTag, TagMultiSelect } from "../components/TagMultiSelect";
+import NotificationSettingsSection from "../components/NotificationSettingsSection";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "FeedDetail">,
@@ -535,26 +536,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             />
           </View>
 
-          <TouchableOpacity
-            style={[
-              styles.actionBtn,
-              styles.notificationButton,
-              { borderColor: colors.border },
-            ]}
-            onPress={() =>
-              navigation.navigate("NotificationSettings", {
-                source: "feed",
-                feedId: feed.id,
-              })
-            }
-            accessibilityLabel="Open notification settings"
-            activeOpacity={0.7}
-          >
-            <Feather name="bell" size={16} color={colors.inkSoft} />
-            <Text style={[styles.actionText, { color: colors.inkSoft }]}>
-              Notification settings
-            </Text>
-          </TouchableOpacity>
+          <NotificationSettingsSection source="feed" feedId={feed.id} />
         </View>
       </ScrollView>
     </KeyboardAvoidingView>

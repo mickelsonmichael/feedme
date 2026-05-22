@@ -31,6 +31,7 @@ import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { getFeedIconUrl } from "../feedIcon";
+import NotificationSettingsSection from "../components/NotificationSettingsSection";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "TagDetail">,
@@ -448,27 +449,8 @@ export default function TagDetailScreen({ route, navigation }: Props) {
             )}
           </View>
 
-          {isEditMode ? (
-            <TouchableOpacity
-              style={[
-                styles.actionBtn,
-                styles.notificationButton,
-                { borderColor: colors.border },
-              ]}
-              onPress={() =>
-                navigation.navigate("NotificationSettings", {
-                  source: "tag",
-                  tagId: tagId as number,
-                })
-              }
-              activeOpacity={0.7}
-              accessibilityLabel="Open notification settings"
-            >
-              <Feather name="bell" size={16} color={colors.inkSoft} />
-              <Text style={[styles.actionText, { color: colors.inkSoft }]}>
-                Notification settings
-              </Text>
-            </TouchableOpacity>
+          {isEditMode && tagId !== undefined ? (
+            <NotificationSettingsSection source="tag" tagId={tagId} />
           ) : null}
         </View>
       </ScrollView>

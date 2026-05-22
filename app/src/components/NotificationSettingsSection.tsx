@@ -1,17 +1,13 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  ScrollView,
   StyleSheet,
   Switch,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   getFeedById,
   getFeedsForTag,
@@ -28,12 +24,11 @@ import {
   getNotificationPermissionGranted,
 } from "../notifications";
 import { fonts, fontSize, radii, spacing } from "../theme";
-import { Feed, RootStackParamList, TabParamList, Tag } from "../types";
+import { Feed, Tag } from "../types";
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "NotificationSettings">,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props =
+  | { source: "feed"; feedId: number }
+  | { source: "tag"; tagId: number };
 
 type FeedFrequency = "immediate" | "daily" | "off";
 
@@ -50,29 +45,26 @@ function normalizeFeedFrequency(value: string | undefined): FeedFrequency {
   return "off";
 }
 
-export default function NotificationSettingsScreen({ route }: Props) {
+export default function NotificationSettingsSection(props: Props) {
   const { colors } = useTheme();
   const [loading, setLoading] = useState(true);
   const [feed, setFeed] = useState<Feed | null>(null);
   const [tag, setTag] = useState<Tag | null>(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
 
-  const params = route.params;
-  const source = params.source;
-
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      if (source === "feed") {
-        setFeed(await getFeedById(params.feedId));
+      if (props.source === "feed") {
+        setFeed(await getFeedById(props.feedId));
       } else {
-        setTag(await getTagById(params.tagId));
+        setTag(await getTagById(props.tagId));
       }
       setPermissionGranted(await getNotificationPermissionGranted());
     } finally {
       setLoading(false);
     }
-  }, [params, source]);
+  }, [props]);
 
   useEffect(() => {
     loadData();
@@ -81,13 +73,6 @@ export default function NotificationSettingsScreen({ route }: Props) {
   const feedFrequency = normalizeFeedFrequency(feed?.notify_frequency);
   const feedEnabled = feed?.notify_enabled === 1 && feedFrequency !== "off";
   const tagEnabled = tag?.notify_enabled === 1;
-
-  const title = useMemo(() => {
-    if (source === "feed") {
-      return feed ? `Notifications · ${feed.title}` : "Feed notifications";
-    }
-    return tag ? `Notifications · #${tag.name}` : "Tag notifications";
-  }, [feed, source, tag]);
 
   const handleEnableForFeed = async (enabled: boolean) => {
     if (!feed) return;
@@ -172,120 +157,125 @@ export default function NotificationSettingsScreen({ route }: Props) {
 
   if (loading) {
     return (
-      <View
-        style={[
-          styles.container,
-          styles.center,
-          { backgroundColor: colors.paper },
-        ]}
-      >
-        <ActivityIndicator color={colors.accent} size="large" />
+      <View style={styles.loading}>
+        <ActivityIndicator color={colors.accent} />
       </View>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={[styles.title, { color: colors.ink }]}>{title}</Text>
-        <Text style={[styles.subtitle, { color: colors.inkSoft }]}>
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <Text style={[styles.sectionHeading, { color: colors.inkSoft }]}>
+          Notifications
+        </Text>
+        <Text style={[styles.permission, { color: colors.inkFaint }]}>
           Permission: {permissionGranted ? "granted" : "not granted"}
         </Text>
+      </View>
 
-        {source === "feed" && feed ? (
-          <>
-            <View style={[styles.row, { borderBottomColor: colors.border }]}>
-              <View style={styles.rowText}>
-                <Text style={[styles.rowLabel, { color: colors.ink }]}>
-                  Notify on new items
-                </Text>
-                <Text style={[styles.rowHint, { color: colors.inkFaint }]}>
-                  Receive alerts for this feed
-                </Text>
-              </View>
-              <Switch
-                value={feedEnabled}
-                onValueChange={handleEnableForFeed}
-                thumbColor={colors.paper}
-                trackColor={{ false: colors.border, true: colors.accent }}
-              />
-            </View>
-
-            <Text style={[styles.sectionTitle, { color: colors.inkSoft }]}>
-              Notification frequency
-            </Text>
-            <View
-              style={[
-                styles.segmented,
-                { borderColor: colors.border, backgroundColor: colors.paper },
-              ]}
-            >
-              {FEED_FREQUENCY_OPTIONS.map((option) => {
-                const active = feedFrequency === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.segment,
-                      active && { backgroundColor: colors.accent },
-                    ]}
-                    onPress={() => handleFeedFrequency(option.value)}
-                    activeOpacity={0.7}
-                  >
-                    <Text
-                      style={[
-                        styles.segmentText,
-                        { color: active ? colors.paper : colors.ink },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
-        ) : null}
-
-        {source === "tag" && tag ? (
+      {props.source === "feed" && feed ? (
+        <>
           <View style={[styles.row, { borderBottomColor: colors.border }]}>
             <View style={styles.rowText}>
               <Text style={[styles.rowLabel, { color: colors.ink }]}>
-                Notify when tagged feeds have new items
+                Notify on new items
               </Text>
               <Text style={[styles.rowHint, { color: colors.inkFaint }]}>
-                Receive alerts for all feeds using this tag
+                Receive alerts for this feed
               </Text>
             </View>
             <Switch
-              value={tagEnabled}
-              onValueChange={handleEnableForTag}
+              value={feedEnabled}
+              onValueChange={handleEnableForFeed}
               thumbColor={colors.paper}
               trackColor={{ false: colors.border, true: colors.accent }}
             />
           </View>
-        ) : null}
-      </ScrollView>
+
+          <Text style={[styles.subHeading, { color: colors.inkSoft }]}>
+            Frequency
+          </Text>
+          <View
+            style={[
+              styles.segmented,
+              { borderColor: colors.border, backgroundColor: colors.paper },
+            ]}
+          >
+            {FEED_FREQUENCY_OPTIONS.map((option) => {
+              const active = feedFrequency === option.value;
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.segment,
+                    active && { backgroundColor: colors.accent },
+                  ]}
+                  onPress={() => handleFeedFrequency(option.value)}
+                  activeOpacity={0.7}
+                >
+                  <Text
+                    style={[
+                      styles.segmentText,
+                      { color: active ? colors.paper : colors.ink },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </>
+      ) : null}
+
+      {props.source === "tag" && tag ? (
+        <View style={[styles.row, { borderBottomColor: colors.border }]}>
+          <View style={styles.rowText}>
+            <Text style={[styles.rowLabel, { color: colors.ink }]}>
+              Notify when tagged feeds have new items
+            </Text>
+            <Text style={[styles.rowHint, { color: colors.inkFaint }]}>
+              Receive alerts for all feeds using this tag
+            </Text>
+          </View>
+          <Switch
+            value={tagEnabled}
+            onValueChange={handleEnableForTag}
+            thumbColor={colors.paper}
+            trackColor={{ false: colors.border, true: colors.accent }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  center: { alignItems: "center", justifyContent: "center" },
-  content: {
-    padding: spacing.lg,
+  container: {
+    marginTop: spacing.xl,
     gap: spacing.sm,
   },
-  title: {
-    fontFamily: fonts.heading,
-    fontSize: fontSize.h2,
-    fontWeight: "600",
+  loading: {
+    marginTop: spacing.xl,
+    paddingVertical: spacing.md,
+    alignItems: "center",
   },
-  subtitle: {
+  header: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: spacing.sm,
+  },
+  sectionHeading: {
     fontFamily: fonts.sans,
-    fontSize: fontSize.body,
-    marginBottom: spacing.md,
+    fontSize: fontSize.xs,
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
+  permission: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
   },
   row: {
     flexDirection: "row",
@@ -305,8 +295,8 @@ const styles = StyleSheet.create({
     fontSize: fontSize.meta,
     marginTop: spacing.xs,
   },
-  sectionTitle: {
-    marginTop: spacing.lg,
+  subHeading: {
+    marginTop: spacing.md,
     fontFamily: fonts.sans,
     fontSize: fontSize.xs,
     letterSpacing: 1.2,

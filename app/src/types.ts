@@ -139,9 +139,6 @@ export type RootStackParamList = {
   };
   FeedDetail: { feedId: number };
   TagDetail: { tagId?: number; from?: string } | undefined;
-  NotificationSettings:
-    | { feedId: number; source: "feed" }
-    | { tagId: number; source: "tag" };
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
   RawXml: { rawXml: string | null; title?: string };
@@ -185,9 +182,6 @@ export type TabParamList = {
   };
   FeedDetail: { feedId: number };
   TagDetail: { tagId?: number; from?: string } | undefined;
-  NotificationSettings:
-    | { feedId: number; source: "feed" }
-    | { tagId: number; source: "tag" };
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
   RawXml: { rawXml: string | null; title?: string };

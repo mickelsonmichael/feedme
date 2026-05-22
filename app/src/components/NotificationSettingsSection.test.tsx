@@ -1,11 +1,7 @@
 import React from "react";
 import { Switch, Text, TouchableOpacity } from "react-native";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
-import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
-import NotificationSettingsScreen from "../screens/NotificationSettingsScreen";
-import { RootStackParamList, TabParamList } from "../types";
+import NotificationSettingsSection from "../components/NotificationSettingsSection";
 import {
   getFeedById,
   getFeedsForTag,
@@ -47,38 +43,7 @@ jest.mock("../notifications", () => ({
   getNotificationPermissionGranted: jest.fn(async () => true),
 }));
 
-type FeedProps = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "NotificationSettings">,
-  NativeStackScreenProps<RootStackParamList>
->;
-
-function buildFeedProps(): FeedProps {
-  return {
-    navigation: {
-      navigate: jest.fn(),
-    } as unknown as FeedProps["navigation"],
-    route: {
-      key: "notify-feed",
-      name: "NotificationSettings",
-      params: { source: "feed", feedId: 1 },
-    } as FeedProps["route"],
-  };
-}
-
-function buildTagProps(): FeedProps {
-  return {
-    navigation: {
-      navigate: jest.fn(),
-    } as unknown as FeedProps["navigation"],
-    route: {
-      key: "notify-tag",
-      name: "NotificationSettings",
-      params: { source: "tag", tagId: 2 },
-    } as FeedProps["route"],
-  };
-}
-
-describe("NotificationSettingsScreen", () => {
+describe("NotificationSettingsSection", () => {
   beforeEach(() => {
     (getFeedById as jest.Mock).mockResolvedValue({
       id: 1,
@@ -102,12 +67,13 @@ describe("NotificationSettingsScreen", () => {
 
   it("enables feed notifications and sets initial checkpoint", async () => {
     // Arrange
-    const props = buildFeedProps();
     let tree: renderer.ReactTestRenderer;
 
     // Act
     await act(async () => {
-      tree = renderer.create(<NotificationSettingsScreen {...props} />);
+      tree = renderer.create(
+        <NotificationSettingsSection source="feed" feedId={1} />
+      );
     });
 
     const toggle = tree!.root.findAllByType(Switch)[0];
@@ -125,12 +91,13 @@ describe("NotificationSettingsScreen", () => {
 
   it("enables tag notifications", async () => {
     // Arrange
-    const props = buildTagProps();
     let tree: renderer.ReactTestRenderer;
 
     // Act
     await act(async () => {
-      tree = renderer.create(<NotificationSettingsScreen {...props} />);
+      tree = renderer.create(
+        <NotificationSettingsSection source="tag" tagId={2} />
+      );
     });
 
     const toggle = tree!.root.findAllByType(Switch)[0];
@@ -144,12 +111,13 @@ describe("NotificationSettingsScreen", () => {
 
   it("sets daily digest when selected", async () => {
     // Arrange
-    const props = buildFeedProps();
     let tree: renderer.ReactTestRenderer;
 
     // Act
     await act(async () => {
-      tree = renderer.create(<NotificationSettingsScreen {...props} />);
+      tree = renderer.create(
+        <NotificationSettingsSection source="feed" feedId={1} />
+      );
     });
 
     const dailyButton = tree!.root

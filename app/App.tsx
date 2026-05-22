@@ -42,7 +42,6 @@ import CustomFeedManageScreen from "./src/screens/CustomFeedManageScreen";
 import SettingsScreen from "./src/screens/SettingsScreen";
 import ImportExportScreen from "./src/screens/ImportExportScreen";
 import InAppBrowserScreen from "./src/screens/InAppBrowserScreen";
-import NotificationSettingsScreen from "./src/screens/NotificationSettingsScreen";
 import RawXmlScreen from "./src/screens/RawXmlScreen";
 import {
   Feed,
@@ -656,11 +655,6 @@ function Tabs() {
       <Tab.Screen
         name="InAppBrowser"
         component={InAppBrowserScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
-        name="NotificationSettings"
-        component={NotificationSettingsScreen}
         options={HIDDEN_TAB_OPTIONS}
       />
       <Tab.Screen
