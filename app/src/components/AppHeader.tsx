@@ -24,8 +24,7 @@ export function AppHeader() {
 
   // On web, the browser handles safe areas and insets.top is 0; use a fixed
   // top padding instead so the header doesn't sit flush against the viewport.
-  const paddingTop =
-    Platform.OS === "web" ? spacing.md : insets.top + spacing.sm;
+  const paddingTop = Platform.OS === "web" ? spacing.md : insets.top;
 
   return (
     <View
