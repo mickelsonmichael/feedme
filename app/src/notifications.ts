@@ -191,14 +191,26 @@ export async function runBackgroundNotificationSync(): Promise<void> {
       continue;
     }
 
-    const lastSeen = feed.notify_last_seen_item_id ?? 0;
+    const lastSeen = feed.notify_last_seen_item_id;
+    const maxItemId = await getMaxItemIdForFeed(feed.id);
+    if (maxItemId === null) {
+      continue;
+    }
+    // Checkpoint not yet initialised — this can happen when a feed is added
+    // to a tag after tag-level notifications were already enabled, so the
+    // per-feed checkpoint was never seeded.  Silently advance the pointer
+    // to the current latest item and skip this cycle to avoid flooding the
+    // user with notifications for every existing post.
+    if (lastSeen === null || lastSeen === undefined) {
+      await setFeedNotificationCheckpoint(feed.id, maxItemId);
+      continue;
+    }
     const unseenItems = await getUnseenItemsForFeed(
       feed.id,
       lastSeen,
       MAX_NOTIFICATIONS_PER_FEED
     );
-    const maxItemId = await getMaxItemIdForFeed(feed.id);
-    if (unseenItems.length === 0 || maxItemId === null) {
+    if (unseenItems.length === 0) {
       continue;
     }
 
