@@ -836,16 +836,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
               variant={filter === "unread" ? "accent" : "soft"}
             />
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setFilter("starred")}
-            activeOpacity={0.7}
-          >
-            <Pill
-              label="Saved"
-              iconName="bookmark"
-              variant={filter === "starred" ? "accent" : "soft"}
-            />
-          </TouchableOpacity>
           <View
             style={[styles.pillDivider, { backgroundColor: colors.inkFaint }]}
           />
