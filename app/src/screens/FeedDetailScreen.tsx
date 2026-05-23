@@ -80,6 +80,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
   const [isNsfw, setIsNsfw] = useState(false);
   const [showOnlyInTag, setShowOnlyInTag] = useState(false);
   const [showOnlyInCustomFeed, setShowOnlyInCustomFeed] = useState(false);
+  const [collapseRepeated, setCollapseRepeated] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
   const [originalTagIds, setOriginalTagIds] = useState<number[]>([]);
@@ -106,6 +107,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
       isNsfw !== (feed.nsfw === 1) ||
       showOnlyInTag !== (feed.show_only_in_tag === 1) ||
       showOnlyInCustomFeed !== (feed.show_only_in_custom_feed === 1) ||
+      collapseRepeated !== (feed.collapse_repeated === 1) ||
       tagsChanged);
 
   const loadFeed = useCallback(async () => {
@@ -121,6 +123,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         setIsNsfw(found.nsfw === 1);
         setShowOnlyInTag(found.show_only_in_tag === 1);
         setShowOnlyInCustomFeed(found.show_only_in_custom_feed === 1);
+        setCollapseRepeated(found.collapse_repeated === 1);
         const [feedTags, stamps] = await Promise.all([
           getTagsForFeed(found.id),
           getAllPublishedAtForFeed(found.id),
@@ -175,6 +178,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         nsfw: isNsfw ? 1 : 0,
         show_only_in_tag: showOnlyInTag ? 1 : 0,
         show_only_in_custom_feed: showOnlyInCustomFeed ? 1 : 0,
+        collapse_repeated: collapseRepeated ? 1 : 0,
       });
 
       // Resolve any newly-created tags and persist the membership list.
@@ -543,6 +547,25 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             <Switch
               value={showOnlyInCustomFeed}
               onValueChange={setShowOnlyInCustomFeed}
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={colors.paper}
+            />
+          </View>
+
+          <View style={styles.proxyRow}>
+            <View style={styles.proxyLabelGroup}>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                collapse repeated entries
+              </Text>
+              <Text style={[styles.proxyHint, { color: colors.inkFaint }]}>
+                In the main feed&apos;s Newest sort, hide consecutive posts from
+                this feed behind the most recent one. Tap a collapsed line to
+                reveal that post individually.
+              </Text>
+            </View>
+            <Switch
+              value={collapseRepeated}
+              onValueChange={setCollapseRepeated}
               trackColor={{ false: colors.border, true: colors.accent }}
               thumbColor={colors.paper}
             />

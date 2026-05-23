@@ -26,6 +26,11 @@ export type WebConfig = {
   groupFeeds?: GroupFeedsMode;
   backgroundSyncFrequency?: BackgroundSyncFrequency;
   backgroundSyncWifiOnly?: boolean;
+  /** Item ids that the user has individually uncollapsed in the main feed
+   *  for feeds marked "collapse repeated entries". Persists across
+   *  navigation and app restarts. Capped to a bounded length so it cannot
+   *  grow unboundedly as items age out. */
+  uncollapsedItemIds?: number[];
 };
 
 let cachedConfig: WebConfig | null = null;
@@ -116,6 +121,14 @@ function validateConfig(raw: unknown): WebConfig {
       .backgroundSyncWifiOnly;
     if (typeof backgroundSyncWifiOnly === "boolean") {
       config.backgroundSyncWifiOnly = backgroundSyncWifiOnly;
+    }
+
+    const uncollapsedItemIds = (raw as Record<string, unknown>)
+      .uncollapsedItemIds;
+    if (Array.isArray(uncollapsedItemIds)) {
+      config.uncollapsedItemIds = uncollapsedItemIds.filter(
+        (n): n is number => typeof n === "number" && Number.isFinite(n)
+      );
     }
   }
   return config;

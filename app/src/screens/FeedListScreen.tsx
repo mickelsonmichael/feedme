@@ -64,6 +64,12 @@ import {
   injectGroupDividers,
   isGroupDivider,
 } from "../groupItems";
+import {
+  type CollapsedFeedListRow,
+  applyCollapsedRuns,
+  isCollapsedItemRow,
+  isCollapsedRunRow,
+} from "../collapseRepeated";
 import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
 import { parseContentAndLinks } from "../utils/contentActions";
 import { FeedPostCard } from "../components/FeedPostCard";
@@ -108,6 +114,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [readLaterIds, setReadLaterIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [uncollapsedIds, setUncollapsedIds] = useState<Set<number>>(
+    () => new Set(loadConfig().uncollapsedItemIds ?? [])
+  );
+  const [revealedRunIds, setRevealedRunIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [revealedNsfwCardIds, setRevealedNsfwCardIds] = useState<Set<number>>(
     new Set()
   );
@@ -129,7 +141,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [customFeedIcon, setCustomFeedIcon] = useState<string | null>(null);
   const scrollToTopParam = route.params?.scrollToTop;
 
-  const flatListRef = useRef<FlashListRef<FeedListRow>>(null);
+  const flatListRef = useRef<FlashListRef<CollapsedFeedListRow>>(null);
   const markAsReadOnScrollRef = useRef(
     loadConfig().markAsReadOnScroll ?? false
   );
@@ -149,9 +161,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (!markAsReadOnScrollRef.current) return;
       for (const token of viewableItems) {
-        const row = token.item as FeedListRow;
-        if (isGroupDivider(row)) continue;
-        const item = row as FeedItemWithFeed;
+        const row = token.item as CollapsedFeedListRow;
+        if (
+          isGroupDivider(row) ||
+          isCollapsedItemRow(row) ||
+          isCollapsedRunRow(row)
+        )
+          continue;
+        const item = row;
         if (!item.read) {
           setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
           markItemRead(item.id)
@@ -329,6 +346,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
     setRetainedUnreadIds(new Set());
     setRefreshing(true);
     await loadData(true);
+    // After a manual refresh, scroll to the top so the user actually sees the
+    // freshly fetched items. This is especially important for the stacked
+    // sort, where the seed is regenerated on refresh and the entire ordering
+    // changes — leaving the user mid-list would feel disorienting. Using
+    // animated:false matches the tab-press scroll-to-top behavior; FlashList's
+    // animated scroll can stall with variable-height rows.
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    setIsFeedScrolled(false);
   };
 
   const feedDetailsById = useMemo(
@@ -475,6 +500,38 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const handleRevealCardMedia = useCallback((id: number) => {
     setRevealedNsfwCardIds((prev) => new Set(prev).add(id));
+  }, []);
+
+  // Maximum number of uncollapsed item ids we keep on disk. Old ids age out
+  // naturally as items get refreshed and dropped, but cap it so that an
+  // unbounded persisted list cannot accumulate over months of usage.
+  const UNCOLLAPSED_PERSIST_CAP = 500;
+
+  const handleUncollapseItem = useCallback((id: number) => {
+    setUncollapsedIds((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      const ids = Array.from(next);
+      const trimmed =
+        ids.length > UNCOLLAPSED_PERSIST_CAP
+          ? ids.slice(ids.length - UNCOLLAPSED_PERSIST_CAP)
+          : ids;
+      saveConfig({ uncollapsedItemIds: trimmed });
+      return next;
+    });
+  }, []);
+
+  // Reveal of a compressed-run stub is intentionally session-only: when the
+  // user re-opens the app the "first 4 + show more" cap is re-applied so the
+  // feed always stays compact.
+  const handleRevealRun = useCallback((runKey: string) => {
+    setRevealedRunIds((prev) => {
+      if (prev.has(runKey)) return prev;
+      const next = new Set(prev);
+      next.add(runKey);
+      return next;
+    });
   }, []);
 
   const handleOpenContentLink = useCallback(
@@ -736,10 +793,29 @@ export default function FeedListScreen({ navigation, route }: Props) {
   }, [sortedItems, filter, savedIds, retainedUnreadIds]);
 
   // Inject time-bucket group dividers when grouping is active and sort is newest.
-  const displayItems = useMemo<FeedListRow[]>(() => {
-    if (sort !== "newest" || groupFeeds === "none") return visibleItems;
-    return injectGroupDividers(visibleItems, groupFeeds);
-  }, [visibleItems, sort, groupFeeds]);
+  const displayItems = useMemo<CollapsedFeedListRow[]>(() => {
+    const withDividers: FeedListRow[] =
+      sort === "newest" && groupFeeds !== "none"
+        ? injectGroupDividers(visibleItems, groupFeeds)
+        : visibleItems;
+
+    // Collapse repeated runs only in the Newest sort — the Stacked sort
+    // already interleaves feeds so runs of the same feed are unlikely.
+    if (sort !== "newest") return withDividers;
+
+    const collapseFeedIds = new Set<number>();
+    for (const feed of feeds) {
+      if (feed.collapse_repeated === 1) collapseFeedIds.add(feed.id);
+    }
+    if (collapseFeedIds.size === 0) return withDividers;
+
+    return applyCollapsedRuns(
+      withDividers,
+      collapseFeedIds,
+      uncollapsedIds,
+      revealedRunIds
+    );
+  }, [visibleItems, sort, groupFeeds, feeds, uncollapsedIds, revealedRunIds]);
 
   if (loading) {
     const totalLoading = refreshProgress?.total ?? 0;
@@ -952,7 +1028,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
           ref={flatListRef}
           data={displayItems}
           keyExtractor={keyExtractor}
-          getItemType={(item) => (isGroupDivider(item) ? "divider" : "item")}
+          getItemType={(item) =>
+            isGroupDivider(item)
+              ? "divider"
+              : isCollapsedRunRow(item)
+                ? "collapsed-run"
+                : isCollapsedItemRow(item)
+                  ? "collapsed"
+                  : "item"
+          }
           onRefresh={handleRefreshAll}
           refreshing={refreshing}
           viewabilityConfig={viewabilityConfig}
@@ -981,6 +1065,68 @@ export default function FeedListScreen({ navigation, route }: Props) {
                     {item.label}
                   </Text>
                 </View>
+              );
+            }
+
+            if (isCollapsedItemRow(item)) {
+              const collapsed = item.item;
+              const truncated =
+                collapsed.title.length > 80
+                  ? collapsed.title.slice(0, 77).trimEnd() + "\u2026"
+                  : collapsed.title;
+              return (
+                <TouchableOpacity
+                  onPress={() => handleUncollapseItem(collapsed.id)}
+                  activeOpacity={0.6}
+                  accessibilityLabel={`Uncollapse: ${collapsed.title}`}
+                  accessibilityRole="button"
+                  style={[
+                    styles.collapsedRow,
+                    { borderBottomColor: colors.inkFaint },
+                  ]}
+                  testID={`collapsed-item-${collapsed.id}`}
+                >
+                  <Feather
+                    name="chevron-down"
+                    size={14}
+                    color={colors.inkFaint}
+                  />
+                  <Text
+                    style={[styles.collapsedRowText, { color: colors.inkSoft }]}
+                    numberOfLines={1}
+                  >
+                    {truncated}
+                  </Text>
+                </TouchableOpacity>
+              );
+            }
+
+            if (isCollapsedRunRow(item)) {
+              const label = `Show ${item.count} more post${item.count === 1 ? "" : "s"}`;
+              return (
+                <TouchableOpacity
+                  onPress={() => handleRevealRun(item.runKey)}
+                  activeOpacity={0.6}
+                  accessibilityLabel={label}
+                  accessibilityRole="button"
+                  style={[
+                    styles.collapsedRow,
+                    { borderBottomColor: colors.inkFaint },
+                  ]}
+                  testID={`collapsed-run-${item.runKey}`}
+                >
+                  <Feather
+                    name="more-horizontal"
+                    size={14}
+                    color={colors.inkFaint}
+                  />
+                  <Text
+                    style={[styles.collapsedRowText, { color: colors.inkSoft }]}
+                    numberOfLines={1}
+                  >
+                    {label}
+                  </Text>
+                </TouchableOpacity>
               );
             }
 
@@ -1060,8 +1206,12 @@ function isRedditCommentsUrl(url: string): boolean {
   }
 }
 
-const keyExtractor = (item: FeedListRow) =>
-  isGroupDivider(item) ? item.key : String(item.id);
+const keyExtractor = (item: CollapsedFeedListRow) => {
+  if (isGroupDivider(item)) return item.key;
+  if (isCollapsedRunRow(item)) return `collapsed-run-${item.runKey}`;
+  if (isCollapsedItemRow(item)) return `collapsed-${item.item.id}`;
+  return String(item.id);
+};
 
 function Separator() {
   return <View style={styles.separator} />;
@@ -1180,6 +1330,21 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: "uppercase",
     fontWeight: "600",
+  },
+  collapsedRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderStyle: "dashed",
+  },
+  collapsedRowText: {
+    flex: 1,
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
+    fontStyle: "italic",
   },
   cardList: {
     alignItems: "center",

@@ -14,6 +14,11 @@ export type Feed = {
    *  added through a custom feed's "Add Feed" flow so that they don't leak
    *  into the main subscription list. */
   show_only_in_custom_feed?: number;
+  /** When 1, the main feed view will collapse runs of consecutive items
+   *  from this feed (in the "Newest" sort) down to just the most recent.
+   *  Subsequent items in the run are rendered as a single muted line that
+   *  the user can tap to reveal individually. */
+  collapse_repeated?: number;
   /** HTTP `ETag` validator from the last successful refresh, used for
    *  conditional GETs (`If-None-Match`). */
   etag?: string | null;

@@ -57,6 +57,7 @@ function normalizeFeed(raw: Feed): Feed {
     nsfw: raw.nsfw ?? 0,
     show_only_in_tag: raw.show_only_in_tag ?? 0,
     show_only_in_custom_feed: raw.show_only_in_custom_feed ?? 0,
+    collapse_repeated: raw.collapse_repeated ?? 0,
     etag: raw.etag ?? null,
     last_modified: raw.last_modified ?? null,
     // Migration: existing rows persisted before adaptive scheduling existed
@@ -254,6 +255,7 @@ export async function addFeed({
   nsfw,
   show_only_in_tag,
   show_only_in_custom_feed,
+  collapse_repeated,
 }: Pick<
   Feed,
   | "title"
@@ -263,6 +265,7 @@ export async function addFeed({
   | "nsfw"
   | "show_only_in_tag"
   | "show_only_in_custom_feed"
+  | "collapse_repeated"
 >): Promise<number> {
   const state = loadState();
   if (state.feeds.some((f) => f.url === url)) {
@@ -281,6 +284,7 @@ export async function addFeed({
     nsfw: nsfw ?? 0,
     show_only_in_tag: show_only_in_tag ?? 0,
     show_only_in_custom_feed: show_only_in_custom_feed ?? 0,
+    collapse_repeated: collapse_repeated ?? 0,
     etag: null,
     last_modified: null,
     next_fetch_at: 0,
@@ -330,6 +334,7 @@ export async function updateFeed(
     | "nsfw"
     | "show_only_in_tag"
     | "show_only_in_custom_feed"
+    | "collapse_repeated"
   >
 ): Promise<void> {
   const state = loadState();
@@ -341,6 +346,7 @@ export async function updateFeed(
     feed.nsfw = fields.nsfw ?? 0;
     feed.show_only_in_tag = fields.show_only_in_tag ?? 0;
     feed.show_only_in_custom_feed = fields.show_only_in_custom_feed ?? 0;
+    feed.collapse_repeated = fields.collapse_repeated ?? 0;
     saveState(state);
   }
 }

@@ -224,6 +224,17 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
+  // Migration: add collapse_repeated column to feeds. When 1, the main
+  // feed view collapses consecutive items from this feed in the Newest
+  // sort down to the most recent. Default 0 preserves existing behaviour.
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN collapse_repeated INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Migration: add etag column to feeds if it doesn't exist yet
   try {
     await database.execAsync("ALTER TABLE feeds ADD COLUMN etag TEXT");
@@ -361,6 +372,7 @@ export async function addFeed({
   nsfw,
   show_only_in_tag,
   show_only_in_custom_feed,
+  collapse_repeated,
 }: Pick<
   Feed,
   | "title"
@@ -370,11 +382,12 @@ export async function addFeed({
   | "nsfw"
   | "show_only_in_tag"
   | "show_only_in_custom_feed"
+  | "collapse_repeated"
 >): Promise<number> {
   const database = await getDatabase();
   const result = await withWriteLock(() =>
     database.runAsync(
-      "INSERT INTO feeds (title, url, description, use_proxy, nsfw, show_only_in_tag, show_only_in_custom_feed) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO feeds (title, url, description, use_proxy, nsfw, show_only_in_tag, show_only_in_custom_feed, collapse_repeated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
       [
         title,
         url,
@@ -383,6 +396,7 @@ export async function addFeed({
         nsfw ?? 0,
         show_only_in_tag ?? 0,
         show_only_in_custom_feed ?? 0,
+        collapse_repeated ?? 0,
       ]
     )
   );
@@ -416,12 +430,13 @@ export async function updateFeed(
     | "nsfw"
     | "show_only_in_tag"
     | "show_only_in_custom_feed"
+    | "collapse_repeated"
   >
 ): Promise<void> {
   const database = await getDatabase();
   await withWriteLock(() =>
     database.runAsync(
-      "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ?, show_only_in_tag = ?, show_only_in_custom_feed = ? WHERE id = ?",
+      "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ?, show_only_in_tag = ?, show_only_in_custom_feed = ?, collapse_repeated = ? WHERE id = ?",
       [
         fields.title,
         fields.url,
@@ -429,6 +444,7 @@ export async function updateFeed(
         fields.nsfw ?? 0,
         fields.show_only_in_tag ?? 0,
         fields.show_only_in_custom_feed ?? 0,
+        fields.collapse_repeated ?? 0,
         feedId,
       ]
     )

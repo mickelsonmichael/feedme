@@ -10,7 +10,7 @@ export type GroupDivider = {
 
 export type FeedListRow = FeedItemWithFeed | GroupDivider;
 
-export function isGroupDivider(row: FeedListRow): row is GroupDivider {
+export function isGroupDivider<T>(row: T): row is T & GroupDivider {
   return (row as GroupDivider).type === "group-divider";
 }
 
