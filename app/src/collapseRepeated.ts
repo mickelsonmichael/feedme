@@ -64,12 +64,18 @@ export function makeRunKey(feedId: number, firstItemId: number): string {
 
 /**
  * Walks a sorted list of rows (newest-first, optionally containing group
- * dividers) and replaces every item belonging to a feed with the
+ * dividers) and replaces items belonging to a feed with the
  * `collapse_repeated` flag set with `CollapsedItemRow` placeholders, as
  * long as that item is part of a run of 2+ consecutive collapse-enabled
  * items (possibly from different collapse-enabled feeds — two noisy feeds
  * interleaving each other still count as a single spammy run). An isolated
  * spammy item between two non-spammy items is shown expanded as normal.
+ *
+ * Within a spammy run, the *first* item encountered from each
+ * collapse-enabled feed is shown expanded; subsequent items from that
+ * same feed (within the same run) are collapsed. The run is bounded by
+ * dividers and by non-spammy items; crossing either boundary resets the
+ * "seen feeds" set so the next run again shows one leader per feed.
  *
  * Items whose id is in `uncollapsedIds` are always shown expanded, even
  * inside a run.
@@ -101,10 +107,13 @@ export function applyCollapsedRuns(
   };
 
   // First pass: replace eligible items with CollapsedItemRow placeholders.
-  // An item collapses iff it is spammy AND has a spammy neighbour on
-  // either side (so isolated spammy items between non-spammy items stay
-  // expanded). Group dividers are treated as hard boundaries.
+  // An item collapses iff it is spammy, has a spammy neighbour on either
+  // side, and another item from the same feed has already been seen in
+  // the current run (so the first occurrence per feed stays expanded as a
+  // "leader"). Group dividers and non-spammy items act as run boundaries
+  // and reset the seen-feeds set.
   const stage: CollapsedFeedListRow[] = [];
+  const seenFeedsInRun = new Set<number>();
 
   for (let idx = 0; idx < rows.length; idx++) {
     const row = rows[idx];
@@ -114,18 +123,29 @@ export function applyCollapsedRuns(
       isCollapsedRunRow(row)
     ) {
       stage.push(row);
+      seenFeedsInRun.clear();
       continue;
     }
     const item = row;
     const itemIsSpammy = collapseRepeatedFeedIds.has(item.feed_id);
     const hasSpammyNeighbour = isSpammyAt(idx - 1) || isSpammyAt(idx + 1);
-    const shouldCollapse =
-      itemIsSpammy && hasSpammyNeighbour && !uncollapsedIds.has(item.id);
 
-    if (shouldCollapse) {
-      stage.push({ type: "collapsed-item", item });
-    } else {
+    if (!itemIsSpammy || !hasSpammyNeighbour) {
       stage.push(item);
+      seenFeedsInRun.clear();
+      continue;
+    }
+    // In a spammy run.
+    if (uncollapsedIds.has(item.id)) {
+      stage.push(item);
+      seenFeedsInRun.add(item.feed_id);
+      continue;
+    }
+    if (!seenFeedsInRun.has(item.feed_id)) {
+      seenFeedsInRun.add(item.feed_id);
+      stage.push(item);
+    } else {
+      stage.push({ type: "collapsed-item", item });
     }
   }
 
