@@ -57,3 +57,51 @@ export function toBionic(text: string): BionicToken[] {
 
   return tokens;
 }
+
+/**
+ * Applies bionic reading to the text nodes of a sanitized HTML string.
+ *
+ * Tags and attributes are left untouched. Content inside <pre>, <code>,
+ * <a>, <script>, and <style> elements is skipped so that code blocks and
+ * links are not mangled.
+ */
+export function applyBionicToHtml(html: string): string {
+  const SKIP_TAGS = new Set(["pre", "code", "a", "script", "style"]);
+  // Split on HTML tags, keeping the tags as array elements.
+  const parts = html.split(/(<[^>]*>)/);
+  let skipDepth = 0;
+  let result = "";
+
+  for (const part of parts) {
+    if (!part.startsWith("<")) {
+      // Text node — apply bionic unless inside a skip-tag.
+      if (skipDepth > 0) {
+        result += part;
+      } else {
+        result += part.replace(/&[a-zA-Z0-9#]+;|\S+/g, (word) => {
+          // Pass HTML entities through unchanged — splitting them would produce invalid HTML.
+          if (word.startsWith("&") && word.endsWith(";")) return word;
+          const { bold, rest } = splitWord(word);
+          return bold ? `<b>${bold}</b>${rest}` : rest;
+        });
+      }
+      continue;
+    }
+
+    // HTML tag — pass through and update skip depth.
+    result += part;
+    const tagMatch = part.match(/^<\/?([a-z0-9]+)/i);
+    if (tagMatch) {
+      const tagName = tagMatch[1].toLowerCase();
+      if (SKIP_TAGS.has(tagName)) {
+        if (part.startsWith("</")) {
+          skipDepth = Math.max(0, skipDepth - 1);
+        } else if (!part.endsWith("/>")) {
+          skipDepth += 1;
+        }
+      }
+    }
+  }
+
+  return result;
+}

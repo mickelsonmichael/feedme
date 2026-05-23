@@ -1,4 +1,4 @@
-import { toBionic } from "./bionicReading";
+import { applyBionicToHtml, toBionic } from "./bionicReading";
 
 describe("toBionic", () => {
   it("returns an empty array for an empty string", () => {
@@ -125,5 +125,53 @@ describe("toBionic", () => {
         expect(token.bold + token.rest).toBe(word);
       }
     }
+  });
+});
+
+describe("applyBionicToHtml", () => {
+  it("wraps the bold prefix of plain text words in <b> tags", () => {
+    const result = applyBionicToHtml("Hello world");
+    expect(result).toBe("<b>Hel</b>lo <b>wor</b>ld");
+  });
+
+  it("passes HTML tags through unmodified", () => {
+    const result = applyBionicToHtml("<p>Hello</p>");
+    expect(result).toBe("<p><b>Hel</b>lo</p>");
+  });
+
+  it("skips text inside <pre> blocks", () => {
+    const result = applyBionicToHtml("<pre>some code here</pre>");
+    expect(result).toBe("<pre>some code here</pre>");
+  });
+
+  it("skips text inside <code> blocks", () => {
+    const result = applyBionicToHtml("<code>foo()</code>");
+    expect(result).toBe("<code>foo()</code>");
+  });
+
+  it("skips text inside <a> tags", () => {
+    const result = applyBionicToHtml(
+      '<a href="https://example.com">Click here</a>'
+    );
+    expect(result).toBe('<a href="https://example.com">Click here</a>');
+  });
+
+  it("applies bionic outside but not inside nested skip tags", () => {
+    const result = applyBionicToHtml("<p>Read <code>foo</code> more</p>");
+    expect(result).toBe("<p><b>Re</b>ad <code>foo</code> <b>mo</b>re</p>");
+  });
+
+  it("handles self-closing tags without incrementing skip depth", () => {
+    const result = applyBionicToHtml("<p>Hello<br/>world</p>");
+    expect(result).toBe("<p><b>Hel</b>lo<br/><b>wor</b>ld</p>");
+  });
+
+  it("returns an empty string for empty input", () => {
+    expect(applyBionicToHtml("")).toBe("");
+  });
+
+  it("does not double-encode HTML entities in text", () => {
+    const result = applyBionicToHtml("<p>&amp; more</p>");
+    expect(result).toBe("<p>&amp; <b>mo</b>re</p>");
   });
 });

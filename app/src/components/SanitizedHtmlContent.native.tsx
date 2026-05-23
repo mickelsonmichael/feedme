@@ -13,17 +13,20 @@ const HEIGHT_REMEASURE_DELAY_MS = 150;
 const INJECTED_HEIGHT_SCRIPT = `
   (function () {
     function reportHeight() {
-      var body = document.body;
-      var doc = document.documentElement;
-      if (!body || !doc || !window.ReactNativeWebView) return;
-      var height = Math.max(
-        body.scrollHeight,
-        body.offsetHeight,
-        doc.clientHeight,
-        doc.scrollHeight,
-        doc.offsetHeight
-      );
-      window.ReactNativeWebView.postMessage(String(height));
+      if (!window.ReactNativeWebView) return;
+      // Measure the content wrapper directly. Using document.body or
+      // documentElement scroll/client/offset heights returns at least the
+      // WebView's viewport height, which on Android can cause the WebView
+      // to balloon to the full screen height when the rendered content is
+      // much smaller. The wrapper element only reports its actual layout
+      // size so we get a tight fit around the rendered HTML.
+      var el = document.getElementById("feedme-content");
+      if (!el) return;
+      var rect = el.getBoundingClientRect();
+      var height = Math.ceil(rect.height);
+      if (height > 0) {
+        window.ReactNativeWebView.postMessage(String(height));
+      }
     }
     window.addEventListener("load", reportHeight);
     window.addEventListener("resize", reportHeight);

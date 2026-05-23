@@ -27,7 +27,7 @@ import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedItem, RootStackParamList } from "../types";
 import { parseContentAndLinks } from "../utils/contentActions";
-import { toBionic } from "../utils/bionicReading";
+import { applyBionicToHtml, toBionic } from "../utils/bionicReading";
 import { openUrlWithPreference } from "../linkOpening";
 import { loadConfig } from "../storage";
 import { SanitizedHtmlContent } from "../components/SanitizedHtmlContent";
@@ -59,10 +59,11 @@ export default function FeedItemScreen({ route, navigation }: Props) {
     () => hasRenderableHtml(item.content),
     [item.content]
   );
-  const sanitizedHtmlContent = React.useMemo(
-    () => (shouldRenderHtmlContent ? sanitizeHtml(item.content ?? "") : ""),
-    [item.content, shouldRenderHtmlContent]
-  );
+  const sanitizedHtmlContent = React.useMemo(() => {
+    if (!shouldRenderHtmlContent) return "";
+    const html = sanitizeHtml(item.content ?? "");
+    return bionicReading ? applyBionicToHtml(html) : html;
+  }, [item.content, shouldRenderHtmlContent, bionicReading]);
   const redditCommentsLink = React.useMemo(
     () =>
       contentLinks.find(

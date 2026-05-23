@@ -11,6 +11,8 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import { parseContentAndLinks } from "../utils/contentActions";
+import { applyBionicToHtml, toBionic } from "../utils/bionicReading";
+import { loadConfig } from "../storage";
 import { proxiedImageUrl } from "../proxyFetch";
 import {
   extractRedditGalleryUrl,
@@ -97,10 +99,12 @@ function FeedPostCardComponent({
     () => hasRenderableHtml(item.content),
     [item.content]
   );
-  const sanitizedHtmlContent = useMemo(
-    () => (shouldRenderHtmlContent ? sanitizeHtml(item.content ?? "") : ""),
-    [item.content, shouldRenderHtmlContent]
-  );
+  const [bionicReading] = useState(() => loadConfig().bionicReading ?? false);
+  const sanitizedHtmlContent = useMemo(() => {
+    if (!shouldRenderHtmlContent) return "";
+    const html = sanitizeHtml(item.content ?? "");
+    return bionicReading ? applyBionicToHtml(html) : html;
+  }, [item.content, shouldRenderHtmlContent, bionicReading]);
   const redditCommentsLink = useMemo(
     () =>
       contentLinks.find(
@@ -438,7 +442,18 @@ function FeedPostCardComponent({
               <SanitizedHtmlContent html={sanitizedHtmlContent} />
             ) : (
               <Text style={[styles.expandContent, { color: colors.ink }]}>
-                {contentText}
+                {bionicReading
+                  ? toBionic(contentText || "").map((token, i) =>
+                      token.kind === "space" ? (
+                        token.text
+                      ) : (
+                        <Text key={i}>
+                          <Text style={styles.bionicBold}>{token.bold}</Text>
+                          {token.rest}
+                        </Text>
+                      )
+                    )
+                  : contentText}
               </Text>
             )
           ) : null}
@@ -813,6 +828,9 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     lineHeight: 20,
     fontFamily: fonts.body,
+  },
+  bionicBold: {
+    fontWeight: "700",
   },
   contentLinkRow: {
     flexDirection: "row",
