@@ -210,3 +210,46 @@ export const GROUP_FEEDS_MODES = [
   "monthly",
 ] as const;
 export type GroupFeedsMode = (typeof GROUP_FEEDS_MODES)[number];
+
+export const BACKGROUND_SYNC_FREQUENCIES = [
+  "off",
+  "15m",
+  "30m",
+  "1h",
+  "3h",
+  "6h",
+  "12h",
+  "24h",
+] as const;
+export type BackgroundSyncFrequency =
+  (typeof BACKGROUND_SYNC_FREQUENCIES)[number];
+
+/**
+ * Convert a background-sync frequency setting to a minimum interval in
+ * minutes, suitable for `BackgroundTask.registerTaskAsync({ minimumInterval })`.
+ * Returns `null` when sync is disabled. The platform minimum is 15 minutes.
+ */
+export function backgroundSyncFrequencyToMinutes(
+  frequency: BackgroundSyncFrequency
+): number | null {
+  switch (frequency) {
+    case "off":
+      return null;
+    case "15m":
+      return 15;
+    case "30m":
+      return 30;
+    case "1h":
+      return 60;
+    case "3h":
+      return 3 * 60;
+    case "6h":
+      return 6 * 60;
+    case "12h":
+      return 12 * 60;
+    case "24h":
+      return 24 * 60;
+  }
+}
+
+export const DEFAULT_BACKGROUND_SYNC_FREQUENCY: BackgroundSyncFrequency = "15m";

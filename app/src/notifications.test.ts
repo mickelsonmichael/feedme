@@ -18,9 +18,10 @@ jest.mock("expo-notifications", () => ({
   AndroidImportance: { DEFAULT: 2 },
 }));
 
-jest.mock("expo-background-fetch", () => ({
-  BackgroundFetchResult: { NewData: "newData", Failed: "failed" },
+jest.mock("expo-background-task", () => ({
+  BackgroundTaskResult: { Success: 1, Failed: 2 },
   registerTaskAsync: jest.fn(),
+  unregisterTaskAsync: jest.fn(),
 }));
 
 jest.mock("expo-task-manager", () => ({
@@ -28,7 +29,25 @@ jest.mock("expo-task-manager", () => ({
   isTaskRegisteredAsync: jest.fn().mockResolvedValue(false),
 }));
 
+jest.mock("expo-network", () => ({
+  NetworkStateType: {
+    WIFI: "WIFI",
+    CELLULAR: "CELLULAR",
+    ETHERNET: "ETHERNET",
+    VPN: "VPN",
+    UNKNOWN: "UNKNOWN",
+    NONE: "NONE",
+  },
+  getNetworkStateAsync: jest
+    .fn()
+    .mockResolvedValue({ isConnected: true, type: "WIFI" }),
+}));
+
 jest.mock("./feedRefresher", () => ({ refreshFeeds: jest.fn() }));
+
+jest.mock("./storage", () => ({
+  loadConfig: jest.fn().mockReturnValue({}),
+}));
 
 jest.mock("./database", () => ({
   getFeeds: jest.fn(),
@@ -67,10 +86,18 @@ const mockRefreshFeeds = feedRefresher.refreshFeeds as jest.MockedFunction<
   typeof feedRefresher.refreshFeeds
 >;
 import * as Notifications from "expo-notifications";
+import * as Network from "expo-network";
+import * as storage from "./storage";
 const mockSchedule =
   Notifications.scheduleNotificationAsync as jest.MockedFunction<
     typeof Notifications.scheduleNotificationAsync
   >;
+const mockGetNetworkState = Network.getNetworkStateAsync as jest.MockedFunction<
+  typeof Network.getNetworkStateAsync
+>;
+const mockLoadConfig = storage.loadConfig as jest.MockedFunction<
+  typeof storage.loadConfig
+>;
 
 import type { Feed, FeedItem, Tag } from "./types";
 
@@ -112,6 +139,12 @@ beforeEach(() => {
   mockSetFeedNotificationCheckpoint.mockResolvedValue(undefined);
   mockGetMaxItemIdForFeed.mockResolvedValue(null);
   mockGetUnseenItemsForFeed.mockResolvedValue([]);
+  mockGetNetworkState.mockResolvedValue({
+    isConnected: true,
+    type: "WIFI" as unknown as Network.NetworkStateType,
+    isInternetReachable: true,
+  });
+  mockLoadConfig.mockReturnValue({});
 });
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -159,5 +192,75 @@ describe("runBackgroundNotificationSync — null checkpoint", () => {
     // Assert
     expect(mockSchedule).not.toHaveBeenCalled();
     expect(mockSetFeedNotificationCheckpoint).not.toHaveBeenCalled();
+  });
+});
+
+describe("runBackgroundNotificationSync — wifi-only", () => {
+  it("calls refreshFeeds when wifi-only is disabled regardless of network type", async () => {
+    // Arrange — wifi-only off, on cellular
+    mockLoadConfig.mockReturnValue({ backgroundSyncWifiOnly: false });
+    mockGetNetworkState.mockResolvedValue({
+      isConnected: true,
+      type: "CELLULAR" as unknown as Network.NetworkStateType,
+      isInternetReachable: true,
+    });
+    const feed = makeFeed({ notify_last_seen_item_id: 10 });
+    mockGetFeeds.mockResolvedValue([feed]);
+
+    // Act
+    await runBackgroundNotificationSync();
+
+    // Assert
+    expect(mockRefreshFeeds).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips refreshFeeds when wifi-only is enabled and on cellular", async () => {
+    // Arrange — wifi-only on, on cellular
+    mockLoadConfig.mockReturnValue({ backgroundSyncWifiOnly: true });
+    mockGetNetworkState.mockResolvedValue({
+      isConnected: true,
+      type: "CELLULAR" as unknown as Network.NetworkStateType,
+      isInternetReachable: true,
+    });
+    const feed = makeFeed({ notify_last_seen_item_id: 10 });
+    mockGetFeeds.mockResolvedValue([feed]);
+
+    // Act
+    await runBackgroundNotificationSync();
+
+    // Assert — network refresh suppressed, but the rest of the pipeline runs
+    expect(mockRefreshFeeds).not.toHaveBeenCalled();
+  });
+
+  it("calls refreshFeeds when wifi-only is enabled and on wifi", async () => {
+    // Arrange
+    mockLoadConfig.mockReturnValue({ backgroundSyncWifiOnly: true });
+    mockGetNetworkState.mockResolvedValue({
+      isConnected: true,
+      type: "WIFI" as unknown as Network.NetworkStateType,
+      isInternetReachable: true,
+    });
+    const feed = makeFeed({ notify_last_seen_item_id: 10 });
+    mockGetFeeds.mockResolvedValue([feed]);
+
+    // Act
+    await runBackgroundNotificationSync();
+
+    // Assert
+    expect(mockRefreshFeeds).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls refreshFeeds when wifi-only is enabled but network state lookup fails", async () => {
+    // Arrange — fail-open: do not punish the user for an unknown network
+    mockLoadConfig.mockReturnValue({ backgroundSyncWifiOnly: true });
+    mockGetNetworkState.mockRejectedValue(new Error("boom"));
+    const feed = makeFeed({ notify_last_seen_item_id: 10 });
+    mockGetFeeds.mockResolvedValue([feed]);
+
+    // Act
+    await runBackgroundNotificationSync();
+
+    // Assert
+    expect(mockRefreshFeeds).toHaveBeenCalledTimes(1);
   });
 });

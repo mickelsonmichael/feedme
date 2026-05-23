@@ -1,10 +1,12 @@
 import { Platform } from "react-native";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import {
+  BACKGROUND_SYNC_FREQUENCIES,
   FEED_LAYOUT_MODES,
   GROUP_FEEDS_MODES,
   LINK_OPEN_MODES,
   THEME_MODES,
+  type BackgroundSyncFrequency,
   type FeedLayoutMode,
   type GroupFeedsMode,
   type LinkOpenMode,
@@ -22,6 +24,8 @@ export type WebConfig = {
   defaultSort?: "newest" | "stacked";
   bionicReading?: boolean;
   groupFeeds?: GroupFeedsMode;
+  backgroundSyncFrequency?: BackgroundSyncFrequency;
+  backgroundSyncWifiOnly?: boolean;
 };
 
 let cachedConfig: WebConfig | null = null;
@@ -94,6 +98,24 @@ function validateConfig(raw: unknown): WebConfig {
       GROUP_FEEDS_MODES.includes(groupFeeds as GroupFeedsMode)
     ) {
       config.groupFeeds = groupFeeds as GroupFeedsMode;
+    }
+
+    const backgroundSyncFrequency = (raw as Record<string, unknown>)
+      .backgroundSyncFrequency;
+    if (
+      typeof backgroundSyncFrequency === "string" &&
+      BACKGROUND_SYNC_FREQUENCIES.includes(
+        backgroundSyncFrequency as BackgroundSyncFrequency
+      )
+    ) {
+      config.backgroundSyncFrequency =
+        backgroundSyncFrequency as BackgroundSyncFrequency;
+    }
+
+    const backgroundSyncWifiOnly = (raw as Record<string, unknown>)
+      .backgroundSyncWifiOnly;
+    if (typeof backgroundSyncWifiOnly === "boolean") {
+      config.backgroundSyncWifiOnly = backgroundSyncWifiOnly;
     }
   }
   return config;

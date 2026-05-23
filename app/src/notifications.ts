@@ -1,6 +1,7 @@
 import { Platform } from "react-native";
-import * as BackgroundFetch from "expo-background-fetch";
+import * as BackgroundTask from "expo-background-task";
 import Constants, { ExecutionEnvironment } from "expo-constants";
+import * as Network from "expo-network";
 import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
 import type { EventSubscription } from "expo-modules-core";
@@ -14,13 +15,18 @@ import {
   setFeedNotificationCheckpoint,
 } from "./database";
 import { refreshFeeds } from "./feedRefresher";
+import { loadConfig } from "./storage";
+import {
+  DEFAULT_BACKGROUND_SYNC_FREQUENCY,
+  backgroundSyncFrequencyToMinutes,
+  type BackgroundSyncFrequency,
+} from "./types";
 
 const BACKGROUND_NOTIFICATION_TASK = "feedme-background-notification-sync";
 const FEED_CHANNEL_ID = "feedme-feed-updates";
 const TAG_CHANNEL_ID = "feedme-tag-updates";
 const MAX_NOTIFICATIONS_PER_FEED = 5;
 const DAILY_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const BACKGROUND_FETCH_INTERVAL_SECONDS = 15 * 60;
 
 type NotificationOpenPayload = {
   itemId: number;
@@ -36,7 +42,52 @@ type NotificationOpenPayload = {
 };
 
 let taskDefined = false;
-let taskRegistered = false;
+let currentRegisteredIntervalMinutes: number | null = null;
+
+function getBackgroundSyncFrequency(): BackgroundSyncFrequency {
+  try {
+    return (
+      loadConfig().backgroundSyncFrequency ?? DEFAULT_BACKGROUND_SYNC_FREQUENCY
+    );
+  } catch {
+    return DEFAULT_BACKGROUND_SYNC_FREQUENCY;
+  }
+}
+
+function getBackgroundSyncWifiOnly(): boolean {
+  try {
+    return loadConfig().backgroundSyncWifiOnly ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns `true` when the device is currently connected via Wi-Fi (or any
+ * non-cellular link such as ethernet on a tablet dock). Returns `true` if the
+ * network state cannot be determined — we'd rather sync than silently skip.
+ */
+async function isOnWifi(): Promise<boolean> {
+  try {
+    const state = await Network.getNetworkStateAsync();
+    if (!state.isConnected) {
+      return false;
+    }
+    // `type` may be undefined on some platforms; treat unknown as wifi to
+    // avoid surprising the user with missed syncs.
+    const type = state.type;
+    if (type === undefined || type === null) {
+      return true;
+    }
+    return (
+      type === Network.NetworkStateType.WIFI ||
+      type === Network.NetworkStateType.ETHERNET ||
+      type === Network.NetworkStateType.VPN
+    );
+  } catch {
+    return true;
+  }
+}
 
 function isNativeNotificationsSupported(): boolean {
   if (Platform.OS === "web") {
@@ -96,7 +147,7 @@ export async function initializeNotificationSystem(): Promise<void> {
     vibrationPattern: [0, 200, 120, 200],
   });
 
-  await registerBackgroundNotificationTask();
+  await updateBackgroundSyncSchedule();
 }
 
 function ensureTaskDefined(): void {
@@ -108,9 +159,9 @@ function ensureTaskDefined(): void {
     TaskManager.defineTask(BACKGROUND_NOTIFICATION_TASK, async () => {
       try {
         await runBackgroundNotificationSync();
-        return BackgroundFetch.BackgroundFetchResult.NewData;
+        return BackgroundTask.BackgroundTaskResult.Success;
       } catch {
-        return BackgroundFetch.BackgroundFetchResult.Failed;
+        return BackgroundTask.BackgroundTaskResult.Failed;
       }
     });
   } catch (error) {
@@ -129,22 +180,75 @@ function ensureTaskDefined(): void {
   }
 }
 
-async function registerBackgroundNotificationTask(): Promise<void> {
-  if (taskRegistered || !isNativeNotificationsSupported()) {
+async function registerBackgroundNotificationTask(
+  intervalMinutes: number
+): Promise<void> {
+  if (!isNativeNotificationsSupported()) {
     return;
   }
   ensureTaskDefined();
-  const isRegistered = await TaskManager.isTaskRegisteredAsync(
-    BACKGROUND_NOTIFICATION_TASK
-  );
-  if (!isRegistered) {
-    await BackgroundFetch.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK, {
-      minimumInterval: BACKGROUND_FETCH_INTERVAL_SECONDS,
-      stopOnTerminate: false,
-      startOnBoot: true,
-    });
+  await BackgroundTask.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK, {
+    minimumInterval: intervalMinutes,
+  });
+  currentRegisteredIntervalMinutes = intervalMinutes;
+}
+
+async function unregisterBackgroundNotificationTask(): Promise<void> {
+  if (!isNativeNotificationsSupported()) {
+    return;
   }
-  taskRegistered = true;
+  try {
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(
+      BACKGROUND_NOTIFICATION_TASK
+    );
+    if (isRegistered) {
+      await BackgroundTask.unregisterTaskAsync(BACKGROUND_NOTIFICATION_TASK);
+    }
+  } catch (error) {
+    console.warn(
+      "[feedme] Failed to unregister background notification task:",
+      error
+    );
+  }
+  currentRegisteredIntervalMinutes = null;
+}
+
+/**
+ * Reconciles the registered background-sync task with the user's current
+ * frequency setting. Safe to call repeatedly — only re-registers when the
+ * interval actually changes, and unregisters entirely when sync is `off`.
+ * Call this on app start and whenever the user changes the frequency.
+ */
+export async function updateBackgroundSyncSchedule(): Promise<void> {
+  if (!isNativeNotificationsSupported()) {
+    return;
+  }
+  const frequency = getBackgroundSyncFrequency();
+  const intervalMinutes = backgroundSyncFrequencyToMinutes(frequency);
+
+  if (intervalMinutes === null) {
+    await unregisterBackgroundNotificationTask();
+    return;
+  }
+
+  try {
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(
+      BACKGROUND_NOTIFICATION_TASK
+    );
+    if (isRegistered && currentRegisteredIntervalMinutes === intervalMinutes) {
+      return;
+    }
+    if (isRegistered) {
+      try {
+        await BackgroundTask.unregisterTaskAsync(BACKGROUND_NOTIFICATION_TASK);
+      } catch {
+        // ignore; re-register below
+      }
+    }
+    await registerBackgroundNotificationTask(intervalMinutes);
+  } catch (error) {
+    console.warn("[feedme] Failed to update background sync schedule:", error);
+  }
 }
 
 export async function runBackgroundNotificationSync(): Promise<void> {
@@ -156,7 +260,13 @@ export async function runBackgroundNotificationSync(): Promise<void> {
   if (feeds.length === 0) {
     return;
   }
-  await refreshFeeds(feeds);
+
+  // Honour the "sync only on Wi-Fi" setting. We still proceed to deliver
+  // notifications for any items we already have locally — the wifi-only gate
+  // only suppresses the network refresh, not the notification dispatch.
+  if (!getBackgroundSyncWifiOnly() || (await isOnWifi())) {
+    await refreshFeeds(feeds);
+  }
 
   const tags = await getTags();
   const enabledTagIds = new Set(

@@ -30,6 +30,10 @@ jest.mock("../storage", () => ({
   saveConfig: jest.fn(),
 }));
 
+jest.mock("../notifications", () => ({
+  updateBackgroundSyncSchedule: jest.fn().mockResolvedValue(undefined),
+}));
+
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Settings">,
   NativeStackScreenProps<RootStackParamList>

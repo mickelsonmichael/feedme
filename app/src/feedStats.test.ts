@@ -54,7 +54,10 @@ describe("computeFrequency", () => {
   it("gives accurate rate when feed item cap means history is shorter than window", () => {
     // Arrange: high-volume feed (10/day) but RSS cap means only 7 days stored.
     // 70 posts over the last 7 days — all fall within the 90-day window.
-    const stamps = Array.from({ length: 70 }, (_, i) => NOW - (i * 7 * DAY) / 70);
+    const stamps = Array.from(
+      { length: 70 },
+      (_, i) => NOW - (i * 7 * DAY) / 70
+    );
     // Act
     const result = computeFrequency(stamps, NOW);
     // Assert

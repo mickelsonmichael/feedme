@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   View,
   Text,
   StyleSheet,
@@ -10,6 +11,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
+import * as BackgroundTask from "expo-background-task";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -17,12 +19,19 @@ import { fonts, fontSize, radii, spacing } from "../theme";
 import {
   RootStackParamList,
   TabParamList,
+  type BackgroundSyncFrequency,
   type FeedLayoutMode,
   type GroupFeedsMode,
   type LinkOpenMode,
 } from "../types";
 import { useTheme, type ThemeMode } from "../context/ThemeContext";
 import { loadConfig, saveConfig } from "../storage";
+import {
+  runBackgroundNotificationSync,
+  updateBackgroundSyncSchedule,
+} from "../notifications";
+import { refreshFeeds } from "../feedRefresher";
+import { getFeeds } from "../database";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Settings">,
@@ -153,8 +162,7 @@ function Dropdown<T extends string>({
 }) {
   const { colors } = useTheme();
   const [open, setOpen] = React.useState(false);
-  const selectedLabel =
-    options.find((o) => o.value === value)?.label ?? value;
+  const selectedLabel = options.find((o) => o.value === value)?.label ?? value;
 
   return (
     <>
@@ -358,6 +366,101 @@ const layoutIconStyles = StyleSheet.create({
   },
 });
 
+/**
+ * Dev-only panel for end-to-end testing of the background notification
+ * pipeline. Rendered only when `__DEV__` is true.
+ *
+ *  - "Run sync now (in-process)" invokes `runBackgroundNotificationSync`
+ *    directly from JS. Verifies the refresh + dispatch logic without
+ *    involving WorkManager.
+ *  - "Trigger OS background worker" calls expo-background-task's debug-only
+ *    `triggerTaskWorkerForTestingAsync`, which actually fires the registered
+ *    WorkManager job. Use this to verify the OS-scheduled path without
+ *    waiting for Android's 15-minute periodic minimum.
+ */
+function BackgroundSyncDevPanel() {
+  const { colors } = useTheme();
+  const [busy, setBusy] = React.useState<null | "in-process" | "os">(null);
+
+  const runInProcess = React.useCallback(async () => {
+    if (busy) return;
+    setBusy("in-process");
+    try {
+      // Force-refresh all feeds first to bypass per-feed adaptive
+      // scheduling (`next_fetch_at`), which otherwise skips recently
+      // fetched feeds during the regular sync. This makes the dev panel
+      // reliably exercise the full fetch + notify pipeline.
+      const feeds = await getFeeds();
+      await refreshFeeds(feeds, { force: true });
+      await runBackgroundNotificationSync();
+      Alert.alert(
+        "Background sync",
+        "In-process sync completed. Check the notification tray."
+      );
+    } catch (e) {
+      Alert.alert("Background sync failed", (e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }, [busy]);
+
+  const triggerOsWorker = React.useCallback(async () => {
+    if (busy) return;
+    setBusy("os");
+    try {
+      const fired = await BackgroundTask.triggerTaskWorkerForTestingAsync();
+      Alert.alert(
+        "OS background worker",
+        fired
+          ? "WorkManager was asked to run the registered task. Watch logcat for the result."
+          : "WorkManager did not accept the trigger (release build or no task registered)."
+      );
+    } catch (e) {
+      Alert.alert("Trigger failed", (e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }, [busy]);
+
+  return (
+    <>
+      <SectionHeading label="Background sync (debug)" />
+      <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
+        Dev-only tools for verifying the notification pipeline end-to-end.
+        Hidden in release builds.
+      </Text>
+      <TouchableOpacity
+        onPress={runInProcess}
+        disabled={busy !== null}
+        activeOpacity={0.7}
+        style={[
+          styles.devButton,
+          { borderColor: colors.border, backgroundColor: colors.paper },
+          busy !== null && { opacity: 0.5 },
+        ]}
+      >
+        <Text style={[styles.devButtonText, { color: colors.ink }]}>
+          {busy === "in-process" ? "Running…" : "Run sync now (in-process)"}
+        </Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={triggerOsWorker}
+        disabled={busy !== null}
+        activeOpacity={0.7}
+        style={[
+          styles.devButton,
+          { borderColor: colors.border, backgroundColor: colors.paper },
+          busy !== null && { opacity: 0.5 },
+        ]}
+      >
+        <Text style={[styles.devButtonText, { color: colors.ink }]}>
+          {busy === "os" ? "Triggering…" : "Trigger OS background worker"}
+        </Text>
+      </TouchableOpacity>
+    </>
+  );
+}
+
 export default function SettingsScreen({ navigation }: Props) {
   const { colors, mode, setMode } = useTheme();
   const isMobile = Platform.OS !== "web";
@@ -381,6 +484,13 @@ export default function SettingsScreen({ navigation }: Props) {
   );
   const [groupFeeds, setGroupFeeds] = React.useState<GroupFeedsMode>(
     () => loadConfig().groupFeeds ?? "none"
+  );
+  const [backgroundSyncFrequency, setBackgroundSyncFrequency] =
+    React.useState<BackgroundSyncFrequency>(
+      () => loadConfig().backgroundSyncFrequency ?? "15m"
+    );
+  const [backgroundSyncWifiOnly, setBackgroundSyncWifiOnly] = React.useState(
+    () => loadConfig().backgroundSyncWifiOnly ?? false
   );
 
   const handleLayoutChange = React.useCallback((nextLayout: FeedLayoutMode) => {
@@ -451,6 +561,33 @@ export default function SettingsScreen({ navigation }: Props) {
       console.warn("[feedme] Failed to persist groupFeeds:", e);
     }
   }, []);
+
+  const handleBackgroundSyncFrequencyChange = React.useCallback(
+    (value: BackgroundSyncFrequency) => {
+      setBackgroundSyncFrequency(value);
+      try {
+        saveConfig({ backgroundSyncFrequency: value });
+      } catch (e) {
+        console.warn("[feedme] Failed to persist backgroundSyncFrequency:", e);
+      }
+      updateBackgroundSyncSchedule().catch((e) => {
+        console.warn("[feedme] Failed to update background sync schedule:", e);
+      });
+    },
+    []
+  );
+
+  const handleBackgroundSyncWifiOnlyChange = React.useCallback(
+    (value: boolean) => {
+      setBackgroundSyncWifiOnly(value);
+      try {
+        saveConfig({ backgroundSyncWifiOnly: value });
+      } catch (e) {
+        console.warn("[feedme] Failed to persist backgroundSyncWifiOnly:", e);
+      }
+    },
+    []
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
@@ -541,6 +678,41 @@ export default function SettingsScreen({ navigation }: Props) {
           </>
         ) : null}
 
+        {isMobile ? (
+          <>
+            <SectionHeading label="Background sync" />
+            <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
+              How often the app refreshes your feeds in the background to check
+              for new items and deliver notifications.
+            </Text>
+            <Dropdown
+              value={backgroundSyncFrequency}
+              options={[
+                { value: "off", label: "Off" },
+                { value: "15m", label: "Every 15 minutes" },
+                { value: "30m", label: "Every 30 minutes" },
+                { value: "1h", label: "Every hour" },
+                { value: "3h", label: "Every 3 hours" },
+                { value: "6h", label: "Every 6 hours" },
+                { value: "12h", label: "Every 12 hours" },
+                { value: "24h", label: "Every 24 hours" },
+              ]}
+              onChange={handleBackgroundSyncFrequencyChange}
+            />
+            <View style={{ height: spacing.sm }} />
+            <ToggleRow
+              label="Sync only on Wi-Fi"
+              value={backgroundSyncWifiOnly}
+              onValueChange={handleBackgroundSyncWifiOnlyChange}
+            />
+            <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
+              When on, background syncs are skipped on cellular networks. Manual
+              pull-to-refresh always works.
+            </Text>
+            {__DEV__ ? <BackgroundSyncDevPanel /> : null}
+          </>
+        ) : null}
+
         <SectionHeading label="Import / export" />
         <Row
           label="Import / export"
@@ -592,6 +764,18 @@ const styles = StyleSheet.create({
     fontSize: fontSize.meta,
     fontFamily: fonts.sans,
     marginBottom: spacing.xs,
+  },
+  devButton: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xs,
+    alignSelf: "flex-start",
+  },
+  devButtonText: {
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
   },
   segment: {
     paddingHorizontal: spacing.md,
