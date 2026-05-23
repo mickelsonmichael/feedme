@@ -121,7 +121,14 @@ export function computeFrequency(
   let window: FrequencyStat["window"];
 
   if (inWindow.length >= MIN_SAMPLES_FOR_WINDOW) {
-    postsPerDay = inWindow.length / (FREQUENCY_WINDOW_MS / MS_PER_DAY);
+    // Divide by the actual observed span within the window, not the full
+    // 90-day constant.  RSS feeds cap their item count (often 10–75 items),
+    // so a high-volume feed may only have a few days of history stored even
+    // though items fall within the 90-day window.  Using a fixed 90-day
+    // denominator would massively underestimate the true posting rate.
+    const oldestInWindow = inWindow[inWindow.length - 1];
+    const spanMs = Math.max(now - oldestInWindow, MS_PER_DAY);
+    postsPerDay = inWindow.length / (spanMs / MS_PER_DAY);
     window = "90d";
   } else {
     const newest = sorted[0];

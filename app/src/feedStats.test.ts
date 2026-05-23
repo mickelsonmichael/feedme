@@ -39,14 +39,29 @@ describe("computeFrequency", () => {
 
   it("uses the 90-day window when enough samples land inside it", () => {
     // Arrange: 30 posts evenly spread across the last 60 days → 0.5 / day
+    // Oldest stamp is NOW - 58*DAY (i=29), so span = 58 days.
     const stamps = Array.from({ length: 30 }, (_, i) => NOW - i * 2 * DAY);
     // Act
     const result = computeFrequency(stamps, NOW);
     // Assert
     expect(result.window).toBe("90d");
-    expect(result.postsPerDay).toBeCloseTo(30 / 90, 5);
-    // 30 / 90 ≈ 0.33 per day → "2 per week" (0.33 * 7 = 2.33)
-    expect(result.label).toBe("2 per week");
+    // Rate is computed over the actual observed span (58 days), not a fixed 90.
+    expect(result.postsPerDay).toBeCloseTo(30 / 58, 5);
+    // 30 / 58 ≈ 0.517 per day → "4 per week" (0.517 * 7 ≈ 3.62)
+    expect(result.label).toBe("4 per week");
+  });
+
+  it("gives accurate rate when feed item cap means history is shorter than window", () => {
+    // Arrange: high-volume feed (10/day) but RSS cap means only 7 days stored.
+    // 70 posts over the last 7 days — all fall within the 90-day window.
+    const stamps = Array.from({ length: 70 }, (_, i) => NOW - (i * 7 * DAY) / 70);
+    // Act
+    const result = computeFrequency(stamps, NOW);
+    // Assert
+    expect(result.window).toBe("90d");
+    // Should be ~10/day, not the ~0.78/day you'd get by dividing by 90.
+    expect(result.postsPerDay).toBeGreaterThan(5);
+    expect(result.label).toMatch(/per day/);
   });
 
   it("falls back to lifetime when there aren't enough recent samples", () => {
