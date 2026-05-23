@@ -673,8 +673,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
     hasSearch,
   ]);
 
+  // Building the per-item search haystack is O(n * content) and was previously
+  // recomputed on every change to `items` (i.e. every focus return), even when
+  // the user wasn't searching. Skip the work entirely unless a search is
+  // active — the map only feeds the searched-items filter below.
   const searchHaystacks = useMemo(() => {
     const map = new Map<number, string>();
+    if (!hasSearch) return map;
     for (const item of items) {
       const sourceFeed = feedDetailsById.get(item.feed_id);
       const haystack = [
@@ -692,7 +697,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       map.set(item.id, haystack);
     }
     return map;
-  }, [items, feedDetailsById]);
+  }, [items, feedDetailsById, hasSearch]);
 
   const searchedItems = useMemo(() => {
     if (!hasSearch) {
