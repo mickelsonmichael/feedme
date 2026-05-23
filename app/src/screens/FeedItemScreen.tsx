@@ -583,9 +583,9 @@ const styles = StyleSheet.create({
   },
   title: {
     fontFamily: fonts.heading,
-    fontWeight: "700",
-    fontSize: fontSize.h1,
-    lineHeight: 34,
+    fontWeight: "500",
+    fontSize: fontSize.h2,
+    lineHeight: 26,
   },
   separator: {
     height: StyleSheet.hairlineWidth,

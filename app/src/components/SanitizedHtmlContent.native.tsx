@@ -53,7 +53,7 @@ export function SanitizedHtmlContent({ html }: Props) {
         color: ${colors.ink} !important;
         background: transparent !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, ${fonts.sans};
-        font-size: 17px;
+        font-size: 13px;
         line-height: 1.45;
         word-wrap: break-word;
       }
@@ -73,7 +73,17 @@ export function SanitizedHtmlContent({ html }: Props) {
         max-width: 100%;
         height: auto;
       }
-      pre, code { white-space: pre-wrap; }
+      pre {
+        white-space: pre-wrap;
+        background: ${colors.paperWarm} !important;
+        border: 1px solid ${colors.border};
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-family: Menlo, Monaco, "Courier New", monospace;
+        font-size: 11px;
+        overflow-x: auto;
+      }
+      code { white-space: pre-wrap; }
     </style>
   </head>
   <body><div id="feedme-content">${html}</div></body>

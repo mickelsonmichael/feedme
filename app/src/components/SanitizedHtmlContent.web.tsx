@@ -13,6 +13,16 @@ export function SanitizedHtmlContent({ html }: Props) {
   const scopeClass = `feedme-html-${instanceClass}`;
   const scopedCss = `
     .${scopeClass} a, .${scopeClass} a * { color: ${colors.accent}; }
+    .${scopeClass} pre {
+      white-space: pre-wrap;
+      background: ${colors.paperWarm};
+      border: 1px solid ${colors.border};
+      border-radius: 6px;
+      padding: 10px 12px;
+      font-family: Menlo, Monaco, "Courier New", monospace;
+      font-size: 11px;
+      overflow-x: auto;
+    }
   `;
 
   return (

@@ -47,14 +47,14 @@ export default function RawXmlScreen({ route, navigation }: Props) {
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
       <View style={[styles.toolbar, { borderBottomColor: colors.border }]}>
         <TouchableOpacity
-          style={[styles.toolbarBtn, { borderColor: colors.border }]}
+          style={styles.toolbarBtn}
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
-          accessibilityLabel="Back"
+          accessibilityLabel="Close"
         >
-          <Feather name="arrow-left" size={16} color={colors.ink} />
+          <Feather name="x" size={16} color={colors.ink} />
           <Text style={[styles.toolbarBtnText, { color: colors.ink }]}>
-            Back
+            Close
           </Text>
         </TouchableOpacity>
 
@@ -62,10 +62,7 @@ export default function RawXmlScreen({ route, navigation }: Props) {
           <TouchableOpacity
             style={[
               styles.toolbarBtn,
-              {
-                borderColor: copied ? colors.accent : colors.border,
-                backgroundColor: copied ? colors.accent : colors.paper,
-              },
+              { backgroundColor: copied ? colors.accent : "transparent" },
             ]}
             onPress={handleCopy}
             activeOpacity={0.7}
@@ -141,18 +138,17 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   toolbarBtn: {
-    borderWidth: 1,
-    borderRadius: radii.sm,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
     flexDirection: "row",
     alignItems: "center",
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.sm,
     gap: 4,
   },
   toolbarBtnText: {
     fontFamily: fonts.sans,
     fontWeight: "600",
-    fontSize: fontSize.meta,
+    fontSize: fontSize.body,
   },
   scroll: {
     flex: 1,
