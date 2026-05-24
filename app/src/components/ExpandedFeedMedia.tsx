@@ -1026,7 +1026,6 @@ const styles = StyleSheet.create({
     maxWidth: MAX_EXPANDED_IMAGE_EDGE,
     borderWidth: 1,
     borderRadius: radii.md,
-    borderStyle: "dashed",
     minHeight: 120,
     alignItems: "center",
     justifyContent: "center",

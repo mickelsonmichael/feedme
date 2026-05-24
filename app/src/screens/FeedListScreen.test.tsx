@@ -583,16 +583,26 @@ describe("FeedListScreen", () => {
       await Promise.resolve();
     });
 
-    const unreadFilter = tree!.root
-      .findAllByType(TouchableOpacity)
-      .find((node: renderer.ReactTestInstance) => {
-        const labels = node.findAllByType(Text);
-        return labels.some((label) => label.props.children === "Unread");
-      });
-    expect(unreadFilter).toBeTruthy();
-
+    const filterTrigger = tree!.root
+      .findAllByProps({ accessibilityLabel: "Filter posts" })
+      .find(
+        (node: renderer.ReactTestInstance) =>
+          typeof node.props.onPress === "function"
+      );
     await act(async () => {
-      await unreadFilter!.props.onPress();
+      await filterTrigger!.props.onPress();
+    });
+    const unreadOption = tree!.root
+      .findAllByProps({
+        accessibilityLabel: "Unread",
+        accessibilityRole: "menuitem",
+      })
+      .find(
+        (node: renderer.ReactTestInstance) =>
+          typeof node.props.onPress === "function"
+      );
+    await act(async () => {
+      await unreadOption!.props.onPress();
     });
 
     const expandButton = tree!.root.findByProps({
@@ -1179,17 +1189,26 @@ describe("FeedListScreen", () => {
     });
 
     // Activate the unread filter.
-    const unreadFilter = tree!.root
-      .findAllByType(TouchableOpacity)
-      .find((node: renderer.ReactTestInstance) => {
-        const labels = node.findAllByType(Text);
-        return labels.some(
-          (label: renderer.ReactTestInstance) =>
-            label.props.children === "Unread"
-        );
-      });
+    const filterTrigger = tree!.root
+      .findAllByProps({ accessibilityLabel: "Filter posts" })
+      .find(
+        (node: renderer.ReactTestInstance) =>
+          typeof node.props.onPress === "function"
+      );
     await act(async () => {
-      await unreadFilter!.props.onPress();
+      await filterTrigger!.props.onPress();
+    });
+    const unreadOption = tree!.root
+      .findAllByProps({
+        accessibilityLabel: "Unread",
+        accessibilityRole: "menuitem",
+      })
+      .find(
+        (node: renderer.ReactTestInstance) =>
+          typeof node.props.onPress === "function"
+      );
+    await act(async () => {
+      await unreadOption!.props.onPress();
     });
 
     // Item should be visible in the unread filter.

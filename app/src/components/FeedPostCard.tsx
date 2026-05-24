@@ -352,10 +352,13 @@ function FeedPostCardComponent({
         style={[
           styles.actionRow,
           {
-            borderTopColor: colors.inkFaint,
+            borderTopColor: colors.border,
+            borderTopWidth: 0.5,
             paddingHorizontal: spacing.md,
+            paddingTop: spacing.xs,
             paddingBottom: spacing.sm,
             justifyContent: isLargeScreen ? "flex-start" : "space-evenly",
+            marginTop: 0,
           },
         ]}
       >
@@ -720,7 +723,7 @@ function arePropsEqual(prev: Props, next: Props): boolean {
 
 const styles = StyleSheet.create({
   card: {
-    borderWidth: 1,
+    borderWidth: 0.5,
     borderRadius: radii.md,
     overflow: "hidden",
   },
@@ -816,13 +819,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderStyle: "dashed",
   },
   expandPanel: {
     padding: spacing.md,
     gap: spacing.md,
     borderTopWidth: 1,
-    borderStyle: "dashed",
   },
   expandContent: {
     fontSize: fontSize.body,

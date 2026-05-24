@@ -740,7 +740,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   rowLabel: {
     flex: 1,

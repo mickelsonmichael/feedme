@@ -51,7 +51,8 @@ import {
   TabParamList,
 } from "../types";
 import { toggleExpandedId } from "../expandItemIds";
-import { MetaText, Pill } from "../components/ui";
+import { MetaText } from "../components/ui";
+import { CompactMenu } from "../components/CompactMenu";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { useHeaderContent } from "../context/HeaderContentContext";
@@ -846,36 +847,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
-      {!isWeb ? (
-        <View
-          style={[styles.searchWrap, { borderBottomColor: colors.inkFaint }]}
-        >
-          {isSearchVisible ? (
-            searchField
-          ) : (
-            <TouchableOpacity
-              style={[
-                styles.searchOpenBtn,
-                {
-                  borderColor: colors.border,
-                  backgroundColor: colors.paperWarm,
-                },
-              ]}
-              onPress={() => setMobileSearchOpen(true)}
-              accessibilityLabel="Open search"
-              activeOpacity={0.8}
-            >
-              <Feather name="search" size={16} color={colors.inkSoft} />
-              <Text
-                style={[styles.searchOpenBtnText, { color: colors.inkSoft }]}
-              >
-                Search all feeds
-              </Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      ) : null}
-
       {selectedFeedTitle ? (
         <View style={[styles.scopeRow, { borderBottomColor: colors.inkFaint }]}>
           <Feather
@@ -895,55 +866,65 @@ export default function FeedListScreen({ navigation, route }: Props) {
         </View>
       ) : null}
 
-      {/* Filter + sort pills row */}
+      {/* Compact filter + sort + search controls */}
       <View style={[styles.filterRow, { borderBottomColor: colors.inkFaint }]}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.filterPills}
-        >
-          <TouchableOpacity
-            onPress={() => setFilter("all")}
-            activeOpacity={0.7}
-          >
-            <Pill label="All" variant={filter === "all" ? "accent" : "soft"} />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={() => setFilter("unread")}
-            activeOpacity={0.7}
-          >
-            <Pill
-              label="Unread"
-              variant={filter === "unread" ? "accent" : "soft"}
-            />
-          </TouchableOpacity>
-          <View
-            style={[styles.pillDivider, { backgroundColor: colors.inkFaint }]}
+        <View style={styles.filterControls}>
+          <CompactMenu<FilterMode>
+            value={filter === "starred" ? "all" : filter}
+            options={[
+              { value: "all", label: "All" },
+              { value: "unread", label: "Unread" },
+            ]}
+            onChange={setFilter}
+            accessibilityLabel="Filter posts"
           />
-          <TouchableOpacity
-            onPress={() => setSort("newest")}
-            activeOpacity={0.7}
-          >
-            <Pill
-              label="Newest"
-              variant={sort === "newest" ? "accent" : "soft"}
-            />
-          </TouchableOpacity>
           {selectedFeedId === undefined &&
           selectedTagId === undefined &&
           selectedCustomFeedId === undefined ? (
-            <TouchableOpacity
-              onPress={() => setSort("stacked")}
-              activeOpacity={0.7}
-            >
-              <Pill
-                label="Stacked"
-                variant={sort === "stacked" ? "accent" : "soft"}
-              />
-            </TouchableOpacity>
-          ) : null}
-        </ScrollView>
+            <CompactMenu<SortMode>
+              value={sort}
+              options={[
+                { value: "newest", label: "Newest" },
+                { value: "stacked", label: "Stacked" },
+              ]}
+              onChange={setSort}
+              accessibilityLabel="Sort posts"
+            />
+          ) : (
+            <CompactMenu<SortMode>
+              value={sort}
+              options={[{ value: "newest", label: "Newest" }]}
+              onChange={setSort}
+              accessibilityLabel="Sort posts"
+            />
+          )}
+        </View>
+        {!isWeb ? (
+          <TouchableOpacity
+            onPress={() => setMobileSearchOpen((open) => !open)}
+            accessibilityLabel={
+              isSearchVisible ? "Close search" : "Open search"
+            }
+            activeOpacity={0.7}
+            hitSlop={8}
+            style={styles.searchIconBtn}
+          >
+            <Feather
+              name="search"
+              size={16}
+              color={isSearchVisible ? colors.accent : colors.inkSoft}
+            />
+          </TouchableOpacity>
+        ) : null}
       </View>
+
+      {!isWeb && isSearchVisible ? (
+        <View
+          style={[styles.searchWrap, { borderBottomColor: colors.inkFaint }]}
+        >
+          {searchField}
+        </View>
+      ) : null}
 
       {refreshing && refreshProgress && refreshProgress.total > 0 ? (
         <View
@@ -1229,9 +1210,21 @@ const styles = StyleSheet.create({
   filterRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: spacing.sm,
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
+  },
+  filterControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  searchIconBtn: {
+    width: 30,
+    height: 30,
+    alignItems: "center",
+    justifyContent: "center",
   },
   scopeRow: {
     flexDirection: "row",
@@ -1240,7 +1233,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   scopeText: {
     fontFamily: fonts.sans,
@@ -1251,7 +1243,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   searchRow: {
     width: "100%",
@@ -1269,38 +1260,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     padding: 0,
   },
-  searchOpenBtn: {
-    borderWidth: 1,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
-  searchOpenBtnText: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.body,
-    fontWeight: "600",
-  },
-  filterPills: {
-    paddingHorizontal: spacing.lg,
-    gap: spacing.sm,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  pillDivider: {
-    width: 1,
-    height: 16,
-    marginHorizontal: spacing.xs,
-  },
   refreshProgressRow: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   progressSpacer: {
     flex: 1,
@@ -1322,7 +1287,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     marginTop: spacing.xs,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   groupDividerLabel: {
     fontSize: fontSize.xs,
@@ -1338,7 +1302,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderStyle: "dashed",
   },
   collapsedRowText: {
     flex: 1,
@@ -1411,7 +1374,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderStyle: "dashed",
   },
   actionMeta: {
     fontSize: fontSize.meta,
@@ -1421,7 +1383,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
     borderTopWidth: 1,
-    borderStyle: "dashed",
   },
   expandContent: {
     fontSize: fontSize.body,

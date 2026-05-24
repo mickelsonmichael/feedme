@@ -379,7 +379,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
     gap: spacing.sm,
   },
   spacer: { flex: 1 },
@@ -419,7 +418,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   rawModalTitle: {
     flex: 1,

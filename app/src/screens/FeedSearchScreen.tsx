@@ -407,7 +407,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing.md,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
     paddingVertical: spacing.md,
   },
   resultBody: { flex: 1, gap: 2 },

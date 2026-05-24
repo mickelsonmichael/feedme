@@ -438,7 +438,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.md,
     paddingBottom: spacing.md,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   headerBackBtn: {
     width: 32,
@@ -516,7 +515,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing.sm,
     paddingBottom: spacing.xs,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   sectionLabel: {
     fontSize: fontSize.xs,

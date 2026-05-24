@@ -254,7 +254,6 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   iconWrap: {
     width: 36,

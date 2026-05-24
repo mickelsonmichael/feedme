@@ -245,7 +245,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
     borderBottomWidth: 1,
-    borderStyle: "dashed",
   },
   scopeText: {
     fontFamily: fonts.sans,
@@ -291,7 +290,6 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     paddingTop: spacing.sm,
     borderTopWidth: 1,
-    borderStyle: "dashed",
   },
   originalLink: {
     fontSize: fontSize.meta,

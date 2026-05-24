@@ -897,7 +897,6 @@ const styles = StyleSheet.create({
   },
   hintBox: {
     borderWidth: 1,
-    borderStyle: "dashed",
     borderRadius: radii.md,
     padding: spacing.md,
     marginBottom: spacing.lg,

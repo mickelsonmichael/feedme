@@ -180,7 +180,6 @@ const styles = StyleSheet.create({
   },
   dashedDivider: {
     borderBottomWidth: 1,
-    borderStyle: "dashed",
     marginVertical: spacing.sm,
   },
 });
