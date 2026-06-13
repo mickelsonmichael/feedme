@@ -34,6 +34,14 @@ jest.mock("../notifications", () => ({
   updateBackgroundSyncSchedule: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock("../feedRefresher", () => ({
+  refreshFeeds: jest.fn(),
+}));
+
+jest.mock("../database", () => ({
+  getFeeds: jest.fn().mockResolvedValue([]),
+}));
+
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Settings">,
   NativeStackScreenProps<RootStackParamList>
@@ -96,6 +104,33 @@ describe("SettingsScreen", () => {
 
     // Assert
     expect(saveConfig).toHaveBeenCalledWith({ feedLayout: "card" });
+  });
+
+  it("persists single layout when selected", async () => {
+    // Arrange
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<SettingsScreen {...props} />);
+    });
+
+    const singleButton = tree!.root
+      .findAllByType(TouchableOpacity)
+      .find((node: renderer.ReactTestInstance) => {
+        const labels = node.findAllByType(Text);
+        return labels.some((label) => label.props.children === "Single");
+      });
+
+    expect(singleButton).toBeTruthy();
+
+    await act(async () => {
+      await singleButton!.props.onPress();
+    });
+
+    // Assert
+    expect(saveConfig).toHaveBeenCalledWith({ feedLayout: "single" });
   });
 
   it("defaults to embedded and persists external link mode on mobile", async () => {

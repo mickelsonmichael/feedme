@@ -70,12 +70,11 @@ import {
   isCollapsedItemRow,
   isCollapsedRunRow,
 } from "../collapseRepeated";
-import { ExpandedFeedMedia } from "../components/ExpandedFeedMedia";
-import { parseContentAndLinks } from "../utils/contentActions";
 import { FeedPostCard } from "../components/FeedPostCard";
 import { loadConfig, saveConfig } from "../storage";
 import { openUrlWithPreference } from "../linkOpening";
 import { resolveCustomFeedIcon } from "../customFeedIcons";
+import { FeedItemContent } from "../components/FeedItemContent";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -92,6 +91,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const { setIsFeedScrolled } = useFeedScroll();
   const { width: viewportWidth } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
+  const isDesktopWeb = isWeb && viewportWidth >= 768;
   const shouldRefreshOnFocus = isWeb;
   const isFocused = useIsFocused();
   const [feedLayout, setFeedLayout] = useState<FeedLayoutMode>(
@@ -109,6 +109,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
   const [groupFeeds, setGroupFeeds] = useState<GroupFeedsMode>(
     () => loadConfig().groupFeeds ?? "none"
+  );
+  const [bionicReading, setBionicReading] = useState(
+    () => loadConfig().bionicReading ?? false
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -131,6 +134,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
     useState<FeedRefreshProgress | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [singleActiveIndex, setSingleActiveIndex] = useState(0);
+  const [showSingleMoreMenu, setShowSingleMoreMenu] = useState(false);
+  const [singleToolbarHeight, setSingleToolbarHeight] = useState(0);
   const selectedFeedId = route.params?.selectedFeedId;
   const selectedTagId = route.params?.selectedTagId;
   const selectedCustomFeedId = route.params?.selectedCustomFeedId;
@@ -139,7 +145,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const scrollToTopParam = route.params?.scrollToTop;
 
   const flatListRef = useRef<FlashListRef<CollapsedFeedListRow>>(null);
+  const singleScrollRef = useRef<ScrollView | null>(null);
   const pendingScrollToTopRef = useRef(false);
+  const singleSelectUnreadOnNextItemsRef = useRef(false);
+  const singleLastAutoMarkedIdRef = useRef<number | null>(null);
   const markAsReadOnScrollRef = useRef(
     loadConfig().markAsReadOnScroll ?? false
   );
@@ -200,6 +209,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
     []
   );
 
+  const scrollCurrentViewToTop = useCallback(() => {
+    if (feedLayout === "single") {
+      singleScrollRef.current?.scrollTo({ y: 0, animated: false });
+      return;
+    }
+
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [feedLayout]);
+
   // Mobile: scroll to top when the Feed tab button is tapped while already focused.
   // animated:false is required for reliability with FlashList: when items have
   // variable heights (card-layout images, expanded compact rows) the animated
@@ -209,20 +227,20 @@ export default function FeedListScreen({ navigation, route }: Props) {
   useEffect(() => {
     const unsubscribe = navigation.addListener("tabPress", () => {
       if (navigation.isFocused()) {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        scrollCurrentViewToTop();
         setIsFeedScrolled(false);
       }
     });
     return unsubscribe;
-  }, [navigation, setIsFeedScrolled]);
+  }, [navigation, scrollCurrentViewToTop, setIsFeedScrolled]);
 
   // Web sidebar: scroll to top when the Feed nav item is pressed while already active
   useEffect(() => {
     if (scrollToTopParam) {
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      scrollCurrentViewToTop();
       setIsFeedScrolled(false);
     }
-  }, [scrollToTopParam, setIsFeedScrolled]);
+  }, [scrollCurrentViewToTop, scrollToTopParam, setIsFeedScrolled]);
 
   // Threshold (in px) past which we consider the feed "scrolled" — used to
   // morph the Feed tab/nav icon into an up-arrow as an affordance for the
@@ -254,9 +272,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   useEffect(() => {
     if (pendingScrollToTopRef.current) {
       pendingScrollToTopRef.current = false;
-      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      scrollCurrentViewToTop();
     }
-  }, [items]);
+  }, [items, scrollCurrentViewToTop]);
 
   const loadData = useCallback(
     async (refreshRemote: boolean) => {
@@ -400,6 +418,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       const config = loadConfig();
       setFeedLayout(config.feedLayout ?? "compact");
       setGroupFeeds(config.groupFeeds ?? "none");
+      setBionicReading(config.bionicReading ?? false);
       markAsReadOnScrollRef.current = config.markAsReadOnScroll ?? false;
       if (shouldRefreshOnFocus) {
         setRefreshing(true);
@@ -410,6 +429,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const handleRefreshAll = async () => {
     setRetainedUnreadIds(new Set());
+    if (feedLayout === "single") {
+      singleSelectUnreadOnNextItemsRef.current = true;
+      singleLastAutoMarkedIdRef.current = null;
+      setSingleActiveIndex(0);
+    }
     setRefreshing(true);
     // Set the flag before loadData so the useEffect watching `items` will
     // scroll to top after React commits the freshly loaded items.
@@ -423,6 +447,22 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const feedDetailsById = useMemo(
     () => new Map(feeds.map((feed) => [feed.id, feed])),
     [feeds]
+  );
+
+  const buildFeedItemViewItem = useCallback(
+    (item: FeedItemWithFeed): RootStackParamList["FeedItemView"]["item"] => ({
+      itemId: item.id,
+      title: item.title,
+      url: item.url,
+      content: item.content,
+      imageUrl: item.image_url,
+      publishedAt: item.published_at,
+      feedTitle: item.feed_title,
+      read: item.read,
+      useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
+      nsfw: feedDetailsById.get(item.feed_id)?.nsfw === 1 || customFeedNsfw,
+    }),
+    [customFeedNsfw, feedDetailsById]
   );
 
   // Ref mirrors of frequently-changing state, kept fresh on every render so
@@ -464,21 +504,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
       }
 
       navigation.navigate("FeedItemView", {
-        item: {
-          itemId: item.id,
-          title: item.title,
-          url: item.url,
-          content: item.content,
-          imageUrl: item.image_url,
-          publishedAt: item.published_at,
-          feedTitle: item.feed_title,
-          read: item.read,
-          useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
-          nsfw: feedDetailsById.get(item.feed_id)?.nsfw === 1 || customFeedNsfw,
-        },
+        item: buildFeedItemViewItem(item),
       });
     },
-    [filter, navigation, feedDetailsById, customFeedNsfw]
+    [buildFeedItemViewItem, filter, navigation]
   );
 
   const toggleSave = useCallback(async (id: number) => {
@@ -718,6 +747,23 @@ export default function FeedListScreen({ navigation, route }: Props) {
     setRetainedUnreadIds(new Set());
   }, [filter]);
 
+  useEffect(() => {
+    if (feedLayout !== "single") {
+      singleLastAutoMarkedIdRef.current = null;
+      return;
+    }
+
+    setSingleActiveIndex(0);
+  }, [
+    feedLayout,
+    filter,
+    normalizedSearch,
+    selectedCustomFeedId,
+    selectedFeedId,
+    selectedTagId,
+    sort,
+  ]);
+
   const selectedFeedTitle = useMemo(() => {
     if (selectedCustomFeedId !== undefined) {
       return route.params?.selectedCustomFeedName ?? null;
@@ -857,6 +903,99 @@ export default function FeedListScreen({ navigation, route }: Props) {
     );
   }, [sortedItems, filter, savedIds, retainedUnreadIds]);
 
+  const singleSafeIndex =
+    visibleItems.length === 0
+      ? 0
+      : Math.min(singleActiveIndex, visibleItems.length - 1);
+  const currentSingleItem = visibleItems[singleSafeIndex] ?? null;
+  const currentSingleViewItem = useMemo(
+    () => (currentSingleItem ? buildFeedItemViewItem(currentSingleItem) : null),
+    [buildFeedItemViewItem, currentSingleItem]
+  );
+  const singlePreviousDisabled = singleSafeIndex === 0;
+  const singleNextDisabled =
+    singleSafeIndex >= visibleItems.length - 1 && !hasMore;
+
+  useEffect(() => {
+    if (feedLayout !== "single" || visibleItems.length === 0) {
+      return;
+    }
+
+    const maxIndex = visibleItems.length - 1;
+    if (singleActiveIndex > maxIndex) {
+      setSingleActiveIndex(maxIndex);
+    }
+  }, [feedLayout, singleActiveIndex, visibleItems.length]);
+
+  useEffect(() => {
+    if (feedLayout !== "single" || !singleSelectUnreadOnNextItemsRef.current) {
+      return;
+    }
+
+    singleSelectUnreadOnNextItemsRef.current = false;
+    const unreadIndex = visibleItems.findIndex((item) => item.read !== 1);
+    setSingleActiveIndex(unreadIndex >= 0 ? unreadIndex : 0);
+  }, [feedLayout, visibleItems]);
+
+  useEffect(() => {
+    if (
+      feedLayout !== "single" ||
+      !currentSingleItem ||
+      singleLastAutoMarkedIdRef.current === currentSingleItem.id
+    ) {
+      return;
+    }
+
+    singleLastAutoMarkedIdRef.current = currentSingleItem.id;
+    if (currentSingleItem.read) {
+      return;
+    }
+
+    if (filter === "unread") {
+      setRetainedUnreadIds((prev) => new Set(prev).add(currentSingleItem.id));
+    }
+
+    markItemRead(currentSingleItem.id)
+      .then(() => {
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === currentSingleItem.id ? { ...item, read: 1 } : item
+          )
+        );
+        setReadLaterIds((prev) => {
+          if (!prev.has(currentSingleItem.id)) return prev;
+          const next = new Set(prev);
+          next.delete(currentSingleItem.id);
+          return next;
+        });
+      })
+      .catch(() => {
+        Alert.alert("Error", "Could not update read status.");
+      });
+  }, [currentSingleItem, feedLayout, filter]);
+
+  useEffect(() => {
+    if (
+      feedLayout !== "single" ||
+      !hasMore ||
+      loadingMore ||
+      visibleItems.length === 0
+    ) {
+      return;
+    }
+
+    if (singleSafeIndex >= visibleItems.length - 5) {
+      handleLoadMore();
+    }
+  }, [
+    feedLayout,
+    handleLoadMore,
+    hasMore,
+    loadingMore,
+    singleSafeIndex,
+    visibleItems.length,
+  ]);
+
   // Inject time-bucket group dividers when grouping is active and sort is newest.
   const displayItems = useMemo<CollapsedFeedListRow[]>(() => {
     const withDividers: FeedListRow[] =
@@ -881,6 +1020,36 @@ export default function FeedListScreen({ navigation, route }: Props) {
       revealedRunIds
     );
   }, [visibleItems, sort, groupFeeds, feeds, uncollapsedIds, revealedRunIds]);
+
+  const handleSinglePrevious = useCallback(() => {
+    if (singleSafeIndex === 0) {
+      return;
+    }
+
+    setSingleActiveIndex(singleSafeIndex - 1);
+    singleScrollRef.current?.scrollTo({ y: 0, animated: false });
+    setIsFeedScrolled(false);
+  }, [setIsFeedScrolled, singleSafeIndex]);
+
+  const handleSingleNext = useCallback(() => {
+    if (singleSafeIndex < visibleItems.length - 1) {
+      setSingleActiveIndex(singleSafeIndex + 1);
+      singleScrollRef.current?.scrollTo({ y: 0, animated: false });
+      setIsFeedScrolled(false);
+      return;
+    }
+
+    if (hasMore && !loadingMore) {
+      handleLoadMore();
+    }
+  }, [
+    handleLoadMore,
+    hasMore,
+    loadingMore,
+    setIsFeedScrolled,
+    singleSafeIndex,
+    visibleItems.length,
+  ]);
 
   const renderItem = useCallback(
     ({ item }: { item: CollapsedFeedListRow }) => {
@@ -1213,6 +1382,256 @@ export default function FeedListScreen({ navigation, route }: Props) {
             </TouchableOpacity>
           ) : null}
         </ScrollView>
+      ) : feedLayout === "single" &&
+        currentSingleItem &&
+        currentSingleViewItem ? (
+        <View style={styles.fill}>
+          {/* Fixed toolbar */}
+          <View
+            style={[styles.singleToolbar, { borderBottomColor: colors.border }]}
+            onLayout={(e) =>
+              setSingleToolbarHeight(e.nativeEvent.layout.height)
+            }
+          >
+            <View style={styles.singleToolbarLeft}>
+              <TouchableOpacity
+                onPress={handleSinglePrevious}
+                disabled={singlePreviousDisabled}
+                activeOpacity={0.7}
+                accessibilityLabel="Previous post"
+                style={styles.singleToolbarButton}
+              >
+                <Feather
+                  name="chevron-left"
+                  size={20}
+                  color={singlePreviousDisabled ? colors.inkFaint : colors.ink}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSingleNext}
+                disabled={singleNextDisabled}
+                activeOpacity={0.7}
+                accessibilityLabel="Next post"
+                style={styles.singleToolbarButton}
+              >
+                <Feather
+                  name="chevron-right"
+                  size={20}
+                  color={singleNextDisabled ? colors.inkFaint : colors.ink}
+                />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.singleToolbarRight}>
+              <TouchableOpacity
+                onPress={() => handleOpenOriginalLink(currentSingleItem.id)}
+                activeOpacity={0.7}
+                accessibilityLabel="Open post link"
+                style={styles.singleToolbarButton}
+              >
+                <Feather name="external-link" size={18} color={colors.ink} />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setShowSingleMoreMenu((v) => !v)}
+                activeOpacity={0.7}
+                accessibilityLabel="More options"
+                style={styles.singleToolbarButton}
+              >
+                <Feather name="more-horizontal" size={18} color={colors.ink} />
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Overflow menu */}
+          {showSingleMoreMenu ? (
+            <TouchableOpacity
+              style={[styles.singleMoreOverlay, { top: singleToolbarHeight }]}
+              onPress={() => setShowSingleMoreMenu(false)}
+              activeOpacity={1}
+            >
+              <View
+                style={[
+                  styles.singleMoreMenuContainer,
+                  {
+                    backgroundColor: colors.paper,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.singleMoreMenuItem,
+                    { borderBottomColor: colors.border },
+                  ]}
+                  onPress={() => {
+                    toggleSave(currentSingleItem.id);
+                    setShowSingleMoreMenu(false);
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel={
+                    savedIds.has(currentSingleItem.id)
+                      ? "Unsave post"
+                      : "Save post"
+                  }
+                >
+                  <Feather
+                    name="bookmark"
+                    size={16}
+                    color={
+                      savedIds.has(currentSingleItem.id)
+                        ? colors.accent
+                        : colors.ink
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.singleMoreMenuItemText,
+                      {
+                        color: savedIds.has(currentSingleItem.id)
+                          ? colors.accent
+                          : colors.ink,
+                      },
+                    ]}
+                  >
+                    {savedIds.has(currentSingleItem.id) ? "Unsave" : "Save"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.singleMoreMenuItem,
+                    { borderBottomColor: colors.border },
+                  ]}
+                  onPress={() => {
+                    toggleReadLater(currentSingleItem.id);
+                    setShowSingleMoreMenu(false);
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel={
+                    readLaterIds.has(currentSingleItem.id)
+                      ? "Remove from Read Later"
+                      : "Add to Read Later"
+                  }
+                >
+                  <Feather
+                    name="clock"
+                    size={16}
+                    color={
+                      readLaterIds.has(currentSingleItem.id)
+                        ? colors.accent
+                        : colors.ink
+                    }
+                  />
+                  <Text
+                    style={[
+                      styles.singleMoreMenuItemText,
+                      {
+                        color: readLaterIds.has(currentSingleItem.id)
+                          ? colors.accent
+                          : colors.ink,
+                      },
+                    ]}
+                  >
+                    {readLaterIds.has(currentSingleItem.id)
+                      ? "Remove from Later"
+                      : "Read Later"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.singleMoreMenuItem}
+                  onPress={() => {
+                    toggleRead(currentSingleItem.id);
+                    setShowSingleMoreMenu(false);
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel={
+                    currentSingleItem.read
+                      ? "Mark post unread"
+                      : "Mark post read"
+                  }
+                >
+                  <Feather
+                    name={currentSingleItem.read ? "eye-off" : "eye"}
+                    size={16}
+                    color={colors.ink}
+                  />
+                  <Text
+                    style={[
+                      styles.singleMoreMenuItemText,
+                      { color: colors.ink },
+                    ]}
+                  >
+                    {currentSingleItem.read ? "Mark Unread" : "Mark Read"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          ) : null}
+
+          {/* Scrollable content */}
+          <ScrollView
+            ref={singleScrollRef}
+            contentContainerStyle={[
+              styles.content,
+              isDesktopWeb ? styles.desktopContent : null,
+            ]}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={handleRefreshAll}
+                colors={[colors.accent]}
+                tintColor={colors.accent}
+              />
+            }
+            onScroll={handleScroll}
+            scrollEventThrottle={64}
+            showsVerticalScrollIndicator={false}
+          >
+            <View
+              style={[
+                styles.singleInner,
+                isDesktopWeb ? styles.singleDesktopInner : null,
+              ]}
+            >
+              <FeedItemContent
+                item={currentSingleViewItem}
+                bionicReading={bionicReading}
+                onOpenContentLink={handleOpenContentLink}
+                includeRedditCommentsInLinks
+              />
+
+              {/* Bottom nav */}
+              <View style={styles.singleNavRowBottom}>
+                <TouchableOpacity
+                  onPress={handleSinglePrevious}
+                  disabled={singlePreviousDisabled}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Previous post"
+                  style={styles.singleNavButton}
+                >
+                  <Feather
+                    name="chevron-left"
+                    size={20}
+                    color={
+                      singlePreviousDisabled ? colors.inkFaint : colors.ink
+                    }
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSingleNext}
+                  disabled={singleNextDisabled}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Next post"
+                  style={styles.singleNavButton}
+                >
+                  <Feather
+                    name="chevron-right"
+                    size={20}
+                    color={singleNextDisabled ? colors.inkFaint : colors.ink}
+                  />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </ScrollView>
+        </View>
       ) : (
         <FlashList
           ref={flatListRef}
@@ -1246,21 +1665,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
       )}
     </View>
   );
-}
-
-function isRedditCommentsUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname.toLowerCase();
-    if (!(hostname === "reddit.com" || hostname.endsWith(".reddit.com"))) {
-      return false;
-    }
-    return parsed.pathname.toLowerCase().includes("/comments/");
-  } catch {
-    return /(?:https?:\/\/)?(?:(?:www|old)\.)?reddit\.com\/.*\/comments\//i.test(
-      url
-    );
-  }
 }
 
 const keyExtractor = (item: CollapsedFeedListRow) => {
@@ -1365,6 +1769,82 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     fontSize: fontSize.meta,
     fontFamily: fonts.sans,
+  },
+  content: {
+    padding: spacing.md,
+    paddingBottom: spacing.xxl,
+  },
+  desktopContent: {
+    alignItems: "center",
+    paddingHorizontal: spacing.xl,
+  },
+  singleInner: {
+    width: "100%",
+    gap: spacing.lg,
+  },
+  singleDesktopInner: {
+    maxWidth: 920,
+  },
+  singleToolbar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+  },
+  singleToolbarLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  singleToolbarRight: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+  },
+  singleToolbarButton: {
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.xs,
+  },
+  singleMoreOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 100,
+  },
+  singleMoreMenuContainer: {
+    position: "absolute",
+    top: spacing.xs,
+    right: spacing.md,
+    minWidth: 170,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radii.md,
+    overflow: "hidden",
+    elevation: 3,
+  },
+  singleMoreMenuItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  singleMoreMenuItemText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+  },
+  singleNavRowBottom: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: spacing.sm,
+  },
+  singleNavButton: {
+    padding: spacing.xs,
   },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   groupDivider: {

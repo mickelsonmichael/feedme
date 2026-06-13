@@ -316,6 +316,49 @@ function CardLayoutIcon({ active }: { active: boolean }) {
   );
 }
 
+function SingleLayoutIcon({ active }: { active: boolean }) {
+  const { colors } = useTheme();
+  const stroke = active ? colors.paper : colors.inkSoft;
+  const fill = active ? colors.paper : colors.paperWarm;
+
+  return (
+    <View
+      style={[
+        layoutIconStyles.frame,
+        layoutIconStyles.singleFrame,
+        { borderColor: stroke },
+      ]}
+    >
+      <View
+        style={[
+          layoutIconStyles.singleHeader,
+          { borderBottomColor: stroke, backgroundColor: fill },
+        ]}
+      />
+      <View style={layoutIconStyles.singleBody}>
+        <View
+          style={[
+            layoutIconStyles.singleMedia,
+            { borderColor: stroke, backgroundColor: fill },
+          ]}
+        />
+        <View
+          style={[
+            layoutIconStyles.line,
+            { backgroundColor: stroke, width: 19, marginTop: 3 },
+          ]}
+        />
+        <View
+          style={[
+            layoutIconStyles.line,
+            { backgroundColor: stroke, width: 16, marginTop: 2 },
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
 const layoutIconStyles = StyleSheet.create({
   frame: {
     width: 42,
@@ -334,6 +377,9 @@ const layoutIconStyles = StyleSheet.create({
     alignSelf: "center",
     paddingHorizontal: 3,
     paddingTop: 3,
+  },
+  singleFrame: {
+    padding: 3,
   },
   row: {
     flexDirection: "row",
@@ -358,6 +404,23 @@ const layoutIconStyles = StyleSheet.create({
     height: 9,
     borderRadius: 2,
     borderWidth: 0.5,
+  },
+  singleHeader: {
+    height: 4,
+    borderRadius: 1.5,
+    borderBottomWidth: 0.5,
+  },
+  singleBody: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  singleMedia: {
+    width: 18,
+    height: 7,
+    borderRadius: 2,
+    borderWidth: 0.5,
+    marginTop: 2,
   },
   line: {
     height: 1.5,
@@ -659,6 +722,11 @@ export default function SettingsScreen({ navigation }: Props) {
               value: "card",
               label: "Card",
               icon: <CardLayoutIcon active={feedLayout === "card"} />,
+            },
+            {
+              value: "single",
+              label: "Single",
+              icon: <SingleLayoutIcon active={feedLayout === "single"} />,
             },
           ]}
           onChange={handleLayoutChange}

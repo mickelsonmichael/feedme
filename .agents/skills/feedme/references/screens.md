@@ -13,41 +13,44 @@ The set of bottom tabs depends on screen size:
 - **Small screens (mobile / narrow web < 768 px):** Feed, Feeds, Discover, Settings. `Saved` and `ReadLater` are accessible from the `FeedsScreen` quick-links instead of from the tab bar.
 - **Wide web (≥ 768 px):** the bottom tab bar is replaced by the left web sidebar, which lists Feed, Saved, Read Later, Manage Feeds, Discover, and Settings.
 
-| Tab | Screen |
-|-----|--------|
-| Feed | `FeedListScreen` |
-| Saved | `SavedScreen` *(wide web only)* |
-| ReadLater | `ReadLaterScreen` *(wide web only)* |
-| Feeds | `FeedsScreen` |
-| Discover | `DiscoverScreen` |
-| Settings | `SettingsScreen` |
-| AddFeed | `AddFeedScreen` *(hidden route)* |
-| FeedSearch | `FeedSearchScreen` *(hidden route)* |
+| Tab        | Screen                              |
+| ---------- | ----------------------------------- |
+| Feed       | `FeedListScreen`                    |
+| Saved      | `SavedScreen` _(wide web only)_     |
+| ReadLater  | `ReadLaterScreen` _(wide web only)_ |
+| Feeds      | `FeedsScreen`                       |
+| Discover   | `DiscoverScreen`                    |
+| Settings   | `SettingsScreen`                    |
+| AddFeed    | `AddFeedScreen` _(hidden route)_    |
+| FeedSearch | `FeedSearchScreen` _(hidden route)_ |
 
 ### Root Stack Navigator (modal/push over tabs)
-| Route | Screen |
-|-------|--------|
-| `FeedItems` | `FeedItemsScreen` |
-| `FeedItemView` | `FeedItemScreen` |
-| `FeedDetail` | `FeedDetailScreen` |
-| `TagDetail` | `TagDetailScreen` |
+
+| Route                  | Screen                       |
+| ---------------------- | ---------------------------- |
+| `FeedItems`            | `FeedItemsScreen`            |
+| `FeedItemView`         | `FeedItemScreen`             |
+| `FeedDetail`           | `FeedDetailScreen`           |
+| `TagDetail`            | `TagDetailScreen`            |
 | `NotificationSettings` | `NotificationSettingsScreen` |
-| `ImportExport` | `ImportExportScreen` |
-| `InAppBrowser` | `InAppBrowserScreen` |
-| `RawXml` | `RawXmlScreen` |
+| `ImportExport`         | `ImportExportScreen`         |
+| `InAppBrowser`         | `InAppBrowserScreen`         |
+| `RawXml`               | `RawXmlScreen`               |
 
 ---
 
 ## Screens
 
 ### FeedListScreen
+
 **File:** `app/src/screens/FeedListScreen.tsx`  
 **Tab:** Feed  
 **Purpose:** The main home feed. Aggregates all items from every subscribed feed into a single chronological list. This is the primary reading experience.
 
 **Primary features:**
+
 - `FlashList`-based virtualized item list with pull-to-refresh
-- Layout modes: compact (text + small thumbnail) vs. card (large image)
+- Layout modes: compact (text + small thumbnail), card (large image), or single (one full post at a time with previous/next navigation)
 - Sort modes: newest-first, stacked
 - Filter modes: show all / unread only / saved
 - Per-item inline expand (shows media/content inline) or tap-to-open full item
@@ -55,16 +58,19 @@ The set of bottom tabs depends on screen size:
 - Background feed refresh with progress tracking
 - Header sort/filter controls injected via `HeaderContentContext`
 - Responsive desktop-web layout at ≥ 760 px
+- Single layout renders the full post content/media using the same article presentation as `FeedItemScreen`, including existing NSFW media handling
 - Tag-scoped view: when navigated with `selectedTagId`, the list shows only items from feeds tagged with that tag, refresh is scoped to those feeds, and the scope row shows the tag name with a tag icon. The default "all feeds" view excludes feeds flagged `show_only_in_tag`.
 
 ---
 
 ### FeedsScreen
+
 **File:** `app/src/screens/FeedsScreen.tsx`  
 **Tab:** Feeds  
 **Purpose:** Subscription manager — lists all added feeds with fuzzy search.
 
 **Primary features:**
+
 - `FlatList` of feeds with icon, title, and URL
 - Live fuzzy-match search bar (substring matching)
 - Tap a feed → navigates to `FeedItemsScreen` for that feed
@@ -75,11 +81,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### FeedItemsScreen
+
 **File:** `app/src/screens/FeedItemsScreen.tsx`  
 **Route:** `FeedItems` (stack)  
 **Purpose:** Shows all posts for a single feed, loaded by `feedId`.
 
 **Primary features:**
+
 - `FlashList` of `FeedPostCard` items, pull-to-refresh (re-fetches the RSS feed live)
 - Inline expand of items (images, video, Reddit gallery support)
 - Save/unsave and read/unread toggling per item
@@ -89,11 +97,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### FeedItemScreen
+
 **File:** `app/src/screens/FeedItemScreen.tsx`  
 **Route:** `FeedItemView` (stack)  
 **Purpose:** Full detail view for a single feed item/post.
 
 **Primary features:**
+
 - Renders parsed content text and extracted links
 - Renders HTML summaries/content as rich formatted content with sanitization safeguards
 - `ExpandedFeedMedia` component for images, GIFs, video
@@ -106,11 +116,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### FeedDetailScreen
+
 **File:** `app/src/screens/FeedDetailScreen.tsx`  
 **Route:** `FeedDetail` (stack)  
 **Purpose:** Edit an existing feed's metadata and settings.
 
 **Primary features:**
+
 - Editable fields: title, URL
 - Toggle switches: Use proxy, NSFW flag, Show only on tag feeds (hides items from the default home view; they only appear under a selected tag)
 - Multi-select tag picker (max 25 tags per feed) with inline create-new
@@ -122,11 +134,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### AddFeedScreen
+
 **File:** `app/src/screens/AddFeedScreen.tsx`  
 **Tab:** AddFeed  
 **Purpose:** Subscribe to a new feed by URL, Reddit subreddit/user, YouTube channel, GitHub repository releases, or Substack publication.
 
 **Primary features:**
+
 - Five source modes (2-column chip grid): URL, Reddit, YouTube, GitHub, Substack
 - Auto-fetches and pre-fills feed title from the feed's XML on URL blur
 - Toggle switches: Use proxy, NSFW, Show only on tag feeds
@@ -138,11 +152,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### TagDetailScreen
+
 **File:** `app/src/screens/TagDetailScreen.tsx`  
 **Route:** `TagDetail` (stack)  
 **Purpose:** Add or edit a user-defined tag and its associated feeds.
 
 **Primary features:**
+
 - Add mode (no `tagId`): name input + searchable feed list with checkbox toggles
 - Edit mode (with `tagId`): pre-populates name and currently-tagged feeds
 - Save creates/updates the tag (case-insensitive uniqueness) and replaces feed associations
@@ -153,11 +169,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### NotificationSettingsScreen
+
 **File:** `app/src/screens/NotificationSettingsScreen.tsx`  
 **Route:** `NotificationSettings` (stack)  
 **Purpose:** Configure push notifications for one feed or one tag.
 
 **Primary features:**
+
 - Feed mode: toggle "Notify on new items"
 - Feed mode: frequency selector (Immediate / Daily digest / Off)
 - Tag mode: toggle "Notify when tagged feeds have new items"
@@ -167,11 +185,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### SavedScreen
+
 **File:** `app/src/screens/SavedScreen.tsx`  
 **Tab:** Saved  
 **Purpose:** Bookmarks — shows all posts the user has explicitly saved.
 
 **Primary features:**
+
 - `FlatList` of saved posts with title, source feed name, and relative timestamp
 - Unsave action per item (removes from saved list immediately)
 - Tap → navigates to `FeedItemScreen` (marks the item as already-read)
@@ -180,27 +200,31 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### SettingsScreen
+
 **File:** `app/src/screens/SettingsScreen.tsx`  
 **Tab:** Settings  
 **Purpose:** App-wide preferences, all persisted to storage.
 
 **Primary features:**
+
 - Appearance: Light / Dark / System theme (segmented control)
 - Reading: "Mark as read on scroll" toggle, "Hide read items by default" toggle, "Bionic Reading" toggle
 - Default sort: Newest / Stacked (segmented)
 - Group Feeds: None / Hourly / Daily / Weekly / Monthly (segmented, full-width); only applies to Newest sort
-- Feed layout: Compact / Card (segmented, with visual icon previews)
+- Feed layout: Compact / Card / Single (segmented, with visual icon previews)
 - Link open mode: Embedded (in-app browser) / External browser
 - Navigation link to ImportExportScreen
 
 ---
 
 ### ImportExportScreen
+
 **File:** `app/src/screens/ImportExportScreen.tsx`  
 **Route:** `ImportExport` (stack)  
 **Purpose:** Bulk migrate subscriptions via OPML files.
 
 **Primary features:**
+
 - Export: generates an OPML file from all current feeds; on native uses share sheet, on web triggers browser download
 - Import: file picker for `.opml` files, parses and bulk-adds feeds
 - Status message area shows success/error inline
@@ -209,11 +233,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### RawXmlScreen
+
 **File:** `app/src/screens/RawXmlScreen.tsx`  
 **Route:** `RawXml` (stack)  
 **Purpose:** Displays the raw XML for a single feed item, pretty-printed for readability.
 
 **Primary features:**
+
 - Shows the stored `raw_xml` for the item, formatted with indentation
 - Horizontal scrolling for wide XML content
 - Copy button that copies the formatted XML to the clipboard
@@ -223,11 +249,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### InAppBrowserScreen
+
 **File:** `app/src/screens/InAppBrowserScreen.tsx`  
 **Route:** `InAppBrowser` (stack)  
 **Purpose:** Embedded web browser for opening article links without leaving the app.
 
 **Primary features:**
+
 - Native: renders `react-native-webview` `WebView` with a toolbar
 - Web: fallback UI (can't embed webview in webview) with URL displayed
 - Toolbar: Close (go back) and Open in External Browser buttons
@@ -236,11 +264,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### DiscoverScreen
+
 **File:** `app/src/screens/DiscoverScreen.tsx`  
 **Tab:** Discover  
 **Purpose:** Find new feeds to subscribe to.
 
 **Primary features:**
+
 - Entry point that opens `FeedSearchScreen` for searching a website's RSS feeds.
 - Curated list of suggested feeds loaded from `app/src/data/curatedFeeds.json` (title, URL, icon, description).
 - Each curated row has an Add button that subscribes the feed; rows for already-subscribed feeds show "Added ✓" and are disabled.
@@ -249,11 +279,13 @@ The set of bottom tabs depends on screen size:
 ---
 
 ### FeedSearchScreen
+
 **File:** `app/src/screens/FeedSearchScreen.tsx`  
 **Route:** `FeedSearch` (hidden tab route)  
 **Purpose:** Find RSS/Atom feeds for an arbitrary website URL.
 
 **Primary features:**
+
 - URL input + Search button. Auto-runs the search if `initialUrl` was passed via params.
 - Uses `discoverFeeds` (HTML `<link rel="alternate">` parsing + common-path probing, with proxy fallback) to find feeds.
 - Displays each result with title, URL, and how it was discovered (direct URL, page link, or guessed path).

@@ -1,5 +1,5 @@
 import React from "react";
-import { Text, TextInput, TouchableOpacity } from "react-native";
+import { ScrollView, Text, TextInput, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { FlashList } from "@shopify/flash-list";
 import { CompositeScreenProps } from "@react-navigation/native";
@@ -901,6 +901,121 @@ describe("FeedListScreen", () => {
     });
   });
 
+  it("renders single layout one post at a time and advances with Next", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue([
+      {
+        id: 501,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Single first",
+        url: "https://alpha.example/first",
+        content: "<p>First body</p>",
+        image_url: null,
+        published_at: 2_000,
+        read: 0,
+      },
+      {
+        id: 502,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Single second",
+        url: "https://alpha.example/second",
+        content: "<p>Second body</p>",
+        image_url: null,
+        published_at: 1_000,
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-layout",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert initial post
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) =>
+            node.props.children === "Single first"
+        )
+    ).toBe(true);
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) =>
+            node.props.children === "Move one post at a time"
+        )
+    ).toBe(false);
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some((node: renderer.ReactTestInstance) =>
+          typeof node.props.children === "string"
+            ? /^\d+ of \d+\+?$/.test(node.props.children)
+            : false
+        )
+    ).toBe(false);
+    expect(
+      tree!.root.findByProps({ accessibilityLabel: "Open post link" })
+    ).toBeTruthy();
+    expect(markItemRead).toHaveBeenCalledWith(501);
+
+    const nextButtons = tree!.root.findAllByProps({
+      accessibilityLabel: "Next post",
+    });
+
+    await act(async () => {
+      await nextButtons[0].props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) =>
+            node.props.children === "Single second"
+        )
+    ).toBe(true);
+    expect(markItemRead).toHaveBeenCalledWith(502);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
   it("blurs compact thumbnails for NSFW feeds", async () => {
     // Arrange
     (getFeeds as jest.Mock).mockResolvedValue([
@@ -1203,6 +1318,106 @@ describe("FeedListScreen", () => {
           props.deferGifLoad === true
       )
     ).toBe(true);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("refreshes single layout to the first unread post", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock)
+      .mockResolvedValueOnce([
+        {
+          id: 601,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Initially selected",
+          url: "https://alpha.example/initial",
+          content: "<p>Initial body</p>",
+          image_url: null,
+          published_at: 3_000,
+          read: 0,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          id: 602,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Read after refresh",
+          url: "https://alpha.example/read",
+          content: "<p>Read body</p>",
+          image_url: null,
+          published_at: 4_000,
+          read: 1,
+        },
+        {
+          id: 603,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Unread after refresh",
+          url: "https://alpha.example/unread",
+          content: "<p>Unread body</p>",
+          image_url: null,
+          published_at: 2_000,
+          read: 0,
+        },
+      ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-refresh",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const scrollView = tree!.root.findByType(ScrollView);
+
+    // Act
+    await act(async () => {
+      await scrollView.props.refreshControl.props.onRefresh();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(refreshFeeds).toHaveBeenCalled();
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) =>
+            node.props.children === "Unread after refresh"
+        )
+    ).toBe(true);
+    expect(markItemRead).toHaveBeenCalledWith(603);
 
     await act(async () => {
       tree!.unmount();
