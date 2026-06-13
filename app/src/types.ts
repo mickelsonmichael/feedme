@@ -93,6 +93,17 @@ export type FeedItem = {
 
 export type FeedItemWithFeed = FeedItem & { feed_title: string };
 
+export type ItemsPageOptions = {
+  /** Restrict to these feed_ids. null/undefined = no restriction.
+   *  An empty array means "scope contains zero feeds" -> returns []. */
+  feedIds?: number[] | null;
+  /** feed_ids to exclude (used by the default "all feeds" view to hide
+   *  feeds flagged show_only_in_tag / show_only_in_custom_feed). */
+  excludeFeedIds?: number[];
+  offset: number;
+  limit: number;
+};
+
 export type SavedPost = {
   id: number;
   item_id: number | null;

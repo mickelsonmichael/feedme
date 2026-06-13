@@ -16,6 +16,7 @@ import {
   Feed,
   FeedItem,
   FeedItemWithFeed,
+  ItemsPageOptions,
   ParsedFeedItem,
   ReadLaterPost,
   SavedPost,
@@ -554,6 +555,34 @@ export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
     .filter((i) => i.feed_id === feedId)
     .map((i) => ({ ...i }))
     .sort((a, b) => (b.published_at ?? 0) - (a.published_at ?? 0));
+}
+
+export async function getItemsPage(
+  options: ItemsPageOptions
+): Promise<FeedItemWithFeed[]> {
+  const { feedIds, excludeFeedIds, offset, limit } = options;
+
+  if (feedIds != null && feedIds.length === 0) {
+    return [];
+  }
+
+  const state = loadState();
+  const titleByFeedId = new Map(state.feeds.map((f) => [f.id, f.title]));
+  const feedIdSet = feedIds != null ? new Set(feedIds) : null;
+  const excludeSet =
+    excludeFeedIds != null && excludeFeedIds.length > 0
+      ? new Set(excludeFeedIds)
+      : null;
+
+  return state.items
+    .filter((i) => titleByFeedId.has(i.feed_id))
+    .filter((i) => feedIdSet === null || feedIdSet.has(i.feed_id))
+    .filter((i) => excludeSet === null || !excludeSet.has(i.feed_id))
+    .map((i) => ({ ...i, feed_title: titleByFeedId.get(i.feed_id) ?? "" }))
+    .sort(
+      (a, b) => (b.published_at ?? 0) - (a.published_at ?? 0) || b.id - a.id
+    )
+    .slice(offset, offset + limit);
 }
 
 export async function upsertItems(

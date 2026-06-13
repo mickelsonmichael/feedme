@@ -13,12 +13,11 @@ import { loadConfig, saveConfig } from "../storage";
 import { HeaderContentProvider } from "../context/HeaderContentContext";
 import {
   getFeeds,
-  getAllItems,
+  getItemsPage,
   markItemRead,
   markItemUnread,
   getSavedItemIds,
   getFeedsForTag,
-  getFeedTagMap,
 } from "../database";
 import { refreshFeeds } from "../feedRefresher";
 import { openUrlWithPreference } from "../linkOpening";
@@ -34,8 +33,7 @@ const mockExpandedFeedMedia = jest.fn(
 
 jest.mock("../database", () => ({
   getFeeds: jest.fn(),
-  getAllItems: jest.fn(),
-  getFeedTagMap: jest.fn(() => Promise.resolve(new Map())),
+  getItemsPage: jest.fn(),
   getFeedsForTag: jest.fn(() => Promise.resolve([])),
   markItemRead: jest.fn(),
   markItemUnread: jest.fn(),
@@ -146,6 +144,28 @@ function renderFeedListScreen(props: FeedScreenProps) {
   );
 }
 
+// Mirrors FeedListScreen's internal PAGE_SIZE constant.
+const PAGE_SIZE = 50;
+
+function makeItems(
+  count: number,
+  startId: number,
+  feedId = 1,
+  feedTitle = "Alpha"
+) {
+  return Array.from({ length: count }, (_, i) => ({
+    id: startId + i,
+    feed_id: feedId,
+    feed_title: feedTitle,
+    title: `Post ${startId + i}`,
+    url: `https://alpha.example/${startId + i}`,
+    content: "body",
+    image_url: null,
+    published_at: 1_700_000_000_000 - i * 1000,
+    read: 0,
+  }));
+}
+
 describe("FeedListScreen", () => {
   beforeEach(() => {
     (loadConfig as jest.Mock).mockReturnValue({});
@@ -172,7 +192,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 10,
         feed_id: 1,
@@ -256,7 +276,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 11,
         feed_id: 1,
@@ -266,17 +286,6 @@ describe("FeedListScreen", () => {
         content: "one",
         image_url: null,
         published_at: Date.now(),
-        read: 0,
-      },
-      {
-        id: 12,
-        feed_id: 2,
-        feed_title: "Beta",
-        title: "Beta post",
-        url: "https://beta.example/1",
-        content: "two",
-        image_url: null,
-        published_at: Date.now() - 1000,
         read: 0,
       },
     ]);
@@ -306,6 +315,9 @@ describe("FeedListScreen", () => {
       .map((node: renderer.ReactTestInstance) => node.props.children);
 
     // Assert
+    expect(getItemsPage).toHaveBeenCalledWith(
+      expect.objectContaining({ feedIds: [1] })
+    );
     expect(allText).toContain("Alpha post");
     expect(allText).not.toContain("Beta post");
     expect(allText).toContain("Alpha");
@@ -330,7 +342,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 101,
         feed_id: 1,
@@ -406,7 +418,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 103,
         feed_id: 1,
@@ -469,7 +481,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 102,
         feed_id: 1,
@@ -534,7 +546,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock)
+    (getItemsPage as jest.Mock)
       .mockResolvedValueOnce([
         {
           id: 201,
@@ -649,7 +661,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 301,
         feed_id: 1,
@@ -716,7 +728,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 301,
         feed_id: 1,
@@ -805,7 +817,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 401,
         feed_id: 1,
@@ -903,7 +915,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 601,
         feed_id: 1,
@@ -972,7 +984,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 701,
         feed_id: 1,
@@ -1049,7 +1061,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 702,
         feed_id: 1,
@@ -1128,7 +1140,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 701,
         feed_id: 1,
@@ -1197,7 +1209,7 @@ describe("FeedListScreen", () => {
     });
   });
 
-  it("searches across all feeds and post content", async () => {
+  it("searches within the current feed scope", async () => {
     // Arrange
     (getFeeds as jest.Mock).mockResolvedValue([
       {
@@ -1218,7 +1230,105 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([
+    (getItemsPage as jest.Mock).mockResolvedValue([
+      {
+        id: 501,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Local update",
+        url: "https://alpha.example/local",
+        content: "A local roundup",
+        image_url: null,
+        published_at: Date.now(),
+        read: 0,
+      },
+      {
+        id: 503,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Cookware review",
+        url: "https://alpha.example/cookware",
+        content: "Cast iron skillet care tips",
+        image_url: null,
+        published_at: Date.now() - 1000,
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-search",
+      name: "Feed",
+      params: { selectedFeedId: 1, selectedFeedTitle: "Alpha" },
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getItemsPage).toHaveBeenCalledWith(
+      expect.objectContaining({ feedIds: [1] })
+    );
+
+    await act(async () => {
+      await tree!.root
+        .findByProps({ accessibilityLabel: "Open search" })
+        .props.onPress();
+    });
+
+    const searchInput = tree!.root.findByProps({
+      accessibilityLabel: "Search feeds and posts",
+    }) as renderer.ReactTestInstance;
+
+    await act(async () => {
+      await searchInput.props.onChangeText("cast iron");
+    });
+
+    const visibleText = tree!.root
+      .findAllByType(Text)
+      .map((node: renderer.ReactTestInstance) => node.props.children);
+
+    // Assert
+    expect(visibleText).toContain("Cookware review");
+    expect(visibleText).not.toContain("Local update");
+    expect(tree!.root.findAllByType(TextInput)).toHaveLength(1);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("searches across all feeds and post content when no scope is selected", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: "General tech",
+        last_fetched: Date.now(),
+        error: null,
+      },
+      {
+        id: 2,
+        title: "Beta",
+        url: "https://beta.example/rss.xml",
+        description: "Coffee",
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue([
       {
         id: 501,
         feed_id: 1,
@@ -1250,9 +1360,9 @@ describe("FeedListScreen", () => {
       isFocused: jest.fn(() => true),
     } as unknown as FeedScreenProps["navigation"];
     const route = {
-      key: "Feed-search",
+      key: "Feed-search-all",
       name: "Feed",
-      params: { selectedFeedId: 1, selectedFeedTitle: "Alpha" },
+      params: undefined,
     } as FeedScreenProps["route"];
     let tree: renderer.ReactTestRenderer;
 
@@ -1262,6 +1372,10 @@ describe("FeedListScreen", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+
+    expect(getItemsPage).toHaveBeenCalledWith(
+      expect.objectContaining({ feedIds: null })
+    );
 
     await act(async () => {
       await tree!.root
@@ -1320,7 +1434,7 @@ describe("FeedListScreen", () => {
       published_at: now - 1000,
       read: 0,
     };
-    (getAllItems as jest.Mock).mockResolvedValue([unreadItem]);
+    (getItemsPage as jest.Mock).mockResolvedValue([unreadItem]);
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
 
     const navigation = {
@@ -1387,11 +1501,11 @@ describe("FeedListScreen", () => {
     );
 
     // The item was marked read in FeedItemScreen (simulated here by updating
-    // the mock so the next getAllItems call returns read=1).
-    (getAllItems as jest.Mock).mockResolvedValue([{ ...unreadItem, read: 1 }]);
-    // Set up tag mocks so that scopedItems still includes the item when
-    // selectedTagId=1 is used to re-trigger the focus-return loadData call.
-    (getFeedTagMap as jest.Mock).mockResolvedValue(new Map([[1, [1]]]));
+    // the mock so the next getItemsPage call returns read=1).
+    (getItemsPage as jest.Mock).mockResolvedValue([{ ...unreadItem, read: 1 }]);
+    // Scope the re-focus to the tag containing this feed, so that loadData's
+    // selectedTagId branch still includes the item when the focus-return
+    // loadData call fires.
     (getFeedsForTag as jest.Mock).mockResolvedValue([feed]);
 
     // Simulate the screen re-focusing after navigation.back().  Changing
@@ -1453,7 +1567,7 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getAllItems as jest.Mock).mockResolvedValue([]);
+    (getItemsPage as jest.Mock).mockResolvedValue([]);
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
 
     const navigation = {
@@ -1479,6 +1593,197 @@ describe("FeedListScreen", () => {
     expect(() =>
       tree!.root.findByProps({ accessibilityLabel: "Toggle feed layout" })
     ).toThrow();
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("loads additional pages until the scope is exhausted", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock)
+      .mockResolvedValueOnce(makeItems(PAGE_SIZE, 1))
+      .mockResolvedValueOnce(makeItems(1, PAGE_SIZE + 1));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-load-more",
+      name: "Feed",
+      params: { selectedFeedId: 1, selectedFeedTitle: "Alpha" },
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act: a full first page (PAGE_SIZE items) leaves hasMore=true, so
+    // FlashList's onEndReached fires once on mount and fetches page two.
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(getItemsPage).toHaveBeenCalledTimes(2);
+    expect(getItemsPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        feedIds: [1],
+        offset: PAGE_SIZE,
+        limit: PAGE_SIZE,
+      })
+    );
+
+    const allText = tree!.root
+      .findAllByType(Text)
+      .map((node: renderer.ReactTestInstance) => node.props.children);
+    expect(allText).toContain("Post 1");
+    expect(allText).toContain(`Post ${PAGE_SIZE + 1}`);
+
+    // The second page was short, so hasMore is now false and a further
+    // onEndReached does not fetch a third page.
+    const list = tree!.root.findByType(FlashList);
+    await act(async () => {
+      await list.props.onEndReached();
+    });
+
+    expect(getItemsPage).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("does not request another page or render a footer once the scope is fully loaded", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue(makeItems(3, 1));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-no-more",
+      name: "Feed",
+      params: { selectedFeedId: 1, selectedFeedTitle: "Alpha" },
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const list = tree!.root.findByType(FlashList);
+
+    // Assert: a short first page means no footer and onEndReached is a no-op
+    expect(list.props.ListFooterComponent).toBeNull();
+
+    await act(async () => {
+      await list.props.onEndReached();
+    });
+
+    expect(getItemsPage).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("does not request additional pages while searching once the scope is fully loaded", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock)
+      .mockResolvedValueOnce(makeItems(PAGE_SIZE, 1))
+      .mockResolvedValueOnce(makeItems(5, PAGE_SIZE + 1));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-search-exhausted",
+      name: "Feed",
+      params: { selectedFeedId: 1, selectedFeedTitle: "Alpha" },
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act: FlashList's onEndReached drains both pages on mount, leaving
+    // hasMore=false once the short second page comes back.
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(getItemsPage).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      await tree!.root
+        .findByProps({ accessibilityLabel: "Open search" })
+        .props.onPress();
+    });
+
+    const searchInput = tree!.root.findByProps({
+      accessibilityLabel: "Search feeds and posts",
+    }) as renderer.ReactTestInstance;
+
+    await act(async () => {
+      await searchInput.props.onChangeText("post 1");
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert: the search auto-loader effect sees hasMore=false and does not
+    // fetch a third page.
+    expect(getItemsPage).toHaveBeenCalledTimes(2);
+
+    const visibleText = tree!.root
+      .findAllByType(Text)
+      .map((node: renderer.ReactTestInstance) => node.props.children);
+    expect(visibleText).toContain("Post 1");
 
     await act(async () => {
       tree!.unmount();

@@ -22,6 +22,7 @@ import {
   getUnseenItemsForFeed,
   getItemCountForFeed,
   getItemsForFeed,
+  getItemsPage,
   getOrCreateTag,
   getReadLaterItemIds,
   getReadLaterPosts,
@@ -345,6 +346,106 @@ describe("database.web — items", () => {
     const otherItems = await getItemsForFeed(otherFeedId);
     expect(otherItems).toHaveLength(1);
     expect(otherItems[0].title).toBe("c");
+  });
+});
+
+describe("database.web — getItemsPage", () => {
+  let feedId: number;
+  let otherFeedId: number;
+
+  beforeEach(async () => {
+    feedId = await addFeed({
+      title: "Feed",
+      url: "https://example.com/a",
+      description: null,
+    });
+    otherFeedId = await addFeed({
+      title: "Other",
+      url: "https://example.com/b",
+      description: null,
+    });
+  });
+
+  it("orders by published_at desc with id desc as a tiebreak, honoring limit/offset", async () => {
+    // Arrange: items 1-3 share published_at=100 (tiebreak by id desc),
+    // item 4 is newer.
+    await upsertItems(feedId, [
+      { title: "A", url: "https://x/a", content: null, publishedAt: 100 }, // id 1
+      { title: "B", url: "https://x/b", content: null, publishedAt: 100 }, // id 2
+      { title: "C", url: "https://x/c", content: null, publishedAt: 100 }, // id 3
+      { title: "D", url: "https://x/d", content: null, publishedAt: 200 }, // id 4
+    ]);
+
+    // Act
+    const page1 = await getItemsPage({ offset: 0, limit: 2 });
+    const page2 = await getItemsPage({ offset: 2, limit: 2 });
+
+    // Assert: newest published_at first, then id desc among ties
+    expect(page1.map((i) => i.title)).toEqual(["D", "C"]);
+    expect(page2.map((i) => i.title)).toEqual(["B", "A"]);
+  });
+
+  it("restricts to the given feedIds, and an empty array returns no items", async () => {
+    await upsertItems(feedId, [
+      { title: "Mine", url: "https://x/1", content: null, publishedAt: 100 },
+    ]);
+    await upsertItems(otherFeedId, [
+      { title: "Theirs", url: "https://y/1", content: null, publishedAt: 200 },
+    ]);
+
+    const scoped = await getItemsPage({
+      feedIds: [feedId],
+      offset: 0,
+      limit: 10,
+    });
+    expect(scoped.map((i) => i.title)).toEqual(["Mine"]);
+
+    const empty = await getItemsPage({ feedIds: [], offset: 0, limit: 10 });
+    expect(empty).toEqual([]);
+  });
+
+  it("excludes the given feedIds, and an empty array is a no-op", async () => {
+    await upsertItems(feedId, [
+      { title: "Mine", url: "https://x/1", content: null, publishedAt: 100 },
+    ]);
+    await upsertItems(otherFeedId, [
+      { title: "Theirs", url: "https://y/1", content: null, publishedAt: 200 },
+    ]);
+
+    const excluded = await getItemsPage({
+      excludeFeedIds: [otherFeedId],
+      offset: 0,
+      limit: 10,
+    });
+    expect(excluded.map((i) => i.title)).toEqual(["Mine"]);
+
+    const noOp = await getItemsPage({
+      excludeFeedIds: [],
+      offset: 0,
+      limit: 10,
+    });
+    expect(noOp.map((i) => i.title).sort()).toEqual(["Mine", "Theirs"]);
+  });
+
+  it("paginates sequentially across the full set without gaps or overlap", async () => {
+    await upsertItems(feedId, [
+      { title: "1", url: "https://x/1", content: null, publishedAt: 100 },
+      { title: "2", url: "https://x/2", content: null, publishedAt: 200 },
+      { title: "3", url: "https://x/3", content: null, publishedAt: 300 },
+      { title: "4", url: "https://x/4", content: null, publishedAt: 400 },
+      { title: "5", url: "https://x/5", content: null, publishedAt: 500 },
+    ]);
+
+    const page1 = await getItemsPage({ offset: 0, limit: 2 });
+    const page2 = await getItemsPage({ offset: 2, limit: 2 });
+    const page3 = await getItemsPage({ offset: 4, limit: 2 });
+
+    expect(page1.map((i) => i.title)).toEqual(["5", "4"]);
+    expect(page2.map((i) => i.title)).toEqual(["3", "2"]);
+    expect(page3.map((i) => i.title)).toEqual(["1"]);
+
+    const all = [...page1, ...page2, ...page3];
+    expect(all.map((i) => i.id).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5]);
   });
 });
 

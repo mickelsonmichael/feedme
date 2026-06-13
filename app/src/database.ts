@@ -5,6 +5,7 @@ import {
   Feed,
   FeedItem,
   FeedItemWithFeed,
+  ItemsPageOptions,
   ParsedFeedItem,
   ReadLaterPost,
   SavedPost,
@@ -687,6 +688,49 @@ export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
     "SELECT * FROM items WHERE feed_id = ? ORDER BY published_at DESC",
     [feedId]
   );
+}
+
+export async function getItemsPage(
+  options: ItemsPageOptions
+): Promise<FeedItemWithFeed[]> {
+  const { feedIds, excludeFeedIds, offset, limit } = options;
+
+  // Empty feedIds means the scope contains zero feeds (e.g. a tag with no
+  // tagged feeds, or a custom feed with no members) -> no items, no query.
+  if (feedIds != null && feedIds.length === 0) {
+    return [];
+  }
+
+  const database = await getDatabase();
+  const conditions: string[] = [];
+  const params: number[] = [];
+
+  if (feedIds != null && feedIds.length > 0) {
+    conditions.push(`items.feed_id IN (${feedIds.map(() => "?").join(", ")})`);
+    params.push(...feedIds);
+  }
+  if (excludeFeedIds != null && excludeFeedIds.length > 0) {
+    conditions.push(
+      `items.feed_id NOT IN (${excludeFeedIds.map(() => "?").join(", ")})`
+    );
+    params.push(...excludeFeedIds);
+  }
+
+  const whereClause =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+  const rows = await database.getAllAsync<Omit<FeedItemWithFeed, "raw_xml">>(
+    `SELECT items.id, items.feed_id, items.title, items.url, items.content,
+            items.image_url, items.published_at, items.read,
+            feeds.title AS feed_title
+     FROM items
+     JOIN feeds ON items.feed_id = feeds.id
+     ${whereClause}
+     ORDER BY items.published_at DESC, items.id DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
+  );
+  return rows.map((row) => ({ ...row, raw_xml: null }));
 }
 
 export async function upsertItems(

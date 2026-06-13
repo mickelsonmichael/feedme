@@ -52,15 +52,15 @@ type Props = {
   cardMediaRevealed?: boolean;
   cardMediaTestID?: string;
   expandedMediaTestID?: string;
-  onOpenItem: () => void;
-  onRevealCardMedia?: () => void;
-  onToggleExpand?: () => void;
-  onToggleRead: () => void;
-  onToggleSave: () => void;
-  onToggleReadLater?: () => void;
-  onOpenOriginalLink: () => void;
+  onOpenItem: (id: number) => void;
+  onRevealCardMedia?: (id: number) => void;
+  onToggleExpand?: (id: number) => void;
+  onToggleRead: (id: number) => void;
+  onToggleSave: (id: number) => void;
+  onToggleReadLater?: (id: number) => void;
+  onOpenOriginalLink: (id: number) => void;
   onOpenContentLink: (url: string) => void;
-  onOpenRawXml?: () => void;
+  onOpenRawXml?: (id: number) => void;
 };
 
 function FeedPostCardComponent({
@@ -187,7 +187,7 @@ function FeedPostCardComponent({
             {showCardRevealOverlay ? (
               <TouchableOpacity
                 style={styles.mediaBlurOverlay}
-                onPress={() => onRevealCardMedia?.()}
+                onPress={() => onRevealCardMedia?.(item.id)}
                 activeOpacity={0.85}
                 accessibilityLabel="Reveal NSFW media"
               >
@@ -213,7 +213,7 @@ function FeedPostCardComponent({
             read={item.read}
           />
           <TouchableOpacity
-            onPress={onOpenItem}
+            onPress={() => onOpenItem(item.id)}
             activeOpacity={0.7}
             accessibilityLabel={`Open post: ${item.title}`}
           >
@@ -243,17 +243,20 @@ function FeedPostCardComponent({
             />
           ) : null}
           <View style={[styles.actionRow, { borderTopColor: colors.inkFaint }]}>
-            <ReadToggleButton read={item.read} onPress={onToggleRead} />
-            <SaveButton saved={saved} onPress={onToggleSave} />
+            <ReadToggleButton
+              read={item.read}
+              onPress={() => onToggleRead(item.id)}
+            />
+            <SaveButton saved={saved} onPress={() => onToggleSave(item.id)} />
             {onToggleReadLater ? (
               <ReadLaterButton
                 readLater={readLater}
-                onPress={onToggleReadLater}
+                onPress={() => onToggleReadLater(item.id)}
               />
             ) : null}
             <TouchableOpacity
               style={styles.iconActionBtn}
-              onPress={onOpenOriginalLink}
+              onPress={() => onOpenOriginalLink(item.id)}
               activeOpacity={0.6}
               hitSlop={8}
               accessibilityLabel="Open original link"
@@ -331,7 +334,7 @@ function FeedPostCardComponent({
             read={item.read}
           />
           <TouchableOpacity
-            onPress={onOpenItem}
+            onPress={() => onOpenItem(item.id)}
             activeOpacity={0.7}
             accessibilityLabel={`Open post: ${item.title}`}
           >
@@ -372,7 +375,7 @@ function FeedPostCardComponent({
       >
         {showExpand && onToggleExpand ? (
           <TouchableOpacity
-            onPress={onToggleExpand}
+            onPress={() => onToggleExpand(item.id)}
             activeOpacity={0.6}
             hitSlop={8}
             accessibilityLabel={expanded ? "Collapse post" : "Expand post"}
@@ -384,14 +387,20 @@ function FeedPostCardComponent({
             />
           </TouchableOpacity>
         ) : null}
-        <ReadToggleButton read={item.read} onPress={onToggleRead} />
-        <SaveButton saved={saved} onPress={onToggleSave} />
+        <ReadToggleButton
+          read={item.read}
+          onPress={() => onToggleRead(item.id)}
+        />
+        <SaveButton saved={saved} onPress={() => onToggleSave(item.id)} />
         {onToggleReadLater ? (
-          <ReadLaterButton readLater={readLater} onPress={onToggleReadLater} />
+          <ReadLaterButton
+            readLater={readLater}
+            onPress={() => onToggleReadLater(item.id)}
+          />
         ) : null}
         <TouchableOpacity
           style={styles.iconActionBtn}
-          onPress={onOpenOriginalLink}
+          onPress={() => onOpenOriginalLink(item.id)}
           activeOpacity={0.6}
           hitSlop={8}
           disabled={!item.url}
@@ -417,7 +426,7 @@ function FeedPostCardComponent({
         {showRawXml && onOpenRawXml ? (
           <TouchableOpacity
             style={styles.iconActionBtn}
-            onPress={onOpenRawXml}
+            onPress={() => onOpenRawXml(item.id)}
             activeOpacity={0.6}
             hitSlop={8}
             accessibilityLabel="View raw XML"
@@ -711,6 +720,7 @@ function arePropsEqual(prev: Props, next: Props): boolean {
     prev.nsfw === next.nsfw &&
     prev.useProxy === next.useProxy &&
     prev.saved === next.saved &&
+    prev.readLater === next.readLater &&
     prev.expanded === next.expanded &&
     prev.showExpand === next.showExpand &&
     prev.showRawXml === next.showRawXml &&
@@ -723,6 +733,7 @@ function arePropsEqual(prev: Props, next: Props): boolean {
     prev.onToggleExpand === next.onToggleExpand &&
     prev.onToggleRead === next.onToggleRead &&
     prev.onToggleSave === next.onToggleSave &&
+    prev.onToggleReadLater === next.onToggleReadLater &&
     prev.onOpenOriginalLink === next.onOpenOriginalLink &&
     prev.onOpenContentLink === next.onOpenContentLink &&
     prev.onOpenRawXml === next.onOpenRawXml

@@ -1,4 +1,10 @@
-import React, { useState, useCallback, useRef, useEffect } from "react";
+import React, {
+  useState,
+  useCallback,
+  useMemo,
+  useRef,
+  useEffect,
+} from "react";
 import {
   View,
   Text,
@@ -103,8 +109,28 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     }
   }, [items]);
 
+  // Ref mirrors of frequently-changing state, kept fresh on every render so
+  // that the row-action callbacks below can stay referentially stable
+  // (empty/near-empty deps). Stable callback identities let FeedPostCard's
+  // React.memo actually skip re-renders for rows that haven't changed.
+  const itemsById = useMemo(
+    () => new Map(items.map((item) => [item.id, item])),
+    [items]
+  );
+  const itemsByIdRef = useRef(itemsById);
+  itemsByIdRef.current = itemsById;
+
+  const savedIdsRef = useRef(savedIds);
+  savedIdsRef.current = savedIds;
+
+  const expandedIdsRef = useRef(expandedIds);
+  expandedIdsRef.current = expandedIds;
+
   const handleOpenItem = useCallback(
-    (item: FeedItem) => {
+    (id: number) => {
+      const item = itemsByIdRef.current.get(id);
+      if (!item) return;
+
       navigation.navigate("FeedItemView", {
         item: {
           itemId: item.id,
@@ -131,8 +157,9 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   );
 
   const handleOpenOriginalLink = useCallback(
-    async (item: FeedItem) => {
-      if (!item.url) {
+    async (id: number) => {
+      const item = itemsByIdRef.current.get(id);
+      if (!item || !item.url) {
         return;
       }
 
@@ -140,9 +167,9 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
 
       if (!item.read) {
         try {
-          await markItemRead(item.id);
+          await markItemRead(id);
           setItems((prev) =>
-            prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
+            prev.map((i) => (i.id === id ? { ...i, read: 1 } : i))
           );
         } catch {
           // Link was opened; silently ignore read-status update failure.
@@ -153,67 +180,115 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   );
 
   const toggleSave = useCallback(
-    async (item: FeedItem) => {
-      const alreadySaved = savedIds.has(item.id);
+    async (id: number) => {
+      const item = itemsByIdRef.current.get(id);
+      if (!item) return;
+
+      const alreadySaved = savedIdsRef.current.has(id);
       try {
         if (alreadySaved) {
-          await unsavePost(item.id);
+          await unsavePost(id);
           setSavedIds((prev) => {
             const next = new Set(prev);
-            next.delete(item.id);
+            next.delete(id);
             return next;
           });
         } else {
           await savePost(item, feed.title);
-          setSavedIds((prev) => new Set(prev).add(item.id));
+          setSavedIds((prev) => new Set(prev).add(id));
         }
       } catch (err) {
         Alert.alert("Error", "Could not update saved status.");
       }
     },
-    [feed.title, savedIds]
+    [feed.title]
   );
 
-  const handleToggleExpand = useCallback(
-    async (item: FeedItem) => {
-      const isExpanding = !expandedIds.has(item.id);
-      setExpandedIds((prev) => toggleExpandedId(prev, item.id));
-      if (isExpanding && !item.read) {
-        try {
-          await markItemRead(item.id);
-          setItems((prev) =>
-            prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
-          );
-        } catch {
-          Alert.alert("Error", "Could not update read status.");
-        }
+  const handleToggleExpand = useCallback(async (id: number) => {
+    const item = itemsByIdRef.current.get(id);
+    if (!item) return;
+
+    const isExpanding = !expandedIdsRef.current.has(id);
+    setExpandedIds((prev) => toggleExpandedId(prev, id));
+    if (isExpanding && !item.read) {
+      try {
+        await markItemRead(id);
+        setItems((prev) =>
+          prev.map((i) => (i.id === id ? { ...i, read: 1 } : i))
+        );
+      } catch {
+        Alert.alert("Error", "Could not update read status.");
       }
-    },
-    [expandedIds]
-  );
+    }
+  }, []);
 
-  const toggleRead = useCallback(async (item: FeedItem) => {
+  const toggleRead = useCallback(async (id: number) => {
+    const item = itemsByIdRef.current.get(id);
+    if (!item) return;
+
     try {
       if (item.read) {
-        await markItemUnread(item.id);
+        await markItemUnread(id);
         setItems((prev) =>
           prev.map((current) =>
-            current.id === item.id ? { ...current, read: 0 } : current
+            current.id === id ? { ...current, read: 0 } : current
           )
         );
         return;
       }
 
-      await markItemRead(item.id);
+      await markItemRead(id);
       setItems((prev) =>
         prev.map((current) =>
-          current.id === item.id ? { ...current, read: 1 } : current
+          current.id === id ? { ...current, read: 1 } : current
         )
       );
     } catch {
       Alert.alert("Error", "Could not update read status.");
     }
   }, []);
+
+  const handleOpenRawXml = useCallback((id: number) => {
+    setRawXmlItem(itemsByIdRef.current.get(id) ?? null);
+  }, []);
+
+  const renderItem = useCallback(
+    ({ item }: { item: FeedItem }) => (
+      <FeedPostCard
+        item={item}
+        feedTitle={feed.title}
+        layout="compact"
+        nsfw={feed.nsfw === 1}
+        useProxy={feed.use_proxy === 1}
+        saved={savedIds.has(item.id)}
+        expanded={expandedIds.has(item.id)}
+        showExpand
+        showRawXml
+        expandedMediaTestID={`expanded-media-${item.id}`}
+        onOpenItem={handleOpenItem}
+        onToggleExpand={handleToggleExpand}
+        onToggleRead={toggleRead}
+        onToggleSave={toggleSave}
+        onOpenOriginalLink={handleOpenOriginalLink}
+        onOpenContentLink={handleOpenContentLink}
+        onOpenRawXml={handleOpenRawXml}
+      />
+    ),
+    [
+      feed.title,
+      feed.nsfw,
+      feed.use_proxy,
+      savedIds,
+      expandedIds,
+      handleOpenItem,
+      handleToggleExpand,
+      toggleRead,
+      toggleSave,
+      handleOpenOriginalLink,
+      handleOpenContentLink,
+      handleOpenRawXml,
+    ]
+  );
 
   if (loading) {
     return (
@@ -287,27 +362,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           onRefresh={handleRefresh}
           refreshing={refreshing}
           contentContainerStyle={styles.list}
-          renderItem={({ item }) => (
-            <FeedPostCard
-              item={item}
-              feedTitle={feed.title}
-              layout="compact"
-              nsfw={feed.nsfw === 1}
-              useProxy={feed.use_proxy === 1}
-              saved={savedIds.has(item.id)}
-              expanded={expandedIds.has(item.id)}
-              showExpand
-              showRawXml
-              expandedMediaTestID={`expanded-media-${item.id}`}
-              onOpenItem={() => handleOpenItem(item)}
-              onToggleExpand={() => handleToggleExpand(item)}
-              onToggleRead={() => toggleRead(item)}
-              onToggleSave={() => toggleSave(item)}
-              onOpenOriginalLink={() => handleOpenOriginalLink(item)}
-              onOpenContentLink={handleOpenContentLink}
-              onOpenRawXml={() => setRawXmlItem(item)}
-            />
-          )}
+          renderItem={renderItem}
           ItemSeparatorComponent={Separator}
         />
       )}

@@ -26,8 +26,7 @@ import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   getFeeds,
-  getAllItems,
-  getFeedTagMap,
+  getItemsPage,
   getFeedsForTag,
   getCustomFeedById,
   getCustomFeedMembers,
@@ -85,6 +84,7 @@ type Props = CompositeScreenProps<
 
 const CARD_IMAGE_WIDTH = 100;
 const CARD_LAYOUT_WIDTH = 760;
+const PAGE_SIZE = 50;
 
 export default function FeedListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
@@ -129,15 +129,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
   const [refreshProgress, setRefreshProgress] =
     useState<FeedRefreshProgress | null>(null);
-  const [feedTagMap, setFeedTagMap] = useState<Map<number, number[]>>(
-    new Map()
-  );
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const selectedFeedId = route.params?.selectedFeedId;
   const selectedTagId = route.params?.selectedTagId;
   const selectedCustomFeedId = route.params?.selectedCustomFeedId;
-  const [customFeedMemberIds, setCustomFeedMemberIds] = useState<Set<number>>(
-    new Set()
-  );
   const [customFeedNsfw, setCustomFeedNsfw] = useState(false);
   const [customFeedIcon, setCustomFeedIcon] = useState<string | null>(null);
   const scrollToTopParam = route.params?.scrollToTop;
@@ -153,6 +149,17 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // per-feed offsets from being regenerated on every in-place item update (e.g.
   // marking an item as read), which was causing the feed to shuffle on read.
   const sortSeedRef = useRef(Math.random());
+
+  // The feed_id scope (set by loadData) that handleLoadMore re-queries when
+  // fetching subsequent pages.
+  const scopeRef = useRef<{
+    feedIds: number[] | null;
+    excludeFeedIds: number[];
+  }>({ feedIds: null, excludeFeedIds: [] });
+
+  // Incremented at the start of every loadData call so handleLoadMore can
+  // detect and discard a page that resolves after the scope has changed.
+  const loadGenerationRef = useRef(0);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
@@ -253,39 +260,51 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const loadData = useCallback(
     async (refreshRemote: boolean) => {
+      const generation = ++loadGenerationRef.current;
       try {
         const feedData = await getFeeds();
         setFeeds(feedData);
 
-        // Determine which feeds to refresh based on the current scope.
+        // Determine which feeds to refresh AND the item query's scope based
+        // on the current selection.
         // Selected single feed -> just that feed.
         // Selected tag -> only feeds tagged with it.
-        // Otherwise -> all feeds (excluding nothing; the hide-from-main-feed
-        // filter is applied client-side at render time).
+        // Selected custom feed -> only that custom feed's member feeds.
+        // Otherwise -> all feeds, excluding ones flagged "show only on tag /
+        // custom feeds" from the items query.
         let feedsToRefresh: Feed[] = feedData;
-        let cfMemberIds: Set<number> | null = null;
         let cfNsfw = false;
+        let scopeFeedIds: number[] | null = null;
+        let excludeFeedIds: number[] = [];
         if (selectedFeedId !== undefined) {
           feedsToRefresh = feedData.filter((f) => f.id === selectedFeedId);
+          scopeFeedIds = feedsToRefresh.map((f) => f.id);
         } else if (selectedTagId !== undefined) {
           const tagged = await getFeedsForTag(selectedTagId);
           const taggedIds = new Set(tagged.map((f) => f.id));
           feedsToRefresh = feedData.filter((f) => taggedIds.has(f.id));
+          scopeFeedIds = feedsToRefresh.map((f) => f.id);
         } else if (selectedCustomFeedId !== undefined) {
           const [cf, members] = await Promise.all([
             getCustomFeedById(selectedCustomFeedId),
             getCustomFeedMembers(selectedCustomFeedId),
           ]);
           const memberIdSet = new Set(members);
-          cfMemberIds = memberIdSet;
           cfNsfw = cf?.nsfw === 1;
           setCustomFeedIcon(cf?.icon ?? null);
           feedsToRefresh = feedData.filter((f) => memberIdSet.has(f.id));
+          scopeFeedIds = feedsToRefresh.map((f) => f.id);
         } else {
           setCustomFeedIcon(null);
+          excludeFeedIds = feedData
+            .filter(
+              (f) =>
+                f.show_only_in_tag === 1 || f.show_only_in_custom_feed === 1
+            )
+            .map((f) => f.id);
         }
-        setCustomFeedMemberIds(cfMemberIds ?? new Set());
         setCustomFeedNsfw(cfNsfw);
+        scopeRef.current = { feedIds: scopeFeedIds, excludeFeedIds };
 
         if (!refreshRemote) {
           setRefreshProgress(null);
@@ -316,23 +335,30 @@ export default function FeedListScreen({ navigation, route }: Props) {
           });
         }
 
-        const [itemData, ids, tagMap] = await Promise.all([
-          getAllItems(),
+        const [itemData, ids] = await Promise.all([
+          getItemsPage({
+            feedIds: scopeFeedIds,
+            excludeFeedIds,
+            offset: 0,
+            limit: PAGE_SIZE,
+          }),
           getSavedItemIds(),
-          getFeedTagMap(),
         ]);
         const readLaterIdsLoaded = await getReadLaterItemIds();
-        // Only regenerate the sort seed on remote refreshes (pull-to-refresh).
-        // Keeping the seed stable when re-focusing after navigation (e.g.
-        // returning from a detail view) prevents the list from shuffling and
-        // makes the just-viewed item stay at its original position.
-        if (refreshRemote) {
-          sortSeedRef.current = Math.random();
+
+        if (loadGenerationRef.current === generation) {
+          // Only regenerate the sort seed on remote refreshes (pull-to-refresh).
+          // Keeping the seed stable when re-focusing after navigation (e.g.
+          // returning from a detail view) prevents the list from shuffling and
+          // makes the just-viewed item stay at its original position.
+          if (refreshRemote) {
+            sortSeedRef.current = Math.random();
+          }
+          setItems(itemData);
+          setHasMore(itemData.length === PAGE_SIZE);
+          setSavedIds(ids);
+          setReadLaterIds(readLaterIdsLoaded);
         }
-        setItems(itemData);
-        setSavedIds(ids);
-        setReadLaterIds(readLaterIdsLoaded);
-        setFeedTagMap(tagMap);
       } catch (err) {
         Alert.alert("Error", "Failed to load: " + (err as Error).message);
       } finally {
@@ -343,6 +369,31 @@ export default function FeedListScreen({ navigation, route }: Props) {
     },
     [selectedFeedId, selectedTagId, selectedCustomFeedId]
   );
+
+  const handleLoadMore = useCallback(async () => {
+    if (loadingMoreRef.current || !hasMoreRef.current) return;
+    loadingMoreRef.current = true;
+    setLoadingMore(true);
+    const generation = loadGenerationRef.current;
+    try {
+      const { feedIds, excludeFeedIds } = scopeRef.current;
+      const nextPage = await getItemsPage({
+        feedIds,
+        excludeFeedIds,
+        offset: itemsRef.current.length,
+        limit: PAGE_SIZE,
+      });
+      if (loadGenerationRef.current !== generation) return; // scope changed mid-flight
+      setItems((prev) => [...prev, ...nextPage]);
+      setHasMore(nextPage.length === PAGE_SIZE);
+    } catch {
+      // onEndReached can fire repeatedly; an alert here would be noisy.
+      // hasMore stays true so scrolling again retries.
+    } finally {
+      loadingMoreRef.current = false;
+      setLoadingMore(false);
+    }
+  }, []);
 
   useFocusEffect(
     useCallback(() => {
@@ -374,8 +425,40 @@ export default function FeedListScreen({ navigation, route }: Props) {
     [feeds]
   );
 
+  // Ref mirrors of frequently-changing state, kept fresh on every render so
+  // that the row-action callbacks below can stay referentially stable
+  // (empty/near-empty deps). Stable callback identities let FeedPostCard's
+  // React.memo actually skip re-renders for rows that haven't changed.
+  const itemsById = useMemo(
+    () => new Map(items.map((item) => [item.id, item])),
+    [items]
+  );
+  const itemsByIdRef = useRef(itemsById);
+  itemsByIdRef.current = itemsById;
+
+  const savedIdsRef = useRef(savedIds);
+  savedIdsRef.current = savedIds;
+
+  const readLaterIdsRef = useRef(readLaterIds);
+  readLaterIdsRef.current = readLaterIds;
+
+  const expandedIdsRef = useRef(expandedIds);
+  expandedIdsRef.current = expandedIds;
+
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+
+  const hasMoreRef = useRef(hasMore);
+  hasMoreRef.current = hasMore;
+
+  const loadingMoreRef = useRef(loadingMore);
+  loadingMoreRef.current = loadingMore;
+
   const handleOpenItem = useCallback(
-    (item: FeedItemWithFeed) => {
+    (id: number) => {
+      const item = itemsByIdRef.current.get(id);
+      if (!item) return;
+
       if (filter === "unread" && !item.read) {
         setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
       }
@@ -398,68 +481,71 @@ export default function FeedListScreen({ navigation, route }: Props) {
     [filter, navigation, feedDetailsById, customFeedNsfw]
   );
 
-  const toggleSave = useCallback(
-    async (item: FeedItemWithFeed) => {
-      const alreadySaved = savedIds.has(item.id);
-      try {
-        if (alreadySaved) {
-          await unsavePost(item.id);
-          setSavedIds((prev) => {
-            const next = new Set(prev);
-            next.delete(item.id);
-            return next;
-          });
-        } else {
-          await savePost(item, item.feed_title);
-          setSavedIds((prev) => new Set(prev).add(item.id));
-        }
-      } catch (err) {
-        Alert.alert("Error", "Could not update saved status.");
-      }
-    },
-    [savedIds]
-  );
+  const toggleSave = useCallback(async (id: number) => {
+    const item = itemsByIdRef.current.get(id);
+    if (!item) return;
 
-  const toggleReadLater = useCallback(
-    async (item: FeedItemWithFeed) => {
-      const alreadyAdded = readLaterIds.has(item.id);
-      try {
-        if (alreadyAdded) {
-          await removeFromReadLater(item.id);
-          setReadLaterIds((prev) => {
-            const next = new Set(prev);
-            next.delete(item.id);
-            return next;
-          });
-        } else {
-          await addToReadLater(item, item.feed_title);
-          setReadLaterIds((prev) => new Set(prev).add(item.id));
-        }
-      } catch {
-        Alert.alert("Error", "Could not update read later status.");
+    const alreadySaved = savedIdsRef.current.has(id);
+    try {
+      if (alreadySaved) {
+        await unsavePost(id);
+        setSavedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      } else {
+        await savePost(item, item.feed_title);
+        setSavedIds((prev) => new Set(prev).add(id));
       }
-    },
-    [readLaterIds]
-  );
+    } catch (err) {
+      Alert.alert("Error", "Could not update saved status.");
+    }
+  }, []);
+
+  const toggleReadLater = useCallback(async (id: number) => {
+    const item = itemsByIdRef.current.get(id);
+    if (!item) return;
+
+    const alreadyAdded = readLaterIdsRef.current.has(id);
+    try {
+      if (alreadyAdded) {
+        await removeFromReadLater(id);
+        setReadLaterIds((prev) => {
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      } else {
+        await addToReadLater(item, item.feed_title);
+        setReadLaterIds((prev) => new Set(prev).add(id));
+      }
+    } catch {
+      Alert.alert("Error", "Could not update read later status.");
+    }
+  }, []);
 
   const handleToggleExpand = useCallback(
-    async (item: FeedItemWithFeed) => {
-      const isExpanding = !expandedIds.has(item.id);
-      setExpandedIds((prev) => toggleExpandedId(prev, item.id));
+    async (id: number) => {
+      const item = itemsByIdRef.current.get(id);
+      if (!item) return;
+
+      const isExpanding = !expandedIdsRef.current.has(id);
+      setExpandedIds((prev) => toggleExpandedId(prev, id));
       if (isExpanding && !item.read) {
         if (filter === "unread") {
-          setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+          setRetainedUnreadIds((prev) => new Set(prev).add(id));
         }
 
         try {
-          await markItemRead(item.id);
+          await markItemRead(id);
           setItems((prev) =>
-            prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
+            prev.map((i) => (i.id === id ? { ...i, read: 1 } : i))
           );
           setReadLaterIds((prev) => {
-            if (!prev.has(item.id)) return prev;
+            if (!prev.has(id)) return prev;
             const next = new Set(prev);
-            next.delete(item.id);
+            next.delete(id);
             return next;
           });
         } catch {
@@ -467,41 +553,44 @@ export default function FeedListScreen({ navigation, route }: Props) {
         }
       }
     },
-    [expandedIds, filter]
+    [filter]
   );
 
   const toggleRead = useCallback(
-    async (item: FeedItemWithFeed) => {
+    async (id: number) => {
+      const item = itemsByIdRef.current.get(id);
+      if (!item) return;
+
       try {
         if (item.read) {
-          await markItemUnread(item.id);
+          await markItemUnread(id);
           setItems((prev) =>
             prev.map((current) =>
-              current.id === item.id ? { ...current, read: 0 } : current
+              current.id === id ? { ...current, read: 0 } : current
             )
           );
           setRetainedUnreadIds((prev) => {
             const next = new Set(prev);
-            next.add(item.id);
+            next.add(id);
             return next;
           });
           return;
         }
 
         if (filter === "unread") {
-          setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+          setRetainedUnreadIds((prev) => new Set(prev).add(id));
         }
 
-        await markItemRead(item.id);
+        await markItemRead(id);
         setItems((prev) =>
           prev.map((current) =>
-            current.id === item.id ? { ...current, read: 1 } : current
+            current.id === id ? { ...current, read: 1 } : current
           )
         );
         setReadLaterIds((prev) => {
-          if (!prev.has(item.id)) return prev;
+          if (!prev.has(id)) return prev;
           const next = new Set(prev);
-          next.delete(item.id);
+          next.delete(id);
           return next;
         });
       } catch {
@@ -555,8 +644,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
 
   const handleOpenOriginalLink = useCallback(
-    async (item: FeedItemWithFeed) => {
-      if (!item.url) {
+    async (id: number) => {
+      const item = itemsByIdRef.current.get(id);
+      if (!item || !item.url) {
         return;
       }
 
@@ -564,20 +654,20 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
       if (!item.read) {
         if (filter === "unread") {
-          setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
+          setRetainedUnreadIds((prev) => new Set(prev).add(id));
         }
 
         try {
-          await markItemRead(item.id);
+          await markItemRead(id);
           setItems((prev) =>
             prev.map((current) =>
-              current.id === item.id ? { ...current, read: 1 } : current
+              current.id === id ? { ...current, read: 1 } : current
             )
           );
           setReadLaterIds((prev) => {
-            if (!prev.has(item.id)) return prev;
+            if (!prev.has(id)) return prev;
             const next = new Set(prev);
-            next.delete(item.id);
+            next.delete(id);
             return next;
           });
         } catch {
@@ -616,6 +706,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const normalizedSearch = searchQuery.trim().toLowerCase();
   const hasSearch = normalizedSearch.length > 0;
   const isSearchVisible = mobileSearchOpen || hasSearch;
+
+  // While searching, keep paginating in the background so the search covers
+  // the whole scoped dataset rather than just the first page.
+  useEffect(() => {
+    if (!hasSearch || !hasMore || loadingMore) return;
+    handleLoadMore();
+  }, [hasSearch, hasMore, loadingMore, handleLoadMore]);
 
   useEffect(() => {
     setRetainedUnreadIds(new Set());
@@ -698,51 +795,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
     };
   }, [clearHeaderContent, isFocused, isWeb, searchField, setHeaderContent]);
 
-  const scopedItems = useMemo(() => {
-    if (hasSearch) {
-      return items;
-    }
-
-    if (selectedFeedId !== undefined) {
-      return items.filter((item) => item.feed_id === selectedFeedId);
-    }
-
-    if (selectedTagId !== undefined) {
-      const taggedFeedIds = new Set<number>();
-      for (const [feedId, tagIds] of feedTagMap.entries()) {
-        if (tagIds.includes(selectedTagId)) {
-          taggedFeedIds.add(feedId);
-        }
-      }
-      return items.filter((item) => taggedFeedIds.has(item.feed_id));
-    }
-
-    if (selectedCustomFeedId !== undefined) {
-      return items.filter((item) => customFeedMemberIds.has(item.feed_id));
-    }
-
-    // Default "all feeds" view: hide items belonging to feeds flagged
-    // "show only on tag feeds" or "show only on custom feeds".
-    const hiddenFeedIds = new Set(
-      feeds
-        .filter(
-          (f) => f.show_only_in_tag === 1 || f.show_only_in_custom_feed === 1
-        )
-        .map((f) => f.id)
-    );
-    if (hiddenFeedIds.size === 0) return items;
-    return items.filter((item) => !hiddenFeedIds.has(item.feed_id));
-  }, [
-    items,
-    selectedFeedId,
-    selectedTagId,
-    selectedCustomFeedId,
-    customFeedMemberIds,
-    feedTagMap,
-    feeds,
-    hasSearch,
-  ]);
-
   // Building the per-item search haystack is O(n * content) and was previously
   // recomputed on every change to `items` (i.e. every focus return), even when
   // the user wasn't searching. Skip the work entirely unless a search is
@@ -771,14 +823,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const searchedItems = useMemo(() => {
     if (!hasSearch) {
-      return scopedItems;
+      return items;
     }
 
-    return scopedItems.filter((item) => {
+    return items.filter((item) => {
       const haystack = searchHaystacks.get(item.id) ?? "";
       return haystack.includes(normalizedSearch);
     });
-  }, [scopedItems, hasSearch, searchHaystacks, normalizedSearch]);
+  }, [items, hasSearch, searchHaystacks, normalizedSearch]);
 
   const sortedItems = useMemo(() => {
     // Build a deterministic LCG RNG from the stable per-session seed so that
@@ -829,6 +881,151 @@ export default function FeedListScreen({ navigation, route }: Props) {
       revealedRunIds
     );
   }, [visibleItems, sort, groupFeeds, feeds, uncollapsedIds, revealedRunIds]);
+
+  const renderItem = useCallback(
+    ({ item }: { item: CollapsedFeedListRow }) => {
+      if (isGroupDivider(item)) {
+        return (
+          <View
+            style={[styles.groupDivider, { borderBottomColor: colors.border }]}
+          >
+            <Text style={[styles.groupDividerLabel, { color: colors.inkSoft }]}>
+              {item.label}
+            </Text>
+          </View>
+        );
+      }
+
+      if (isCollapsedItemRow(item)) {
+        const collapsed = item.item;
+        const truncated =
+          collapsed.title.length > 80
+            ? collapsed.title.slice(0, 77).trimEnd() + "…"
+            : collapsed.title;
+        return (
+          <TouchableOpacity
+            onPress={() => handleUncollapseItem(collapsed.id)}
+            activeOpacity={0.6}
+            accessibilityLabel={`Uncollapse: ${collapsed.title}`}
+            accessibilityRole="button"
+            style={[
+              styles.collapsedRow,
+              { borderBottomColor: colors.inkFaint },
+            ]}
+            testID={`collapsed-item-${collapsed.id}`}
+          >
+            <Feather name="chevron-down" size={14} color={colors.inkFaint} />
+            <Text
+              style={[styles.collapsedRowText, { color: colors.inkSoft }]}
+              numberOfLines={1}
+            >
+              {truncated}
+            </Text>
+          </TouchableOpacity>
+        );
+      }
+
+      if (isCollapsedRunRow(item)) {
+        const label = `Show ${item.count} more post${item.count === 1 ? "" : "s"}`;
+        return (
+          <TouchableOpacity
+            onPress={() => handleRevealRun(item.runKey)}
+            activeOpacity={0.6}
+            accessibilityLabel={label}
+            accessibilityRole="button"
+            style={[
+              styles.collapsedRow,
+              { borderBottomColor: colors.inkFaint },
+            ]}
+            testID={`collapsed-run-${item.runKey}`}
+          >
+            <Feather name="more-horizontal" size={14} color={colors.inkFaint} />
+            <Text
+              style={[styles.collapsedRowText, { color: colors.inkSoft }]}
+              numberOfLines={1}
+            >
+              {label}
+            </Text>
+          </TouchableOpacity>
+        );
+      }
+
+      const sourceFeed = feedDetailsById.get(item.feed_id);
+      const isFeedNsfw = sourceFeed?.nsfw === 1 || customFeedNsfw;
+      const feedUseProxy = sourceFeed?.use_proxy === 1;
+
+      if (feedLayout === "card") {
+        const cardWidth = Math.min(
+          CARD_LAYOUT_WIDTH,
+          Math.max(0, viewportWidth - spacing.md * 2)
+        );
+        return (
+          <FeedPostCard
+            item={item}
+            feedTitle={item.feed_title}
+            layout="card"
+            nsfw={isFeedNsfw}
+            useProxy={feedUseProxy}
+            saved={savedIds.has(item.id)}
+            readLater={readLaterIds.has(item.id)}
+            cardMediaRevealed={revealedNsfwCardIds.has(item.id)}
+            cardWidth={cardWidth}
+            cardMediaTestID={`card-media-${item.id}`}
+            onOpenItem={handleOpenItem}
+            onRevealCardMedia={handleRevealCardMedia}
+            onToggleRead={toggleRead}
+            onToggleSave={toggleSave}
+            onToggleReadLater={toggleReadLater}
+            onOpenOriginalLink={handleOpenOriginalLink}
+            onOpenContentLink={handleOpenContentLink}
+          />
+        );
+      }
+
+      return (
+        <FeedPostCard
+          item={item}
+          feedTitle={item.feed_title}
+          layout="compact"
+          nsfw={isFeedNsfw}
+          useProxy={feedUseProxy}
+          saved={savedIds.has(item.id)}
+          readLater={readLaterIds.has(item.id)}
+          expanded={expandedIds.has(item.id)}
+          showExpand
+          expandedMediaTestID={`expanded-media-${item.id}`}
+          onOpenItem={handleOpenItem}
+          onToggleExpand={handleToggleExpand}
+          onToggleRead={toggleRead}
+          onToggleSave={toggleSave}
+          onToggleReadLater={toggleReadLater}
+          onOpenOriginalLink={handleOpenOriginalLink}
+          onOpenContentLink={handleOpenContentLink}
+        />
+      );
+    },
+    [
+      colors,
+      feedDetailsById,
+      customFeedNsfw,
+      feedLayout,
+      viewportWidth,
+      savedIds,
+      readLaterIds,
+      expandedIds,
+      revealedNsfwCardIds,
+      handleUncollapseItem,
+      handleRevealRun,
+      handleOpenItem,
+      handleRevealCardMedia,
+      toggleRead,
+      toggleSave,
+      toggleReadLater,
+      handleOpenOriginalLink,
+      handleOpenContentLink,
+      handleToggleExpand,
+    ]
+  );
 
   if (loading) {
     const totalLoading = refreshProgress?.total ?? 0;
@@ -1040,144 +1237,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
             styles.list,
             feedLayout === "card" ? styles.cardList : null,
           ]}
-          renderItem={({ item }) => {
-            if (isGroupDivider(item)) {
-              return (
-                <View
-                  style={[
-                    styles.groupDivider,
-                    { borderBottomColor: colors.border },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.groupDividerLabel,
-                      { color: colors.inkSoft },
-                    ]}
-                  >
-                    {item.label}
-                  </Text>
-                </View>
-              );
-            }
-
-            if (isCollapsedItemRow(item)) {
-              const collapsed = item.item;
-              const truncated =
-                collapsed.title.length > 80
-                  ? collapsed.title.slice(0, 77).trimEnd() + "\u2026"
-                  : collapsed.title;
-              return (
-                <TouchableOpacity
-                  onPress={() => handleUncollapseItem(collapsed.id)}
-                  activeOpacity={0.6}
-                  accessibilityLabel={`Uncollapse: ${collapsed.title}`}
-                  accessibilityRole="button"
-                  style={[
-                    styles.collapsedRow,
-                    { borderBottomColor: colors.inkFaint },
-                  ]}
-                  testID={`collapsed-item-${collapsed.id}`}
-                >
-                  <Feather
-                    name="chevron-down"
-                    size={14}
-                    color={colors.inkFaint}
-                  />
-                  <Text
-                    style={[styles.collapsedRowText, { color: colors.inkSoft }]}
-                    numberOfLines={1}
-                  >
-                    {truncated}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }
-
-            if (isCollapsedRunRow(item)) {
-              const label = `Show ${item.count} more post${item.count === 1 ? "" : "s"}`;
-              return (
-                <TouchableOpacity
-                  onPress={() => handleRevealRun(item.runKey)}
-                  activeOpacity={0.6}
-                  accessibilityLabel={label}
-                  accessibilityRole="button"
-                  style={[
-                    styles.collapsedRow,
-                    { borderBottomColor: colors.inkFaint },
-                  ]}
-                  testID={`collapsed-run-${item.runKey}`}
-                >
-                  <Feather
-                    name="more-horizontal"
-                    size={14}
-                    color={colors.inkFaint}
-                  />
-                  <Text
-                    style={[styles.collapsedRowText, { color: colors.inkSoft }]}
-                    numberOfLines={1}
-                  >
-                    {label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }
-
-            const sourceFeed = feedDetailsById.get(item.feed_id);
-            const isFeedNsfw = sourceFeed?.nsfw === 1 || customFeedNsfw;
-            const feedUseProxy = sourceFeed?.use_proxy === 1;
-
-            if (feedLayout === "card") {
-              const cardWidth = Math.min(
-                CARD_LAYOUT_WIDTH,
-                Math.max(0, viewportWidth - spacing.md * 2)
-              );
-              return (
-                <FeedPostCard
-                  item={item}
-                  feedTitle={item.feed_title}
-                  layout="card"
-                  nsfw={isFeedNsfw}
-                  useProxy={feedUseProxy}
-                  saved={savedIds.has(item.id)}
-                  readLater={readLaterIds.has(item.id)}
-                  cardMediaRevealed={revealedNsfwCardIds.has(item.id)}
-                  cardWidth={cardWidth}
-                  cardMediaTestID={`card-media-${item.id}`}
-                  onOpenItem={() => handleOpenItem(item)}
-                  onRevealCardMedia={() => handleRevealCardMedia(item.id)}
-                  onToggleRead={() => toggleRead(item)}
-                  onToggleSave={() => toggleSave(item)}
-                  onToggleReadLater={() => toggleReadLater(item)}
-                  onOpenOriginalLink={() => handleOpenOriginalLink(item)}
-                  onOpenContentLink={handleOpenContentLink}
-                />
-              );
-            }
-
-            return (
-              <FeedPostCard
-                item={item}
-                feedTitle={item.feed_title}
-                layout="compact"
-                nsfw={isFeedNsfw}
-                useProxy={feedUseProxy}
-                saved={savedIds.has(item.id)}
-                readLater={readLaterIds.has(item.id)}
-                expanded={expandedIds.has(item.id)}
-                showExpand
-                expandedMediaTestID={`expanded-media-${item.id}`}
-                onOpenItem={() => handleOpenItem(item)}
-                onToggleExpand={() => handleToggleExpand(item)}
-                onToggleRead={() => toggleRead(item)}
-                onToggleSave={() => toggleSave(item)}
-                onToggleReadLater={() => toggleReadLater(item)}
-                onOpenOriginalLink={() => handleOpenOriginalLink(item)}
-                onOpenContentLink={handleOpenContentLink}
-              />
-            );
-          }}
+          renderItem={renderItem}
           ItemSeparatorComponent={Separator}
+          onEndReached={handleLoadMore}
+          onEndReachedThreshold={0.5}
+          ListFooterComponent={loadingMore ? LoadingMoreFooter : null}
         />
       )}
     </View>
@@ -1208,6 +1272,15 @@ const keyExtractor = (item: CollapsedFeedListRow) => {
 
 function Separator() {
   return <View style={styles.separator} />;
+}
+
+function LoadingMoreFooter() {
+  const { colors } = useTheme();
+  return (
+    <View style={styles.loadMoreFooter}>
+      <ActivityIndicator size="small" color={colors.accent} />
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -1422,6 +1495,7 @@ const styles = StyleSheet.create({
     fontSize: fontSize.meta,
   },
   separator: { height: spacing.sm },
+  loadMoreFooter: { paddingVertical: spacing.lg, alignItems: "center" },
   emptyTitle: {
     fontSize: fontSize.h2,
     fontWeight: "600",
