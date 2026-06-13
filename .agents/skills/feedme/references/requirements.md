@@ -19,7 +19,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDLIST-005 | The user shall be able to expand an item inline to view its media/content without navigating away. |
 | REQ-FEEDLIST-006 | The user shall be able to save or unsave any item from the list. |
 | REQ-FEEDLIST-007 | The user shall be able to mark any item as read or unread from the list. |
-| REQ-FEEDLIST-008 | Pull-to-refresh shall trigger a background refresh of all feeds. |
+| REQ-FEEDLIST-008 | Pull-to-refresh shall trigger a background refresh of all feeds and scroll the list to the top once the new items are rendered. |
 | REQ-FEEDLIST-009 | When viewing a tag-scoped feed list (`selectedTagId`), the list shall show only items from feeds that have that tag, and refresh shall be limited to those feeds. |
 | REQ-FEEDLIST-010 | The default "all feeds" view shall exclude items from feeds flagged `show_only_in_tag`; such items appear only in tag-scoped views. |
 | REQ-FEEDLIST-011 | In card layout, items from NSFW feeds shall show a "Reveal images" overlay instead of unblurred media (images or GIFs); tapping the overlay reveals the media. For GIF posts, tapping reveal also auto-loads the GIF. Reddit galleries use a separate deferred-load mechanism and are excluded from this overlay. |
@@ -48,7 +48,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | ID | Requirement |
 |----|-------------|
 | REQ-FEEDITEMS-001 | The screen shall display all posts for a single feed identified by feedId. |
-| REQ-FEEDITEMS-002 | Pull-to-refresh shall re-fetch the RSS feed and update the item list. |
+| REQ-FEEDITEMS-002 | Pull-to-refresh shall re-fetch the RSS feed, update the item list, and scroll the list to the top once the new items are rendered. |
 | REQ-FEEDITEMS-003 | The user shall be able to expand items inline to view media and content. |
 | REQ-FEEDITEMS-004 | The user shall be able to save/unsave and mark items as read/unread. |
 | REQ-FEEDITEMS-005 | The screen title shall display the feed's title. |

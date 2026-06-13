@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import {
   View,
   Text,
@@ -10,7 +10,7 @@ import {
   ScrollView,
   RefreshControl,
 } from "react-native";
-import { FlashList } from "@shopify/flash-list";
+import { FlashList, FlashListRef } from "@shopify/flash-list";
 import { useFocusEffect } from "@react-navigation/native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
@@ -42,6 +42,8 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [rawXmlItem, setRawXmlItem] = useState<FeedItem | null>(null);
+  const listRef = useRef<FlashListRef<FeedItem>>(null);
+  const pendingScrollToTopRef = useRef(false);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: feed.title });
@@ -64,6 +66,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
+    pendingScrollToTopRef.current = true;
     try {
       // Explicit single-feed refresh: bypass adaptive scheduling so the
       // user actually gets a fresh fetch even if the feed is in backoff.
@@ -91,6 +94,14 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       }
     }, [handleRefresh, loadItems])
   );
+
+  // Scroll to top after pull-to-refresh once new items are committed.
+  useEffect(() => {
+    if (pendingScrollToTopRef.current) {
+      pendingScrollToTopRef.current = false;
+      listRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }
+  }, [items]);
 
   const handleOpenItem = useCallback(
     (item: FeedItem) => {
@@ -270,6 +281,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
         </ScrollView>
       ) : (
         <FlashList
+          ref={listRef}
           data={items}
           keyExtractor={keyExtractor}
           onRefresh={handleRefresh}

@@ -143,6 +143,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const scrollToTopParam = route.params?.scrollToTop;
 
   const flatListRef = useRef<FlashListRef<CollapsedFeedListRow>>(null);
+  const pendingScrollToTopRef = useRef(false);
   const markAsReadOnScrollRef = useRef(
     loadConfig().markAsReadOnScroll ?? false
   );
@@ -236,6 +237,18 @@ export default function FeedListScreen({ navigation, route }: Props) {
       setIsFeedScrolled(false);
     }
   }, [isFocused, setIsFeedScrolled]);
+
+  // Scroll to top after a pull-to-refresh once new items are committed.
+  // Calling scrollToOffset immediately after `await loadData()` would fire
+  // before React commits the state updates from setItems, so the list can
+  // re-render with fresh content and then discard the scroll. Using a flag
+  // here defers the scroll until after the next render cycle.
+  useEffect(() => {
+    if (pendingScrollToTopRef.current) {
+      pendingScrollToTopRef.current = false;
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+    }
+  }, [items]);
 
   const loadData = useCallback(
     async (refreshRemote: boolean) => {
@@ -346,14 +359,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const handleRefreshAll = async () => {
     setRetainedUnreadIds(new Set());
     setRefreshing(true);
+    // Set the flag before loadData so the useEffect watching `items` will
+    // scroll to top after React commits the freshly loaded items.
+    pendingScrollToTopRef.current = true;
     await loadData(true);
-    // After a manual refresh, scroll to the top so the user actually sees the
-    // freshly fetched items. This is especially important for the stacked
-    // sort, where the seed is regenerated on refresh and the entire ordering
-    // changes — leaving the user mid-list would feel disorienting. Using
     // animated:false matches the tab-press scroll-to-top behavior; FlashList's
     // animated scroll can stall with variable-height rows.
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
     setIsFeedScrolled(false);
   };
 
