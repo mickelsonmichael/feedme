@@ -126,6 +126,21 @@ function FeedTabIcon({ focused }: { focused: boolean }): React.ReactElement {
   return <FeatherTabIcon icon={icon} focused={focused} />;
 }
 
+function FeedTabLabel({
+  focused,
+  color,
+}: {
+  focused: boolean;
+  color: string;
+}): React.ReactElement {
+  const { isFeedScrolled } = useFeedScroll();
+  return (
+    <Text style={[styles.tabLabel, { color }]}>
+      {focused && isFeedScrolled ? "To Top" : "Feed"}
+    </Text>
+  );
+}
+
 // Width breakpoint at which the web layout switches to the sidebar
 const WEB_BREAKPOINT = 768;
 
@@ -203,8 +218,9 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
           selectedTagId !== undefined ||
           selectedCustomFeedId !== undefined)
       );
-    const displayIcon: FeatherIconName =
-      name === "Feed" && focused && isFeedScrolled ? "arrow-up" : icon;
+    const showScrollToTop = name === "Feed" && focused && isFeedScrolled;
+    const displayIcon: FeatherIconName = showScrollToTop ? "arrow-up" : icon;
+    const displayLabel = showScrollToTop ? "To Top" : label;
     return (
       <TouchableOpacity
         key={name}
@@ -214,7 +230,17 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
         ]}
         onPress={() => {
           if (name === "Feed") {
-            if (currentRoute === "Feed" && selectedFeedId === undefined) {
+            if (currentRoute === "Feed" && isFeedScrolled) {
+              // Acting as "To Top" — scroll the current (possibly scoped)
+              // view without resetting the active feed/tag/custom-feed scope.
+              navigation.dispatch(
+                CommonActions.navigate({
+                  name: "Feed",
+                  params: { scrollToTop: Date.now() },
+                  merge: true,
+                })
+              );
+            } else if (currentRoute === "Feed") {
               navigation.navigate("Feed", { scrollToTop: Date.now() });
             } else {
               navigation.navigate("Feed", {});
@@ -237,7 +263,7 @@ function WebSideNav({ state, navigation }: BottomTabBarProps) {
             focused && { fontWeight: "600" },
           ]}
         >
-          {label}
+          {displayLabel}
         </Text>
       </TouchableOpacity>
     );
@@ -479,6 +505,11 @@ function Tabs() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const useSidebar = isWeb && width >= WEB_BREAKPOINT;
+  const { isFeedScrolled } = useFeedScroll();
+  // The tabPress listener below is created outside of React's render scope,
+  // so it reads scroll state via a ref kept in sync on every render.
+  const isFeedScrolledRef = React.useRef(isFeedScrolled);
+  isFeedScrolledRef.current = isFeedScrolled;
 
   return (
     <Tab.Navigator
@@ -534,6 +565,9 @@ function Tabs() {
         component={FeedListScreen}
         options={{
           tabBarIcon: ({ focused }) => <FeedTabIcon focused={focused} />,
+          tabBarLabel: ({ focused, color }) => (
+            <FeedTabLabel focused={focused} color={color} />
+          ),
         }}
         listeners={({ navigation }) => ({
           tabPress: (event) => {
@@ -542,8 +576,15 @@ function Tabs() {
               // without resetting params or scrolling to top.
               return;
             }
-            // Already on the Feed tab — reset any active scope and scroll to top.
+            // Already on the Feed tab — suppress the default re-jump either way.
             event.preventDefault();
+            if (isFeedScrolledRef.current) {
+              // Acting as "To Top" — let FeedListScreen's own tabPress
+              // listener scroll the current (possibly scoped) view to the
+              // top without touching the active feed/tag/custom-feed scope.
+              return;
+            }
+            // Already at the top — reset any active scope back to "All Feeds".
             navigation.dispatch(
               CommonActions.navigate({
                 name: "Feed",

@@ -2,7 +2,6 @@ import { Platform } from "react-native";
 import * as BackgroundTask from "expo-background-task";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Network from "expo-network";
-import * as Notifications from "expo-notifications";
 import * as TaskManager from "expo-task-manager";
 import type { EventSubscription } from "expo-modules-core";
 import {
@@ -101,10 +100,22 @@ function isNativeNotificationsSupported(): boolean {
   return true;
 }
 
+/**
+ * Lazily requires `expo-notifications`. Merely evaluating this module throws
+ * on Android in Expo Go (SDK 53+) as a side effect of its own module-level
+ * code, before any of its APIs are even called. Every call site below is
+ * reached only after `isNativeNotificationsSupported()` has confirmed we're
+ * not in that environment, so the module is never loaded there.
+ */
+function getNotifications() {
+  return require("expo-notifications") as typeof import("expo-notifications");
+}
+
 export async function ensureNotificationPermissions(): Promise<boolean> {
   if (!isNativeNotificationsSupported()) {
     return false;
   }
+  const Notifications = getNotifications();
   const current = await Notifications.getPermissionsAsync();
   if (current.granted) {
     return true;
@@ -117,6 +128,7 @@ export async function getNotificationPermissionGranted(): Promise<boolean> {
   if (!isNativeNotificationsSupported()) {
     return false;
   }
+  const Notifications = getNotifications();
   const current = await Notifications.getPermissionsAsync();
   return current.granted;
 }
@@ -125,6 +137,8 @@ export async function initializeNotificationSystem(): Promise<void> {
   if (!isNativeNotificationsSupported()) {
     return;
   }
+
+  const Notifications = getNotifications();
 
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
@@ -256,6 +270,8 @@ export async function runBackgroundNotificationSync(): Promise<void> {
     return;
   }
 
+  const Notifications = getNotifications();
+
   const feeds = await getFeeds();
   if (feeds.length === 0) {
     return;
@@ -364,6 +380,7 @@ export function subscribeToNotificationOpens(
   if (!isNativeNotificationsSupported()) {
     return null;
   }
+  const Notifications = getNotifications();
   return Notifications.addNotificationResponseReceivedListener((response) => {
     const data = response.notification.request.content.data as
       | NotificationOpenPayload

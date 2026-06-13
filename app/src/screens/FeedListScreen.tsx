@@ -203,10 +203,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
     const unsubscribe = navigation.addListener("tabPress", () => {
       if (navigation.isFocused()) {
         flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+        setIsFeedScrolled(false);
       }
     });
     return unsubscribe;
-  }, [navigation]);
+  }, [navigation, setIsFeedScrolled]);
 
   // Web sidebar: scroll to top when the Feed nav item is pressed while already active
   useEffect(() => {
