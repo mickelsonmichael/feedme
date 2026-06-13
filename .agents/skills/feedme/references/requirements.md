@@ -26,6 +26,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDLIST-012 | Opening an item's original link via the external-link button shall mark the item as read if it is not already read. |
 | REQ-FEEDLIST-013 | Pressing the Feed tab button while already on the Feed screen shall scroll to the top (and reset any active scope). Pressing it while on any other screen shall navigate to the Feed screen at the same scroll position the user left it at. |
 | REQ-FEEDLIST-014 | When the **Group Feeds** setting is set to a value other than None (Hourly / Daily / Weekly / Monthly) and the active sort is **Newest**, the feed list shall display labeled time-bucket dividers between posts. A divider is shown only if at least one post belongs to that bucket. The setting has no effect when any sort other than Newest is active. |
+| REQ-FEEDLIST-015 | In compact layout, when a post with an image is expanded inline, the thumbnail shall be hidden so the image is only displayed once (in the expanded media panel). Additionally, any `<img>` tags present in the HTML content shall be stripped before rendering, so the image embedded in the feed HTML (e.g. the Reddit thumbnail before "submitted by") is not shown again alongside the image rendered by ExpandedFeedMedia. |
 
 ---
 

@@ -107,7 +107,7 @@ export function SanitizedHtmlContent({ html }: Props) {
         onMessage={(event) => {
           const parsed = Number(event.nativeEvent.data);
           if (!Number.isFinite(parsed) || parsed <= 0) return;
-          setContentHeight(Math.max(MIN_WEBVIEW_HEIGHT, Math.ceil(parsed)));
+          setContentHeight(Math.ceil(parsed));
         }}
         style={[
           styles.webview,
@@ -119,11 +119,8 @@ export function SanitizedHtmlContent({ html }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    minHeight: MIN_WEBVIEW_HEIGHT,
-  },
+  wrap: {},
   webview: {
-    minHeight: MIN_WEBVIEW_HEIGHT,
     marginTop: spacing.xs,
   },
 });

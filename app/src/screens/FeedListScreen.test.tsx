@@ -958,6 +958,161 @@ describe("FeedListScreen", () => {
     });
   });
 
+  it("hides compact thumbnail when post is expanded so the image is not shown twice", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+        nsfw: 0,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 701,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Image post",
+        url: "https://alpha.example/post",
+        content: null,
+        image_url: "https://alpha.example/image.jpg",
+        published_at: Date.now(),
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-compact-expand-image",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert: thumbnail is visible before expanding
+    const thumbnailsBefore = tree!.root
+      .findAllByType(Image)
+      .filter(
+        (img) => img.props.source?.uri === "https://alpha.example/image.jpg"
+      );
+    expect(thumbnailsBefore.length).toBeGreaterThan(0);
+
+    // Act: expand the post
+    const expandButton = tree!.root.findByProps({
+      accessibilityLabel: "Expand post",
+    });
+    await act(async () => {
+      await expandButton.props.onPress();
+    });
+
+    // Assert: thumbnail Image is hidden (no longer rendered), full media shown via ExpandedFeedMedia
+    const thumbnailsAfter = tree!.root
+      .findAllByType(Image)
+      .filter(
+        (img) => img.props.source?.uri === "https://alpha.example/image.jpg"
+      );
+    expect(thumbnailsAfter.length).toBe(0);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("strips img tags from HTML content when expanded to avoid duplicate of image shown by ExpandedFeedMedia", async () => {
+    // Arrange – a Reddit-style post whose content HTML has an image <td> and a "submitted by" <td>
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Reddit",
+        url: "https://www.reddit.com/r/pics/.rss",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+        nsfw: 0,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getAllItems as jest.Mock).mockResolvedValue([
+      {
+        id: 702,
+        feed_id: 1,
+        feed_title: "Reddit",
+        title: "Cool photo",
+        url: "https://reddit.com/r/pics/comments/abc/cool_photo/",
+        content:
+          '<table><tr><td><a href="https://i.redd.it/abc.jpg"><img src="https://alpha.example/thumb.jpg" /></a></td><td>&#32; submitted by &#32; /u/user <a href="https://reddit.com/r/pics/comments/abc/cool_photo/">[comments]</a></td></tr></table>',
+        image_url: "https://alpha.example/thumb.jpg",
+        published_at: Date.now(),
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-compact-expand-img-strip",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Act: expand the post
+    const expandButton = tree!.root.findByProps({
+      accessibilityLabel: "Expand post",
+    });
+    await act(async () => {
+      await expandButton.props.onPress();
+    });
+
+    // Assert: the HTML rendered by SanitizedHtmlContent has no <img>, empty <a>, or empty <td>
+    const { Text: RNText } = require("react-native");
+    const htmlNodes = tree!.root
+      .findAllByType(RNText)
+      .filter(
+        (node) =>
+          typeof node.props.children === "string" &&
+          (node.props.children as string).startsWith("HTML:")
+      );
+    expect(htmlNodes.length).toBeGreaterThan(0);
+    for (const node of htmlNodes) {
+      const html = node.props.children as string;
+      expect(html).not.toMatch(/<img/i);
+      expect(html).not.toMatch(/<a\b[^>]*>\s*<\/a>/i);
+      expect(html).not.toMatch(/<td\b[^>]*>\s*<\/td>/i);
+    }
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
   it("shows reveal overlay for NSFW GIFs in card layout and shows Load GIF pill after reveal", async () => {
     // Arrange
     (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "card" });

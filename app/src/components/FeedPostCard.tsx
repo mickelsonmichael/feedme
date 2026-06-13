@@ -102,7 +102,15 @@ function FeedPostCardComponent({
   const [bionicReading] = useState(() => loadConfig().bionicReading ?? false);
   const sanitizedHtmlContent = useMemo(() => {
     if (!shouldRenderHtmlContent) return "";
-    const html = sanitizeHtml(item.content ?? "");
+    // Strip <img> tags — images are displayed via ExpandedFeedMedia above the
+    // content panel, so rendering them again inside the HTML would show the
+    // same image twice (e.g. the Reddit thumbnail before "submitted by").
+    // Also clean up empty <a> and <td> elements left behind after img removal
+    // to prevent layout gaps (e.g. an empty table cell from the image column).
+    const html = sanitizeHtml(item.content ?? "")
+      .replace(/<img\b[^>]*\/?>/gi, "")
+      .replace(/<a\b[^>]*>\s*<\/a>/gi, "")
+      .replace(/<td\b[^>]*>\s*<\/td>/gi, "");
     return bionicReading ? applyBionicToHtml(html) : html;
   }, [item.content, shouldRenderHtmlContent, bionicReading]);
   const redditCommentsLink = useMemo(
@@ -289,7 +297,7 @@ function FeedPostCardComponent({
       ]}
     >
       <View style={styles.cardRow}>
-        {item.image_url || galleryThumbnailUrl ? (
+        {!expanded && (item.image_url || galleryThumbnailUrl) ? (
           <View style={styles.cardImage}>
             <View
               style={[
