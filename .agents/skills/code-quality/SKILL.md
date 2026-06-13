@@ -1,3 +1,9 @@
+---
+name: code-quality
+description: "Run Prettier and TypeScript checks to verify code quality. Use as the very last step before submitting a PR. Triggers: format check, typecheck, prettier, code quality, pre-submit."
+argument-hint: "Optional: describe which files or areas to focus on"
+---
+
 # Code Quality
 
 Use Prettier to check that the code meets the project's formatting standards, and TypeScript to verify type correctness.
