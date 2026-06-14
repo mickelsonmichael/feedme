@@ -77,7 +77,7 @@ import { FeedPostCard } from "../components/FeedPostCard";
 import { loadConfig, saveConfig } from "../storage";
 import { openUrlWithPreference } from "../linkOpening";
 import { resolveCustomFeedIcon } from "../customFeedIcons";
-import { FeedItemContent } from "../components/FeedItemContent";
+import { FeedItemContent, formatDate } from "../components/FeedItemContent";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -1692,6 +1692,23 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 isDesktopWeb ? styles.singleDesktopInner : null,
               ]}
             >
+              <View style={styles.singlePostHeader}>
+                <Text
+                  style={[styles.singlePostMeta, { color: colors.inkSoft }]}
+                >
+                  {currentSingleItem.feed_title} -{" "}
+                  {formatDate(currentSingleItem.published_at)}
+                </Text>
+                <Text style={[styles.singlePostTitle, { color: colors.ink }]}>
+                  {currentSingleItem.title}
+                </Text>
+              </View>
+              <View
+                style={[
+                  styles.singlePostSeparator,
+                  { backgroundColor: colors.border },
+                ]}
+              />
               {isSingleItemNsfw ? (
                 <TouchableOpacity
                   onPress={() => setSingleNsfwRevealed((v) => !v)}
@@ -1888,6 +1905,25 @@ const styles = StyleSheet.create({
   desktopContent: {
     alignItems: "center",
     paddingHorizontal: spacing.xl,
+  },
+  singlePostHeader: {
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+  },
+  singlePostMeta: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+  },
+  singlePostTitle: {
+    fontFamily: fonts.heading,
+    fontWeight: "500",
+    fontSize: fontSize.h2,
+    lineHeight: 26,
+  },
+  singlePostSeparator: {
+    height: StyleSheet.hairlineWidth,
+    marginHorizontal: spacing.md,
   },
   singleInner: {
     width: "100%",

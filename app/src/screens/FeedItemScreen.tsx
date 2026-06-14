@@ -30,6 +30,7 @@ import { openUrlWithPreference } from "../linkOpening";
 import { loadConfig } from "../storage";
 import {
   FeedItemContent,
+  formatDate,
   isRedditCommentsUrl,
 } from "../components/FeedItemContent";
 
@@ -380,6 +381,22 @@ export default function FeedItemScreen({ route, navigation }: Props) {
         ]}
         showsVerticalScrollIndicator={false}
       >
+        <View
+          style={[
+            styles.itemHeader,
+            isDesktopWeb ? styles.desktopItemHeader : null,
+          ]}
+        >
+          <Text style={[styles.itemMeta, { color: colors.inkSoft }]}>
+            {item.feedTitle} - {formatDate(item.publishedAt)}
+          </Text>
+          <Text style={[styles.itemTitle, { color: colors.ink }]}>
+            {item.title}
+          </Text>
+          <View
+            style={[styles.itemSeparator, { backgroundColor: colors.border }]}
+          />
+        </View>
         <FeedItemContent
           item={item}
           bionicReading={bionicReading}
@@ -453,9 +470,31 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.md,
     paddingBottom: spacing.xxl,
+    gap: spacing.md,
   },
   desktopContent: {
     alignItems: "center",
     paddingHorizontal: spacing.xl,
+  },
+  itemHeader: {
+    width: "100%",
+    gap: spacing.xs,
+  },
+  desktopItemHeader: {
+    maxWidth: 920,
+  },
+  itemMeta: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+  },
+  itemTitle: {
+    fontFamily: fonts.heading,
+    fontWeight: "500",
+    fontSize: fontSize.h2,
+    lineHeight: 26,
+  },
+  itemSeparator: {
+    height: StyleSheet.hairlineWidth,
+    marginTop: spacing.xs,
   },
 });

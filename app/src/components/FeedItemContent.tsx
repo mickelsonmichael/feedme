@@ -64,14 +64,6 @@ export function FeedItemContent({
     <View
       style={[styles.articleInner, isDesktopWeb ? styles.desktopInner : null]}
     >
-      <Text style={[styles.meta, { color: colors.inkSoft }]}>
-        {item.feedTitle} - {formatDate(item.publishedAt)}
-      </Text>
-
-      <Text style={[styles.title, { color: colors.ink }]}>{item.title}</Text>
-
-      <View style={[styles.separator, { backgroundColor: colors.border }]} />
-
       {item.imageUrl || item.url || item.content ? (
         <ExpandedFeedMedia
           imageUrl={item.imageUrl}
@@ -145,7 +137,7 @@ export function isRedditCommentsUrl(url: string): boolean {
   }
 }
 
-function formatDate(ts: number | null): string {
+export function formatDate(ts: number | null): string {
   if (!ts) return "unknown";
   return new Date(ts).toLocaleString(undefined, {
     month: "short",
@@ -162,19 +154,6 @@ const styles = StyleSheet.create({
   },
   desktopInner: {
     maxWidth: 920,
-  },
-  meta: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.meta,
-  },
-  title: {
-    fontFamily: fonts.heading,
-    fontWeight: "500",
-    fontSize: fontSize.h2,
-    lineHeight: 26,
-  },
-  separator: {
-    height: StyleSheet.hairlineWidth,
   },
   article: {
     fontSize: fontSize.bodyLg,
