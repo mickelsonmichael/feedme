@@ -29,6 +29,14 @@ const STORAGE_KEY = "feedme_db_v1";
 type FeedTagRow = { feed_id: number; tag_id: number };
 type CustomFeedMemberRow = { custom_feed_id: number; feed_id: number };
 
+type ItemViewTimeRow = {
+  id: number;
+  item_id: number;
+  feed_id: number;
+  view_start_at: number;
+  view_end_at: number | null;
+};
+
 type DbState = {
   feeds: Feed[];
   items: FeedItem[];
@@ -43,12 +51,14 @@ type DbState = {
   feedTags: FeedTagRow[];
   customFeeds: CustomFeed[];
   customFeedMembers: CustomFeedMemberRow[];
+  itemViewTimes: ItemViewTimeRow[];
   nextFeedId: number;
   nextItemId: number;
   nextSavedPostId: number;
   nextReadLaterPostId: number;
   nextTagId: number;
   nextCustomFeedId: number;
+  nextItemViewTimeId: number;
 };
 
 function normalizeFeed(raw: Feed): Feed {
@@ -87,12 +97,14 @@ function emptyState(): DbState {
     feedTags: [],
     customFeeds: [],
     customFeedMembers: [],
+    itemViewTimes: [],
     nextFeedId: 1,
     nextItemId: 1,
     nextSavedPostId: 1,
     nextReadLaterPostId: 1,
     nextTagId: 1,
     nextCustomFeedId: 1,
+    nextItemViewTimeId: 1,
   };
 }
 
@@ -159,6 +171,12 @@ function loadState(): DbState {
         parsed && Array.isArray(parsed.customFeedMembers)
           ? (parsed.customFeedMembers as CustomFeedMemberRow[])
           : [];
+      const itemViewTimes =
+        parsed && Array.isArray(parsed.itemViewTimes)
+          ? (parsed.itemViewTimes as ItemViewTimeRow[]).filter(
+              (r) => r.view_end_at !== null
+            )
+          : [];
       cachedState = {
         feeds,
         items,
@@ -171,6 +189,7 @@ function loadState(): DbState {
         feedTags,
         customFeeds,
         customFeedMembers,
+        itemViewTimes,
         nextFeedId:
           typeof parsed?.nextFeedId === "number" && parsed.nextFeedId > 0
             ? parsed.nextFeedId
@@ -198,6 +217,11 @@ function loadState(): DbState {
           parsed.nextCustomFeedId > 0
             ? parsed.nextCustomFeedId
             : Math.max(1, ...customFeeds.map((c) => c.id + 1)),
+        nextItemViewTimeId:
+          typeof parsed?.nextItemViewTimeId === "number" &&
+          parsed.nextItemViewTimeId > 0
+            ? parsed.nextItemViewTimeId
+            : Math.max(1, ...itemViewTimes.map((r) => r.id + 1)),
       };
       return cachedState;
     }
@@ -1101,4 +1125,51 @@ export async function getFeedsForCustomFeed(
     .sort((a, b) =>
       a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
     );
+}
+
+// ── Item view times ────────────────────────────────────────────────────────
+
+export async function startItemViewTime(
+  itemId: number,
+  feedId: number
+): Promise<number> {
+  const state = loadState();
+  const id = state.nextItemViewTimeId;
+  state.itemViewTimes.push({
+    id,
+    item_id: itemId,
+    feed_id: feedId,
+    view_start_at: Date.now(),
+    view_end_at: null,
+  });
+  state.nextItemViewTimeId = id + 1;
+  // Do not persist incomplete sessions — they will be discarded on next load.
+  cachedState = state;
+  return id;
+}
+
+export async function endItemViewTime(rowId: number): Promise<void> {
+  const state = loadState();
+  const row = state.itemViewTimes.find(
+    (r) => r.id === rowId && r.view_end_at === null
+  );
+  if (row) {
+    row.view_end_at = Date.now();
+    saveState(state);
+  }
+}
+
+export async function getAverageViewTimeForFeed(
+  feedId: number
+): Promise<number | null> {
+  const state = loadState();
+  const completed = state.itemViewTimes.filter(
+    (r) => r.feed_id === feedId && r.view_end_at !== null
+  );
+  if (completed.length === 0) return null;
+  const total = completed.reduce(
+    (sum, r) => sum + (r.view_end_at! - r.view_start_at),
+    0
+  );
+  return total / completed.length;
 }

@@ -35,6 +35,8 @@ jest.mock("../database", () => ({
   getFeeds: jest.fn(),
   getItemsPage: jest.fn(),
   getFeedsForTag: jest.fn(() => Promise.resolve([])),
+  getCustomFeedById: jest.fn(() => Promise.resolve(null)),
+  getCustomFeedMembers: jest.fn(() => Promise.resolve([])),
   markItemRead: jest.fn(),
   markItemUnread: jest.fn(),
   savePost: jest.fn(),
@@ -43,6 +45,8 @@ jest.mock("../database", () => ({
   addToReadLater: jest.fn(),
   removeFromReadLater: jest.fn(),
   getReadLaterItemIds: jest.fn(() => Promise.resolve(new Set())),
+  startItemViewTime: jest.fn(() => Promise.resolve(1)),
+  endItemViewTime: jest.fn(() => Promise.resolve()),
 }));
 
 jest.mock("../feedRefresher", () => ({

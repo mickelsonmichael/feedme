@@ -328,6 +328,34 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
+  // Migration: add item_view_times table for tracking how long users view
+  // each post in single-layout mode. view_end_at is NULL until the user
+  // presses Next; rows with a NULL end are cleaned up on startup.
+  try {
+    await database.execAsync(`
+      CREATE TABLE IF NOT EXISTS item_view_times (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL,
+        feed_id INTEGER NOT NULL,
+        view_start_at INTEGER NOT NULL,
+        view_end_at INTEGER
+      )
+    `);
+  } catch {
+    // Table already exists — ignore
+  }
+
+  // On every startup, discard any in-progress view sessions that were
+  // interrupted by a crash or force-quit. Without this, a post left "open"
+  // overnight would contribute a multi-hour view time to the average.
+  try {
+    await database.execAsync(
+      "DELETE FROM item_view_times WHERE view_end_at IS NULL"
+    );
+  } catch {
+    // Non-critical — silently ignore if the table doesn't exist yet.
+  }
+
   // Indexes: ensure efficient sort/filter for the list screens.
   // These are optional for correctness — wrap in try/catch so a transient
   // failure here doesn't permanently poison dbPromise.
@@ -343,6 +371,7 @@ async function initializeSchema(
     CREATE INDEX IF NOT EXISTS idx_feed_tags_feed_id ON feed_tags(feed_id);
     CREATE INDEX IF NOT EXISTS idx_custom_feed_members_feed_id ON custom_feed_members(feed_id);
     CREATE INDEX IF NOT EXISTS idx_custom_feed_members_custom_feed_id ON custom_feed_members(custom_feed_id);
+    CREATE INDEX IF NOT EXISTS idx_item_view_times_feed_id ON item_view_times(feed_id);
   `);
   } catch {
     // Indexes are non-critical — if creation fails the app still functions.
@@ -663,6 +692,56 @@ export async function getAllPublishedAtForFeed(
   return rows
     .map((r) => r.published_at)
     .filter((t): t is number => typeof t === "number");
+}
+
+// ── Item view times ────────────────────────────────────────────────────────
+
+/**
+ * Record that the user has started viewing an item. Returns the row ID of the
+ * newly-created record so the caller can later close it with `endItemViewTime`.
+ */
+export async function startItemViewTime(
+  itemId: number,
+  feedId: number
+): Promise<number> {
+  const database = await getDatabase();
+  const result = await withWriteLock(() =>
+    database.runAsync(
+      "INSERT INTO item_view_times (item_id, feed_id, view_start_at) VALUES (?, ?, ?)",
+      [itemId, feedId, Date.now()]
+    )
+  );
+  return result.lastInsertRowId;
+}
+
+/**
+ * Record that the user has finished viewing an item by pressing Next.
+ * Only the specific row identified by `rowId` is updated so concurrent or
+ * overlapping sessions do not interfere with each other.
+ */
+export async function endItemViewTime(rowId: number): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync(
+      "UPDATE item_view_times SET view_end_at = ? WHERE id = ? AND view_end_at IS NULL",
+      [Date.now(), rowId]
+    )
+  );
+}
+
+/**
+ * Returns the average view duration (in ms) for all completed view sessions
+ * belonging to a feed, or `null` when no completed sessions exist yet.
+ */
+export async function getAverageViewTimeForFeed(
+  feedId: number
+): Promise<number | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{ avg_ms: number | null }>(
+    "SELECT AVG(view_end_at - view_start_at) AS avg_ms FROM item_view_times WHERE feed_id = ? AND view_end_at IS NOT NULL",
+    [feedId]
+  );
+  return row?.avg_ms ?? null;
 }
 
 // ── Items ──────────────────────────────────────────────────────────────────

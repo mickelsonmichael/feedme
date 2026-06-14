@@ -3,6 +3,7 @@ import {
   computeFrequency,
   computePostingWindow,
   computeStability,
+  formatReadTime,
   selectBadge,
   _internal,
 } from "./feedStats";
@@ -216,19 +217,64 @@ describe("selectBadge", () => {
     expect(badge).toBe("Spammy");
   });
 
-  it("prefers 'Invalid' over 'Dead' when both apply", () => {
-    // Arrange: never succeeded, also no recent posts
-    const oldStamps = [NOW - 400 * DAY];
+  it("returns 'FrequentlySkipped' when avg read time is less than 5 seconds", () => {
+    // Arrange
     const feed = makeFeed({
-      fetch_success_count: 0,
-      fetch_failure_count: 10,
+      fetch_success_count: 5,
+      fetch_failure_count: 0,
     });
-    const freq = computeFrequency(oldStamps, NOW);
+    const freq = computeFrequency(oneAYearStamps, NOW);
     const stab = computeStability(feed);
     // Act
-    const badge = selectBadge(feed, freq, stab, oldStamps, NOW);
+    const badge = selectBadge(feed, freq, stab, oneAYearStamps, NOW, 3000);
     // Assert
-    expect(badge).toBe("Invalid");
+    expect(badge).toBe("FrequentlySkipped");
+  });
+
+  it("does NOT return 'FrequentlySkipped' when avg read time is exactly 5 seconds", () => {
+    // Arrange
+    const feed = makeFeed({
+      fetch_success_count: 5,
+      fetch_failure_count: 0,
+    });
+    const freq = computeFrequency(oneAYearStamps, NOW);
+    const stab = computeStability(feed);
+    // Act
+    const badge = selectBadge(feed, freq, stab, oneAYearStamps, NOW, 5000);
+    // Assert
+    expect(badge).toBeNull();
+  });
+
+  it("does NOT return 'FrequentlySkipped' when avgReadTimeMs is null", () => {
+    // Arrange
+    const feed = makeFeed({
+      fetch_success_count: 5,
+      fetch_failure_count: 0,
+    });
+    const freq = computeFrequency(oneAYearStamps, NOW);
+    const stab = computeStability(feed);
+    // Act
+    const badge = selectBadge(feed, freq, stab, oneAYearStamps, NOW, null);
+    // Assert
+    expect(badge).toBeNull();
+  });
+
+  it("prefers 'Spammy' over 'FrequentlySkipped'", () => {
+    // Arrange: spammy feed that is also quickly skipped
+    const spammyStamps = Array.from(
+      { length: 200 },
+      (_, i) => NOW - (i * 90 * DAY) / 200
+    );
+    const feed = makeFeed({
+      fetch_success_count: 10,
+      fetch_failure_count: 0,
+    });
+    const freq = computeFrequency(spammyStamps, NOW);
+    const stab = computeStability(feed);
+    // Act
+    const badge = selectBadge(feed, freq, stab, spammyStamps, NOW, 1000);
+    // Assert
+    expect(badge).toBe("Spammy");
   });
 });
 
@@ -251,6 +297,32 @@ describe("computeFeedStats", () => {
     expect(stats.lastFetch.ok).toBe(true);
     expect(stats.stability.rate).toBeCloseTo(10 / 11, 5);
     expect(stats.badge).toBeNull();
+  });
+
+  it("includes avgReadTimeMs and avgReadTimeLabel when provided", () => {
+    // Arrange
+    const stamps = [NOW - DAY, NOW - 3 * DAY];
+    const feed = makeFeed({
+      fetch_success_count: 5,
+      fetch_failure_count: 0,
+    });
+    // Act
+    const stats = computeFeedStats(feed, stamps, NOW, 3500);
+    // Assert
+    expect(stats.avgReadTimeMs).toBe(3500);
+    expect(stats.avgReadTimeLabel).toBe("4s");
+    expect(stats.badge).toBe("FrequentlySkipped");
+  });
+
+  it("sets avgReadTimeMs and avgReadTimeLabel to null when not provided", () => {
+    // Arrange
+    const stamps = [NOW - DAY];
+    const feed = makeFeed({ fetch_success_count: 5, fetch_failure_count: 0 });
+    // Act
+    const stats = computeFeedStats(feed, stamps, NOW);
+    // Assert
+    expect(stats.avgReadTimeMs).toBeNull();
+    expect(stats.avgReadTimeLabel).toBeNull();
   });
 
   it("propagates feed error to lastFetch.error", () => {
@@ -291,4 +363,23 @@ describe("computePostingWindow", () => {
 
 it("exposes internal constants for visibility in other tests", () => {
   expect(_internal.SIX_MONTHS_MS).toBeGreaterThan(0);
+});
+
+describe("formatReadTime", () => {
+  it("formats sub-minute durations as seconds", () => {
+    expect(formatReadTime(0)).toBe("0s");
+    expect(formatReadTime(3500)).toBe("4s");
+    expect(formatReadTime(59000)).toBe("59s");
+  });
+
+  it("formats minute-level durations as Nm Xs", () => {
+    expect(formatReadTime(60000)).toBe("1m");
+    expect(formatReadTime(90000)).toBe("1m 30s");
+    expect(formatReadTime(125000)).toBe("2m 5s");
+  });
+
+  it("omits seconds component when seconds are zero", () => {
+    expect(formatReadTime(120000)).toBe("2m");
+    expect(formatReadTime(300000)).toBe("5m");
+  });
 });

@@ -38,6 +38,9 @@ import {
   addToReadLater,
   removeFromReadLater,
   getReadLaterItemIds,
+  startItemViewTime,
+  endItemViewTime,
+  getItemRawXml,
 } from "../database";
 import { Feather } from "@expo/vector-icons";
 import { refreshFeeds } from "../feedRefresher";
@@ -137,6 +140,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [singleActiveIndex, setSingleActiveIndex] = useState(0);
   const [showSingleMoreMenu, setShowSingleMoreMenu] = useState(false);
   const [singleToolbarHeight, setSingleToolbarHeight] = useState(0);
+  /** Row ID of the active item_view_times record in single layout.
+   *  Persisted as a ref (not state) to avoid triggering re-renders. */
+  const singleViewTimeRowIdRef = useRef<number | null>(null);
   const selectedFeedId = route.params?.selectedFeedId;
   const selectedTagId = route.params?.selectedTagId;
   const selectedCustomFeedId = route.params?.selectedCustomFeedId;
@@ -707,6 +713,23 @@ export default function FeedListScreen({ navigation, route }: Props) {
     [filter, navigation]
   );
 
+  const handleSingleViewXml = useCallback(
+    async (id: number) => {
+      const item = itemsByIdRef.current.get(id);
+      let rawXml: string | null = null;
+      try {
+        rawXml = await getItemRawXml(id);
+      } catch {
+        // Fetch failure — navigate anyway to show the empty state
+      }
+      navigation.navigate("RawXml", {
+        rawXml,
+        title: item?.title ?? "Raw XML",
+      });
+    },
+    [navigation]
+  );
+
   const formatDate = (ts: number | null): string => {
     if (!ts) return "";
     const diff = Date.now() - ts;
@@ -996,6 +1019,43 @@ export default function FeedListScreen({ navigation, route }: Props) {
     visibleItems.length,
   ]);
 
+  // Track how long the user views each post in single layout. Start a timer
+  // when the active item changes; the timer is ended in handleSingleNext.
+  // We use a ref to store the record ID so the effect doesn't need to be
+  // listed as a dependency of handleSingleNext.
+  useEffect(() => {
+    if (feedLayout !== "single" || !currentSingleItem) return;
+
+    const itemId = currentSingleItem.id;
+    const feedId = currentSingleItem.feed_id;
+    let rowId: number | null = null;
+    let cancelled = false;
+
+    startItemViewTime(itemId, feedId)
+      .then((id) => {
+        if (!cancelled) {
+          singleViewTimeRowIdRef.current = id;
+          rowId = id;
+        } else {
+          // Component unmounted or item changed before the insert resolved —
+          // endItemViewTime is a no-op for records with a NULL end, so we
+          // leave the row to be cleaned up on next startup.
+        }
+      })
+      .catch(() => {
+        // Non-critical — silently ignore view time failures.
+      });
+
+    return () => {
+      cancelled = true;
+      // Do NOT end the timer on cleanup — only end it when the user
+      // explicitly presses Next. If they go back or switch modes the row
+      // stays open and will be discarded on next startup.
+      singleViewTimeRowIdRef.current = null;
+      void rowId; // keep linter happy
+    };
+  }, [currentSingleItem, feedLayout]);
+
   // Inject time-bucket group dividers when grouping is active and sort is newest.
   const displayItems = useMemo<CollapsedFeedListRow[]>(() => {
     const withDividers: FeedListRow[] =
@@ -1032,6 +1092,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
   }, [setIsFeedScrolled, singleSafeIndex]);
 
   const handleSingleNext = useCallback(() => {
+    // End the view-time session for the current post before moving on.
+    const rowId = singleViewTimeRowIdRef.current;
+    if (rowId !== null) {
+      singleViewTimeRowIdRef.current = null;
+      endItemViewTime(rowId).catch(() => {
+        // Non-critical — silently ignore view time failures.
+      });
+    }
+
     if (singleSafeIndex < visibleItems.length - 1) {
       setSingleActiveIndex(singleSafeIndex + 1);
       singleScrollRef.current?.scrollTo({ y: 0, animated: false });
@@ -1536,7 +1605,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.singleMoreMenuItem}
+                  style={[
+                    styles.singleMoreMenuItem,
+                    { borderBottomColor: colors.border },
+                  ]}
                   onPress={() => {
                     toggleRead(currentSingleItem.id);
                     setShowSingleMoreMenu(false);
@@ -1560,6 +1632,25 @@ export default function FeedListScreen({ navigation, route }: Props) {
                     ]}
                   >
                     {currentSingleItem.read ? "Mark Unread" : "Mark Read"}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.singleMoreMenuItem}
+                  onPress={() => {
+                    handleSingleViewXml(currentSingleItem.id);
+                    setShowSingleMoreMenu(false);
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel="View raw XML"
+                >
+                  <Feather name="code" size={16} color={colors.ink} />
+                  <Text
+                    style={[
+                      styles.singleMoreMenuItemText,
+                      { color: colors.ink },
+                    ]}
+                  >
+                    View XML
                   </Text>
                 </TouchableOpacity>
               </View>

@@ -21,7 +21,12 @@ const MIN_SAMPLES_FOR_WINDOW = 3;
  * unlucky failure on a brand-new feed doesn't immediately label it. */
 const MIN_ATTEMPTS_FOR_STABILITY_BADGE = 4;
 
-export type FeedBadge = "Invalid" | "Dead" | "Unstable" | "Spammy";
+export type FeedBadge =
+  | "Invalid"
+  | "Dead"
+  | "Unstable"
+  | "Spammy"
+  | "FrequentlySkipped";
 
 export type FrequencyStat = {
   /** Posts per day averaged across the selected window. `null` when there
@@ -78,6 +83,12 @@ export type FeedStats = {
   /** The single, highest-priority badge currently earned by the feed.
    *  `null` when none apply. */
   badge: FeedBadge | null;
+  /** Average time (ms) the user spends on posts from this feed before
+   *  pressing Next in single-layout mode. `null` when no completed sessions
+   *  have been recorded yet. */
+  avgReadTimeMs: number | null;
+  /** Human-readable label for `avgReadTimeMs`, e.g. "3s" or "1m 20s". */
+  avgReadTimeLabel: string | null;
 };
 
 function formatRelativeAge(ms: number): string {
@@ -92,6 +103,14 @@ function formatRelativeAge(ms: number): string {
   if (months < 12) return `${months} month${months === 1 ? "" : "s"} ago`;
   const years = Math.floor(days / 365);
   return `${years} year${years === 1 ? "" : "s"} ago`;
+}
+
+export function formatReadTime(ms: number): string {
+  const totalSeconds = Math.round(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
 }
 
 function formatRelativeFuture(ms: number): string {
@@ -286,9 +305,10 @@ export function selectBadge(
   frequency: FrequencyStat,
   stability: StabilityStat,
   publishedAts: number[],
-  now: number
+  now: number,
+  avgReadTimeMs: number | null = null
 ): FeedBadge | null {
-  // Priority order: Invalid > Dead > Unstable > Spammy.
+  // Priority order: Invalid > Dead > Unstable > Spammy > FrequentlySkipped.
   if (
     stability.totalCount >= MIN_ATTEMPTS_FOR_STABILITY_BADGE &&
     stability.rate === 0
@@ -318,6 +338,10 @@ export function selectBadge(
     return "Spammy";
   }
 
+  if (avgReadTimeMs !== null && avgReadTimeMs < 5000) {
+    return "FrequentlySkipped";
+  }
+
   // Suppress unused-warning for `feed` — kept in the signature so callers
   // don't have to refactor when we add feed-driven badges (e.g. NSFW).
   void feed;
@@ -327,14 +351,22 @@ export function selectBadge(
 export function computeFeedStats(
   feed: Feed,
   publishedAts: number[],
-  now: number = Date.now()
+  now: number = Date.now(),
+  avgReadTimeMs: number | null = null
 ): FeedStats {
   const frequency = computeFrequency(publishedAts, now);
   const stability = computeStability(feed);
   const lastFetch = computeLastFetchStatus(feed);
   const newest = computeNewestPostAge(publishedAts, now);
   const postingWindow = computePostingWindow(publishedAts);
-  const badge = selectBadge(feed, frequency, stability, publishedAts, now);
+  const badge = selectBadge(
+    feed,
+    frequency,
+    stability,
+    publishedAts,
+    now,
+    avgReadTimeMs
+  );
 
   const nextFetchAt = feed.next_fetch_at ?? 0;
   const nextFetchLabel =
@@ -351,6 +383,9 @@ export function computeFeedStats(
     consecutiveFailures: feed.consecutive_failures ?? 0,
     nextFetchLabel,
     badge,
+    avgReadTimeMs,
+    avgReadTimeLabel:
+      avgReadTimeMs !== null ? formatReadTime(avgReadTimeMs) : null,
   };
 }
 

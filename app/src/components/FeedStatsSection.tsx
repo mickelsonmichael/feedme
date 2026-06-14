@@ -19,6 +19,10 @@ function badgeColor(badge: FeedBadge, colors: ColorTokens): string {
       return colors.inkSoft;
     case "Spammy":
       return colors.accent;
+    case "FrequentlySkipped":
+      // Use a readable amber/orange rather than the highlight yellow
+      // (which is too light for text/border).
+      return "#b87c00";
   }
 }
 
@@ -100,13 +104,16 @@ export default function FeedStatsSection({ stats }: Props) {
 
   // Decide which row owns the active badge so the UI can highlight it once.
   // Order mirrors selectBadge priority.
-  let badgeOwner: "stability" | "frequency" | "newest" | null = null;
+  let badgeOwner: "stability" | "frequency" | "newest" | "readTime" | null =
+    null;
   if (stats.badge === "Invalid" || stats.badge === "Unstable") {
     badgeOwner = "stability";
   } else if (stats.badge === "Dead") {
     badgeOwner = "newest";
   } else if (stats.badge === "Spammy") {
     badgeOwner = "frequency";
+  } else if (stats.badge === "FrequentlySkipped") {
+    badgeOwner = "readTime";
   }
 
   const frequencyHint =
@@ -243,6 +250,23 @@ export default function FeedStatsSection({ stats }: Props) {
               icon="clock"
               label="Next scheduled fetch"
               value={stats.nextFetchLabel}
+            />
+          </>
+        ) : null}
+
+        {stats.avgReadTimeLabel ? (
+          <>
+            <View
+              style={[styles.divider, { backgroundColor: colors.border }]}
+              accessibilityElementsHidden
+            />
+            <StatRow
+              icon="eye"
+              label="Avg read time"
+              value={stats.avgReadTimeLabel}
+              hint="time spent before pressing Next in single layout"
+              badge={badgeOwner === "readTime" ? stats.badge : null}
+              highlight={badgeOwner === "readTime"}
             />
           </>
         ) : null}

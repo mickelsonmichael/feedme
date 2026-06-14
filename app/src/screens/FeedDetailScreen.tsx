@@ -31,6 +31,7 @@ import {
   getOrCreateTag,
   setFeedTags,
   getAllPublishedAtForFeed,
+  getAverageViewTimeForFeed,
 } from "../database";
 import { fetchFeedWithMeta } from "../feedParser";
 import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
@@ -71,6 +72,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
 
   const [feed, setFeed] = useState<Feed | null>(null);
   const [publishedAts, setPublishedAts] = useState<number[]>([]);
+  const [avgReadTimeMs, setAvgReadTimeMs] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -124,13 +126,15 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         setShowOnlyInTag(found.show_only_in_tag === 1);
         setShowOnlyInCustomFeed(found.show_only_in_custom_feed === 1);
         setCollapseRepeated(found.collapse_repeated === 1);
-        const [feedTags, stamps] = await Promise.all([
+        const [feedTags, stamps, avgMs] = await Promise.all([
           getTagsForFeed(found.id),
           getAllPublishedAtForFeed(found.id),
+          getAverageViewTimeForFeed(found.id),
         ]);
         setSelectedTags(feedTags.map((t) => ({ id: t.id, name: t.name })));
         setOriginalTagIds(feedTags.map((t) => t.id));
         setPublishedAts(stamps);
+        setAvgReadTimeMs(avgMs);
       }
     } finally {
       setLoading(false);
@@ -283,7 +287,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
     );
   }
 
-  const stats = computeFeedStats(feed, publishedAts);
+  const stats = computeFeedStats(feed, publishedAts, Date.now(), avgReadTimeMs);
 
   return (
     <KeyboardAvoidingView
