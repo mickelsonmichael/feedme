@@ -85,9 +85,9 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDDETAIL-002 | The user shall be able to toggle proxy usage for the feed.                                                                                               |
 | REQ-FEEDDETAIL-003 | The user shall be able to flag a feed as NSFW.                                                                                                           |
 | REQ-FEEDDETAIL-004 | The Save button shall only be enabled when unsaved changes exist.                                                                                        |
-| REQ-FEEDDETAIL-005 | The user shall be able to manually refresh (re-fetch) the feed from this screen.                                                                         |
+| REQ-FEEDDETAIL-005 | The user shall be able to manually refresh (re-fetch) the feed via a Refresh button placed in the header alongside the Save and Delete buttons. While refreshing, the button shows a spinner. [modified: moved refresh to header icon/action button; previously a separate in-page button] |
 | REQ-FEEDDETAIL-006 | The user shall be able to delete the feed with a confirmation step.                                                                                      |
-| REQ-FEEDDETAIL-007 | The screen shall display the feed's last-fetched timestamp and any fetch error.                                                                          |
+| REQ-FEEDDETAIL-007 | The screen shall display the feed's last-fetched timestamp and any fetch error. When an error exists, tapping the error box shall navigate to FeedErrorScreen showing the full error message. |
 | REQ-FEEDDETAIL-008 | The user shall be able to assign up to 25 tags to a feed via a multi-select picker, including creating new tags inline.                                  |
 | REQ-FEEDDETAIL-009 | The user shall be able to toggle "Show only on tag feeds" so the feed's items are hidden from the default home view and only appear in tag-scoped views. |
 | REQ-FEEDDETAIL-010 | The user shall be able to open per-feed notification settings from FeedDetailScreen.                                                                     |
@@ -95,7 +95,13 @@ This file tracks functional requirements for each screen and feature area. Updat
 
 ---
 
-## AddFeedScreen
+## FeedErrorScreen
+
+| ID                | Requirement                                                                                                                        |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| REQ-FEEDERROR-001 | The screen shall display the full raw error message in a selectable, monospace text view.                                          |
+| REQ-FEEDERROR-002 | The user shall be able to copy the error text to the clipboard via a Copy button.                                                  |
+| REQ-FEEDERROR-003 | The user shall be able to return to FeedDetailScreen via a Close button.                                                           |
 
 | ID              | Requirement                                                                                                                                                                                                                                  |
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

@@ -83,6 +83,7 @@ function normalizeFeed(raw: Feed): Feed {
     notify_frequency: raw.notify_frequency ?? "off",
     notify_last_seen_item_id: raw.notify_last_seen_item_id ?? null,
     notify_daily_last_sent_at: raw.notify_daily_last_sent_at ?? null,
+    rate_limit_info: raw.rate_limit_info ?? null,
   };
 }
 
@@ -398,6 +399,18 @@ export async function updateFeedCacheValidators(
   if (feed) {
     feed.etag = etag;
     feed.last_modified = lastModified;
+    saveState(state);
+  }
+}
+
+export async function updateFeedRateLimitInfo(
+  feedId: number,
+  info: string | null
+): Promise<void> {
+  const state = loadState();
+  const feed = state.feeds.find((f) => f.id === feedId);
+  if (feed) {
+    feed.rate_limit_info = info;
     saveState(state);
   }
 }

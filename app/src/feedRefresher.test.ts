@@ -1,12 +1,18 @@
 import { refreshFeeds } from "./feedRefresher";
-import { fetchFeedWithMeta } from "./feedParser";
+import { fetchFeedWithMeta, RateLimitError } from "./feedParser";
 import * as database from "./database";
 import { Feed, ParsedFeedItem } from "./types";
 
 // Mock network and database calls so tests run offline and touch no real storage
-jest.mock("./feedParser", () => ({
-  fetchFeedWithMeta: jest.fn(),
-}));
+jest.mock("./feedParser", () => {
+  const actual = jest.requireActual(
+    "./feedParser"
+  ) as typeof import("./feedParser");
+  return {
+    fetchFeedWithMeta: jest.fn(),
+    RateLimitError: actual.RateLimitError,
+  };
+});
 
 jest.mock("./database", () => ({
   upsertItems: jest.fn(),
@@ -18,6 +24,7 @@ jest.mock("./database", () => ({
   setFeedRefreshFailure: jest.fn(),
   getRecentPublishedAtForFeed: jest.fn(),
   recordFeedFetchOutcome: jest.fn(),
+  updateFeedRateLimitInfo: jest.fn(),
 }));
 
 const mockFetchFeedWithMeta = fetchFeedWithMeta as jest.MockedFunction<
@@ -53,6 +60,10 @@ const mockGetRecentPublishedAtForFeed =
   database.getRecentPublishedAtForFeed as jest.MockedFunction<
     typeof database.getRecentPublishedAtForFeed
   >;
+const mockUpdateFeedRateLimitInfo =
+  database.updateFeedRateLimitInfo as jest.MockedFunction<
+    typeof database.updateFeedRateLimitInfo
+  >;
 
 const makeFeed = (id: number, overrides: Partial<Feed> = {}): Feed => ({
   id,
@@ -79,6 +90,7 @@ beforeEach(() => {
     notModified: false,
     etag: null,
     lastModified: null,
+    rateLimitHeaders: null,
   });
   mockUpsertItems.mockResolvedValue(undefined);
   mockUpdateFeedLastFetched.mockResolvedValue(undefined);
@@ -88,6 +100,7 @@ beforeEach(() => {
   mockSetFeedRefreshSuccess.mockResolvedValue(undefined);
   mockSetFeedRefreshFailure.mockResolvedValue(undefined);
   mockGetRecentPublishedAtForFeed.mockResolvedValue([]);
+  mockUpdateFeedRateLimitInfo.mockResolvedValue(undefined);
 });
 
 describe("refreshFeeds", () => {
@@ -482,5 +495,62 @@ describe("refreshFeeds", () => {
     // Allow some slack for clock drift between the call and the assertion.
     expect(delay).toBeGreaterThan(8 * 60 * 60 * 1000 - 5_000);
     expect(delay).toBeLessThanOrEqual(8 * 60 * 60 * 1000);
+  });
+
+  it("persists rate-limit headers when fetch succeeds after a 429 retry", async () => {
+    // Arrange — fetchFeedWithMeta resolved successfully but encountered a 429
+    // during retries (rateLimitHeaders is populated).
+    const rateLimitHeaders = {
+      retryAfter: "5",
+      limit: "100",
+      remaining: "0",
+      reset: null,
+      capturedAt: Date.now(),
+    };
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [parsedItem],
+      usedProxy: false,
+      notModified: false,
+      etag: null,
+      lastModified: null,
+      rateLimitHeaders,
+    });
+    const feeds = [makeFeed(1)];
+
+    // Act
+    await refreshFeeds(feeds);
+
+    // Assert — rate limit info should be persisted
+    expect(mockUpdateFeedRateLimitInfo).toHaveBeenCalledTimes(1);
+    expect(mockUpdateFeedRateLimitInfo).toHaveBeenCalledWith(
+      1,
+      JSON.stringify(rateLimitHeaders)
+    );
+  });
+
+  it("persists rate-limit headers when fetch fails with RateLimitError", async () => {
+    // Arrange — all retries exhausted; fetchFeedWithMeta throws RateLimitError
+    const rateLimitHeaders = {
+      retryAfter: "60",
+      limit: "50",
+      remaining: "0",
+      reset: null,
+      capturedAt: Date.now(),
+    };
+    mockFetchFeedWithMeta.mockRejectedValue(
+      new RateLimitError(rateLimitHeaders)
+    );
+    mockGetItemCountForFeed.mockResolvedValue(0);
+    const feeds = [makeFeed(1)];
+
+    // Act
+    const errors = await refreshFeeds(feeds);
+
+    // Assert
+    expect(errors).toBe(1);
+    expect(mockUpdateFeedRateLimitInfo).toHaveBeenCalledWith(
+      1,
+      JSON.stringify(rateLimitHeaders)
+    );
   });
 });

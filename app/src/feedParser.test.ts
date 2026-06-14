@@ -689,4 +689,125 @@ describe("fetchFeedWithMeta", () => {
     expect(result.items).toEqual([]);
     expect(result.etag).toBe('"abc123"');
   });
+
+  it("throws RateLimitError with headers when server returns 429", async () => {
+    // Arrange — every XHR call returns 429; send() fires onload via microtask
+    jest.useFakeTimers();
+    type FakeXhr = {
+      open: jest.Mock;
+      send: jest.Mock;
+      setRequestHeader: jest.Mock;
+      getResponseHeader: jest.Mock;
+      status: number;
+      statusText: string;
+      responseText: string;
+      timeout: number;
+      ontimeout: (() => void) | null;
+      onerror: (() => void) | null;
+      onload: (() => void) | null;
+    };
+    (globalThis as unknown as Record<string, unknown>).XMLHttpRequest = jest.fn(
+      () => {
+        const xhr: FakeXhr = {
+          open: jest.fn(),
+          send: jest.fn(function (this: FakeXhr) {
+            Promise.resolve().then(() => this.onload?.());
+          }),
+          setRequestHeader: jest.fn(),
+          getResponseHeader: jest.fn((name: string) => {
+            const h: Record<string, string> = {
+              "x-ratelimit-limit": "100",
+              "x-ratelimit-remaining": "0",
+              "retry-after": "1",
+            };
+            return h[name.toLowerCase()] ?? null;
+          }),
+          status: 429,
+          statusText: "Too Many Requests",
+          responseText: "",
+          timeout: 0,
+          ontimeout: null,
+          onerror: null,
+          onload: null,
+        };
+        return xhr;
+      }
+    );
+
+    // Act — attach assertion BEFORE draining timers to prevent unhandled rejection
+    const promise = fetchFeedWithMeta("https://example.com/feed.xml");
+    const assertion = expect(promise).rejects.toMatchObject({
+      name: "RateLimitError",
+      message: "Rate limited (429 Too Many Requests)",
+      rateLimitHeaders: expect.objectContaining({
+        limit: "100",
+        remaining: "0",
+        retryAfter: "1",
+      }),
+    });
+    await jest.runAllTimersAsync();
+
+    // Assert
+    await assertion;
+    jest.useRealTimers();
+  });
+
+  it("returns rateLimitHeaders when a 429 is retried and eventually succeeds", async () => {
+    // Arrange — first XHR call returns 429, second returns 200
+    jest.useFakeTimers();
+    type FakeXhr = {
+      open: jest.Mock;
+      send: jest.Mock;
+      setRequestHeader: jest.Mock;
+      getResponseHeader: jest.Mock;
+      status: number;
+      statusText: string;
+      responseText: string;
+      timeout: number;
+      ontimeout: (() => void) | null;
+      onerror: (() => void) | null;
+      onload: (() => void) | null;
+    };
+    let callCount = 0;
+    (globalThis as unknown as Record<string, unknown>).XMLHttpRequest = jest.fn(
+      () => {
+        const thisCall = ++callCount;
+        const is429 = thisCall === 1;
+        const headers: Record<string, string> = is429
+          ? { "x-ratelimit-limit": "50", "retry-after": "1" }
+          : {};
+        const xhr: FakeXhr = {
+          open: jest.fn(),
+          send: jest.fn(function (this: FakeXhr) {
+            Promise.resolve().then(() => this.onload?.());
+          }),
+          setRequestHeader: jest.fn(),
+          getResponseHeader: jest.fn(
+            (name: string) => headers[name.toLowerCase()] ?? null
+          ),
+          status: is429 ? 429 : 200,
+          statusText: is429 ? "Too Many Requests" : "OK",
+          responseText: is429 ? "" : RSS_FEED,
+          timeout: 0,
+          ontimeout: null,
+          onerror: null,
+          onload: null,
+        };
+        return xhr;
+      }
+    );
+
+    // Act
+    const promise = fetchFeedWithMeta("https://example.com/feed.xml");
+    await jest.runAllTimersAsync();
+    const result = await promise;
+
+    // Assert
+    expect(result.items).toHaveLength(2);
+    expect(result.rateLimitHeaders).toMatchObject({
+      limit: "50",
+      retryAfter: "1",
+    });
+    jest.useRealTimers();
+  });
 });

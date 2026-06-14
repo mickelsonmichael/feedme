@@ -345,6 +345,17 @@ async function initializeSchema(
     // Table already exists — ignore
   }
 
+  // Migration: add rate_limit_info column to feeds. Stores a JSON-encoded
+  // snapshot of the rate-limit headers received on the most recent 429
+  // response. NULL when the feed has never been rate-limited.
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN rate_limit_info TEXT"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+
   // On every startup, discard any in-progress view sessions that were
   // interrupted by a crash or force-quit. Without this, a post left "open"
   // overnight would contribute a multi-hour view time to the average.
@@ -505,6 +516,21 @@ export async function updateFeedCacheValidators(
       "UPDATE feeds SET etag = ?, last_modified = ? WHERE id = ?",
       [etag, lastModified, feedId]
     )
+  );
+}
+
+/** Persist the most recent rate-limit headers for a feed.  Pass `null` to
+ *  clear the stored info (e.g. on a clean success after a previous 429). */
+export async function updateFeedRateLimitInfo(
+  feedId: number,
+  info: string | null
+): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(() =>
+    database.runAsync("UPDATE feeds SET rate_limit_info = ? WHERE id = ?", [
+      info,
+      feedId,
+    ])
   );
 }
 

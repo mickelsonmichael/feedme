@@ -1,4 +1,5 @@
 import { Feed } from "./types";
+import type { RateLimitHeaders } from "./feedParser";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const MS_PER_WEEK = 7 * MS_PER_DAY;
@@ -89,6 +90,10 @@ export type FeedStats = {
   avgReadTimeMs: number | null;
   /** Human-readable label for `avgReadTimeMs`, e.g. "3s" or "1m 20s". */
   avgReadTimeLabel: string | null;
+  /** Human-readable summary of the last-recorded rate-limit response from
+   *  this feed's server (e.g. "Limit: 100/hr · last hit 2 days ago").
+   *  `null` when no 429 has ever been received for this feed. */
+  rateLimitInfo: string | null;
 };
 
 function formatRelativeAge(ms: number): string {
@@ -386,7 +391,40 @@ export function computeFeedStats(
     avgReadTimeMs,
     avgReadTimeLabel:
       avgReadTimeMs !== null ? formatReadTime(avgReadTimeMs) : null,
+    rateLimitInfo: parseRateLimitInfo(feed.rate_limit_info ?? null, now),
   };
+}
+
+/** Parse the JSON stored in `feed.rate_limit_info` and return a short
+ *  human-readable string for display in the stats panel, or `null` when
+ *  no rate-limit data is available. */
+export function parseRateLimitInfo(
+  raw: string | null,
+  now: number = Date.now()
+): string | null {
+  if (!raw) return null;
+  let headers: RateLimitHeaders;
+  try {
+    headers = JSON.parse(raw) as RateLimitHeaders;
+  } catch {
+    return null;
+  }
+
+  const parts: string[] = [];
+  if (headers.limit) {
+    parts.push(`Limit: ${headers.limit}`);
+  }
+  if (headers.remaining !== null && headers.remaining !== undefined) {
+    parts.push(`Remaining: ${headers.remaining}`);
+  }
+  if (headers.retryAfter) {
+    parts.push(`Retry-After: ${headers.retryAfter}s`);
+  }
+  if (headers.capturedAt) {
+    const age = Math.max(0, now - headers.capturedAt);
+    parts.push(`last hit ${formatRelativeAge(age)}`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : "Rate limited (429)";
 }
 
 // Exports for tests that want to reach in for individual unit helpers.

@@ -47,6 +47,10 @@ export type Feed = {
   notify_frequency?: "immediate" | "daily" | "off";
   notify_last_seen_item_id?: number | null;
   notify_daily_last_sent_at?: number | null;
+  /** JSON-serialized {@link RateLimitHeaders} captured the last time this
+   *  feed returned a 429 Too Many Requests response. `null` when no 429
+   *  has ever been seen. */
+  rate_limit_info?: string | null;
 };
 
 export type Tag = {
@@ -164,6 +168,7 @@ export type RootStackParamList = {
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
   RawXml: { rawXml: string | null; title?: string };
+  FeedError: { error: string; feedTitle?: string };
 };
 
 export type TabParamList = {
@@ -207,6 +212,7 @@ export type TabParamList = {
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
   RawXml: { rawXml: string | null; title?: string };
+  FeedError: { error: string; feedTitle?: string };
 };
 
 export const THEME_MODES = ["light", "dark", "system"] as const;

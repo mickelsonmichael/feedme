@@ -31,6 +31,7 @@ The set of bottom tabs depends on screen size:
 | `FeedItems`            | `FeedItemsScreen`            |
 | `FeedItemView`         | `FeedItemScreen`             |
 | `FeedDetail`           | `FeedDetailScreen`           |
+| `FeedError`            | `FeedErrorScreen`            |
 | `TagDetail`            | `TagDetailScreen`            |
 | `NotificationSettings` | `NotificationSettingsScreen` |
 | `ImportExport`         | `ImportExportScreen`         |
@@ -130,6 +131,20 @@ The set of bottom tabs depends on screen size:
 - Delete feed button with confirmation alert
 - Dirty-state detection; Save button only enabled when changes exist
 - Shows last-fetched timestamp and any feed error
+
+---
+
+### FeedErrorScreen
+
+**File:** `app/src/screens/FeedErrorScreen.tsx`  
+**Route:** `FeedError` (stack)  
+**Purpose:** Displays the full raw error message for the most recent fetch failure of a feed.
+
+**Primary features:**
+
+- Selectable monospace text showing the complete error string
+- Copy button that copies the error to the clipboard
+- Close button to return to FeedDetailScreen
 
 ---
 

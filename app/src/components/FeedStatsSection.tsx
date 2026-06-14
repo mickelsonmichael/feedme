@@ -270,6 +270,21 @@ export default function FeedStatsSection({ stats }: Props) {
             />
           </>
         ) : null}
+
+        {stats.rateLimitInfo ? (
+          <>
+            <View
+              style={[styles.divider, { backgroundColor: colors.border }]}
+              accessibilityElementsHidden
+            />
+            <StatRow
+              icon="alert-octagon"
+              label="Rate limit"
+              value={stats.rateLimitInfo}
+              hint="server returned 429 Too Many Requests"
+            />
+          </>
+        ) : null}
       </View>
     </View>
   );

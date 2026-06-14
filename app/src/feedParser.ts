@@ -11,7 +11,36 @@ export type FetchFeedResult = {
   etag?: string | null;
   /** Latest `Last-Modified` response header from a 200 response, if any. */
   lastModified?: string | null;
+  /** Rate-limit headers captured from a 429 response encountered during this
+   *  fetch cycle (even if we eventually succeeded after retrying). Present
+   *  whenever at least one 429 was received; `null` otherwise. */
+  rateLimitHeaders?: RateLimitHeaders | null;
 };
+
+/** Rate-limiting metadata extracted from a 429 response. */
+export type RateLimitHeaders = {
+  /** `Retry-After` header value (seconds or HTTP date string), if present. */
+  retryAfter: string | null;
+  /** `X-RateLimit-Limit` / `RateLimit-Limit`: the server's request quota. */
+  limit: string | null;
+  /** `X-RateLimit-Remaining` / `RateLimit-Remaining`: remaining quota at the
+   *  time of the 429. */
+  remaining: string | null;
+  /** `X-RateLimit-Reset` / `RateLimit-Reset`: Unix timestamp (s) when the
+   *  quota resets, if present. */
+  reset: string | null;
+  /** `Date.now()` timestamp (ms) when the 429 was received. */
+  capturedAt: number;
+};
+
+/** Thrown when a feed URL responds with HTTP 429 Too Many Requests and all
+ *  retry attempts have been exhausted. */
+export class RateLimitError extends Error {
+  constructor(public readonly rateLimitHeaders: RateLimitHeaders) {
+    super("Rate limited (429 Too Many Requests)");
+    this.name = "RateLimitError";
+  }
+}
 
 export type FetchFeedOptions = {
   /** Last seen `ETag` to send as `If-None-Match`. */
@@ -24,6 +53,30 @@ export type FetchFeedOptions = {
 };
 
 const FETCH_TIMEOUT_MS = 10_000;
+/** Maximum number of times to retry a 429 response before giving up. */
+const MAX_RATE_LIMIT_RETRIES = 2;
+/** Hard cap on how long (ms) we will wait before a single retry when the user
+ *  is actively waiting for the refresh to complete. */
+const MAX_RETRY_DELAY_MS = 8_000;
+
+const sleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Returns the delay in ms to wait before the next retry after a 429.
+ * Honors `Retry-After` (capped at MAX_RETRY_DELAY_MS) when present;
+ * otherwise applies exponential backoff: 1 s, 2 s, 4 s, …
+ */
+function computeRetryDelay(headers: RateLimitHeaders, attempt: number): number {
+  if (headers.retryAfter !== null) {
+    const secs = Number(headers.retryAfter);
+    if (Number.isFinite(secs) && secs > 0) {
+      return Math.min(secs * 1000, MAX_RETRY_DELAY_MS);
+    }
+    // HTTP-date form of Retry-After: fall through to backoff
+  }
+  return Math.min(1000 * Math.pow(2, attempt), MAX_RETRY_DELAY_MS);
+}
 
 /**
  * Fetches and parses an RSS/Atom feed URL.
@@ -78,6 +131,29 @@ export async function fetchFeedWithMeta(
           resolve({ status: 304, body: "", etag, lastModified });
           return;
         }
+        if (xhr.status === 429) {
+          const headers: RateLimitHeaders = {
+            retryAfter:
+              xhr.getResponseHeader?.("Retry-After") ??
+              xhr.getResponseHeader?.("retry-after") ??
+              null,
+            limit:
+              xhr.getResponseHeader?.("X-RateLimit-Limit") ??
+              xhr.getResponseHeader?.("RateLimit-Limit") ??
+              null,
+            remaining:
+              xhr.getResponseHeader?.("X-RateLimit-Remaining") ??
+              xhr.getResponseHeader?.("RateLimit-Remaining") ??
+              null,
+            reset:
+              xhr.getResponseHeader?.("X-RateLimit-Reset") ??
+              xhr.getResponseHeader?.("RateLimit-Reset") ??
+              null,
+            capturedAt: Date.now(),
+          };
+          reject(new RateLimitError(headers));
+          return;
+        }
         if (xhr.status >= 200 && xhr.status < 300) {
           resolve({
             status: xhr.status,
@@ -101,7 +177,11 @@ export async function fetchFeedWithMeta(
       xhr.send();
     });
 
-  const toResult = (xhr: XhrResult, usedProxy: boolean): FetchFeedResult => {
+  const toResult = (
+    xhr: XhrResult,
+    usedProxy: boolean,
+    rateLimitHeaders?: RateLimitHeaders | null
+  ): FetchFeedResult => {
     if (xhr.status === 304) {
       return {
         items: [],
@@ -111,6 +191,7 @@ export async function fetchFeedWithMeta(
         // in place. Some servers also re-send ETag/Last-Modified on 304s.
         etag: xhr.etag ?? options.etag ?? null,
         lastModified: xhr.lastModified ?? options.lastModified ?? null,
+        rateLimitHeaders: rateLimitHeaders ?? null,
       };
     }
     return {
@@ -119,18 +200,57 @@ export async function fetchFeedWithMeta(
       notModified: false,
       etag: xhr.etag,
       lastModified: xhr.lastModified,
+      rateLimitHeaders: rateLimitHeaders ?? null,
     };
   };
 
+  /** Retry a fetch call up to MAX_RATE_LIMIT_RETRIES times when it is
+   *  rate-limited.  Returns the successful result along with the last seen
+   *  rate-limit headers (so the caller can persist them even on success). */
+  const fetchWithRetry = async (
+    fetchFn: () => Promise<XhrResult>
+  ): Promise<{
+    result: XhrResult;
+    rateLimitHeaders: RateLimitHeaders | null;
+  }> => {
+    let lastHeaders: RateLimitHeaders | null = null;
+    for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
+      try {
+        const result = await fetchFn();
+        return { result, rateLimitHeaders: lastHeaders };
+      } catch (err) {
+        if (err instanceof RateLimitError && attempt < MAX_RATE_LIMIT_RETRIES) {
+          lastHeaders = err.rateLimitHeaders;
+          const delay = computeRetryDelay(err.rateLimitHeaders, attempt);
+          await sleep(delay);
+          continue;
+        }
+        throw err;
+      }
+    }
+    // Unreachable: the loop always returns or throws.
+    /* istanbul ignore next */
+    throw new Error("Unreachable");
+  };
+
   if (forceProxy && proxyUrl) {
-    return toResult(await xhrFetch(proxyUrl), true);
+    const { result, rateLimitHeaders } = await fetchWithRetry(() =>
+      xhrFetch(proxyUrl)
+    );
+    return toResult(result, true, rateLimitHeaders);
   }
 
   try {
-    return toResult(await xhrFetch(feedUrl), false);
+    const { result, rateLimitHeaders } = await fetchWithRetry(() =>
+      xhrFetch(feedUrl)
+    );
+    return toResult(result, false, rateLimitHeaders);
   } catch (error) {
     if (proxyUrl && isLikelyCorsBlockedError(error)) {
-      return toResult(await xhrFetch(proxyUrl), true);
+      const { result, rateLimitHeaders } = await fetchWithRetry(() =>
+        xhrFetch(proxyUrl)
+      );
+      return toResult(result, true, rateLimitHeaders);
     }
     throw error;
   }

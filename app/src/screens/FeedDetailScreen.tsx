@@ -75,6 +75,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
   const [avgReadTimeMs, setAvgReadTimeMs] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [title, setTitle] = useState("");
   const [url, setUrl] = useState("");
@@ -257,6 +258,27 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
     ]);
   };
 
+  const handleRefresh = async () => {
+    if (!feed || refreshing) return;
+    setRefreshing(true);
+    try {
+      const { items, usedProxy } = await fetchFeedWithMeta(url, useProxy);
+      await upsertItems(feedId, items);
+      await updateFeedLastFetched(feedId);
+      await setFeedError(feedId, null);
+      await recordFeedFetchOutcome(feedId, true);
+      if (usedProxy) {
+        Alert.alert(PROXY_ALERT_TITLE, PROXY_ALERT_MESSAGE);
+      }
+    } catch (fetchErr) {
+      await setFeedError(feedId, (fetchErr as Error).message);
+      await recordFeedFetchOutcome(feedId, false);
+    } finally {
+      await loadFeed();
+      setRefreshing(false);
+    }
+  };
+
   if (loading) {
     return (
       <View
@@ -307,6 +329,19 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
           </TouchableOpacity>
           <View style={styles.spacer} />
           <TouchableOpacity
+            onPress={handleRefresh}
+            hitSlop={8}
+            style={[styles.iconBtn, refreshing && styles.disabled]}
+            disabled={refreshing}
+            accessibilityLabel="Refresh feed"
+          >
+            {refreshing ? (
+              <ActivityIndicator size="small" color={colors.ink} />
+            ) : (
+              <Feather name="refresh-cw" size={20} color={colors.ink} />
+            )}
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={handleSave}
             hitSlop={8}
             style={[styles.iconBtn, (!hasChanges || saving) && styles.disabled]}
@@ -315,7 +350,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
           >
             <Feather
               name="save"
-              size={22}
+              size={20}
               color={!hasChanges || saving ? colors.inkFaint : colors.accent}
             />
           </TouchableOpacity>
@@ -325,7 +360,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             style={styles.iconBtn}
             accessibilityLabel="Delete feed"
           >
-            <Feather name="trash-2" size={22} color={colors.danger} />
+            <Feather name="trash-2" size={20} color={colors.danger} />
           </TouchableOpacity>
         </View>
       ) : null}
@@ -369,6 +404,26 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
                 style={[
                   styles.actionBtn,
                   { borderColor: colors.border },
+                  refreshing && styles.actionBtnDisabled,
+                ]}
+                onPress={handleRefresh}
+                disabled={refreshing}
+                activeOpacity={0.7}
+                accessibilityLabel="Refresh feed"
+              >
+                {refreshing ? (
+                  <ActivityIndicator size="small" color={colors.ink} />
+                ) : (
+                  <Feather name="refresh-cw" size={14} color={colors.ink} />
+                )}
+                <Text style={[styles.actionText, { color: colors.ink }]}>
+                  Refresh
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.actionBtn,
+                  { borderColor: colors.border },
                   (!hasChanges || saving) && styles.actionBtnDisabled,
                 ]}
                 onPress={handleSave}
@@ -378,7 +433,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
               >
                 <Feather
                   name="save"
-                  size={16}
+                  size={14}
                   color={
                     !hasChanges || saving ? colors.inkFaint : colors.accent
                   }
@@ -404,7 +459,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
                 activeOpacity={0.7}
                 accessibilityLabel="Delete feed"
               >
-                <Feather name="trash-2" size={16} color={colors.danger} />
+                <Feather name="trash-2" size={14} color={colors.danger} />
                 <Text style={[styles.actionText, { color: colors.danger }]}>
                   Delete
                 </Text>
@@ -413,7 +468,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
           ) : null}
 
           {feed.error ? (
-            <View
+            <TouchableOpacity
               style={[
                 styles.errorBox,
                 {
@@ -421,11 +476,25 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
                   backgroundColor: colors.danger + "18",
                 },
               ]}
+              onPress={() =>
+                navigation.navigate("FeedError", {
+                  error: feed.error!,
+                  feedTitle: feed.title,
+                })
+              }
+              activeOpacity={0.7}
+              accessibilityLabel="View full error details"
             >
-              <Text style={[styles.errorText, { color: colors.danger }]}>
+              <Text
+                style={[styles.errorText, { color: colors.danger }]}
+                numberOfLines={3}
+              >
                 {feed.error}
               </Text>
-            </View>
+              <Text style={[styles.errorLink, { color: colors.danger }]}>
+                View details →
+              </Text>
+            </TouchableOpacity>
           ) : null}
 
           {stats.badge ? (
@@ -622,6 +691,13 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontFamily: fonts.sans,
     lineHeight: 18,
+  },
+  errorLink: {
+    fontSize: fontSize.xs,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+    marginTop: spacing.xs,
+    textDecorationLine: "underline",
   },
   label: {
     fontSize: fontSize.xs,

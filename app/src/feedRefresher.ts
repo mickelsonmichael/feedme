@@ -1,5 +1,9 @@
 import { Feed } from "./types";
-import { fetchFeedWithMeta } from "./feedParser";
+import {
+  fetchFeedWithMeta,
+  RateLimitError,
+  RateLimitHeaders,
+} from "./feedParser";
 import {
   computeBackoffDelay,
   computeBaseInterval,
@@ -16,6 +20,7 @@ import {
   upsertItems,
   updateFeedCacheValidators,
   updateFeedLastFetched,
+  updateFeedRateLimitInfo,
 } from "./database";
 
 export type FeedRefreshProgress = {
@@ -120,6 +125,12 @@ export async function refreshFeeds(
           // clear any prior error, but leave items and validators alone.
           await updateFeedLastFetched(feed.id);
           await setFeedError(feed.id, null);
+          if (fetched.rateLimitHeaders) {
+            await updateFeedRateLimitInfo(
+              feed.id,
+              serializeRateLimitHeaders(fetched.rateLimitHeaders)
+            );
+          }
           await scheduleNextSuccess(feed);
           await recordFeedFetchOutcome(feed.id, true);
           succeeded += 1;
@@ -133,10 +144,22 @@ export async function refreshFeeds(
         );
         await updateFeedLastFetched(feed.id);
         await setFeedError(feed.id, null);
+        if (fetched.rateLimitHeaders) {
+          await updateFeedRateLimitInfo(
+            feed.id,
+            serializeRateLimitHeaders(fetched.rateLimitHeaders)
+          );
+        }
         await scheduleNextSuccess(feed);
         await recordFeedFetchOutcome(feed.id, true);
         succeeded += 1;
       } catch (error) {
+        if (error instanceof RateLimitError) {
+          await updateFeedRateLimitInfo(
+            feed.id,
+            serializeRateLimitHeaders(error.rateLimitHeaders)
+          );
+        }
         const cachedItemCount = await getItemCountForFeed(feed.id);
         const fallbackSuffix =
           cachedItemCount > 0 ? " Showing cached posts." : "";
@@ -226,4 +249,9 @@ async function scheduleNextFailure(feed: Feed): Promise<void> {
   const failures = (feed.consecutive_failures ?? 0) + 1;
   const delay = computeBackoffDelay(feed.fetch_interval_ms, failures);
   await setFeedRefreshFailure(feed.id, failures, Date.now() + delay);
+}
+
+/** Serialize rate-limit headers to the JSON string stored in `rate_limit_info`. */
+function serializeRateLimitHeaders(headers: RateLimitHeaders): string {
+  return JSON.stringify(headers);
 }
