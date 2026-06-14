@@ -140,6 +140,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [singleActiveIndex, setSingleActiveIndex] = useState(0);
   const [showSingleMoreMenu, setShowSingleMoreMenu] = useState(false);
   const [singleToolbarHeight, setSingleToolbarHeight] = useState(0);
+  const [singleNsfwRevealed, setSingleNsfwRevealed] = useState(false);
   /** Row ID of the active item_view_times record in single layout.
    *  Persisted as a ref (not state) to avoid triggering re-renders. */
   const singleViewTimeRowIdRef = useRef<number | null>(null);
@@ -938,6 +939,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const singlePreviousDisabled = singleSafeIndex === 0;
   const singleNextDisabled =
     singleSafeIndex >= visibleItems.length - 1 && !hasMore;
+  const isSingleItemNsfw = currentSingleItem
+    ? feedDetailsById.get(currentSingleItem.feed_id)?.nsfw === 1 ||
+      customFeedNsfw
+    : false;
+
+  // Reset the NSFW reveal state whenever the active post changes.
+  useEffect(() => {
+    setSingleNsfwRevealed(false);
+  }, [currentSingleItem?.id]);
 
   useEffect(() => {
     if (feedLayout !== "single" || visibleItems.length === 0) {
@@ -1682,44 +1692,54 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 isDesktopWeb ? styles.singleDesktopInner : null,
               ]}
             >
-              <FeedItemContent
-                item={currentSingleViewItem}
-                bionicReading={bionicReading}
-                onOpenContentLink={handleOpenContentLink}
-                includeRedditCommentsInLinks
-              />
+              {isSingleItemNsfw ? (
+                <TouchableOpacity
+                  onPress={() => setSingleNsfwRevealed((v) => !v)}
+                  style={[styles.singleNsfwRevealButton]}
+                  activeOpacity={0.7}
+                  accessibilityLabel={
+                    singleNsfwRevealed
+                      ? "Hide NSFW content"
+                      : "Reveal NSFW content"
+                  }
+                  accessibilityRole="button"
+                >
+                  <Text
+                    style={[
+                      styles.singleNsfwRevealText,
+                      { color: colors.inkSoft },
+                    ]}
+                  >
+                    {singleNsfwRevealed ? "Hide NSFW" : "Reveal NSFW"}
+                  </Text>
+                  <Feather
+                    name={singleNsfwRevealed ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={colors.inkSoft}
+                  />
+                </TouchableOpacity>
+              ) : null}
 
-              {/* Bottom nav */}
-              <View style={styles.singleNavRowBottom}>
-                <TouchableOpacity
-                  onPress={handleSinglePrevious}
-                  disabled={singlePreviousDisabled}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Previous post"
-                  style={styles.singleNavButton}
-                >
-                  <Feather
-                    name="chevron-left"
-                    size={20}
-                    color={
-                      singlePreviousDisabled ? colors.inkFaint : colors.ink
-                    }
-                  />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleSingleNext}
-                  disabled={singleNextDisabled}
-                  activeOpacity={0.7}
-                  accessibilityLabel="Next post"
-                  style={styles.singleNavButton}
-                >
-                  <Feather
-                    name="chevron-right"
-                    size={20}
-                    color={singleNextDisabled ? colors.inkFaint : colors.ink}
-                  />
-                </TouchableOpacity>
-              </View>
+              {isSingleItemNsfw && !singleNsfwRevealed ? (
+                <View style={styles.singleNsfwPlaceholder}>
+                  <Feather name="eye-off" size={48} color={colors.inkFaint} />
+                  <Text
+                    style={[
+                      styles.singleNsfwPlaceholderText,
+                      { color: colors.inkFaint },
+                    ]}
+                  >
+                    NSFW content hidden
+                  </Text>
+                </View>
+              ) : (
+                <FeedItemContent
+                  item={currentSingleViewItem}
+                  bionicReading={bionicReading}
+                  onOpenContentLink={handleOpenContentLink}
+                  includeRedditCommentsInLinks
+                />
+              )}
             </View>
           </ScrollView>
         </View>
@@ -1928,14 +1948,29 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: fontSize.body,
   },
-  singleNavRowBottom: {
+  singleNsfwRevealButton: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    gap: spacing.xs,
     paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignSelf: "center",
   },
-  singleNavButton: {
-    padding: spacing.xs,
+  singleNsfwRevealText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+    fontWeight: "600",
+  },
+  singleNsfwPlaceholder: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: spacing.xxl * 2,
+    gap: spacing.md,
+  },
+  singleNsfwPlaceholderText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
   },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
   groupDivider: {

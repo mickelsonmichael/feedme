@@ -25,11 +25,11 @@ Use this file together with the shared repository rules in the root `AGENTS.md`.
 
 Use this glossary when interpreting user requests to avoid ambiguity.
 
-| Term used in requests | Meaning |
-|-----------------------|---------|
-| **"single view"** | The `single` feed layout mode in `FeedListScreen` — one post is shown at a time, full-screen, with Prev/Next navigation. Controlled by `feedLayout === "single"`. |
-| **"compact view"** | The `compact` feed layout mode — posts shown as a scrollable list of condensed rows with an optional expand panel. |
-| **"card view"** | The `card` feed layout mode — posts shown as large media-first cards in a scrollable list. |
+| Term used in requests                           | Meaning                                                                                                                                                              |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **"single view"**                               | The `single` feed layout mode in `FeedListScreen` — one post is shown at a time, full-screen, with Prev/Next navigation. Controlled by `feedLayout === "single"`.    |
+| **"compact view"**                              | The `compact` feed layout mode — posts shown as a scrollable list of condensed rows with an optional expand panel.                                                   |
+| **"card view"**                                 | The `card` feed layout mode — posts shown as large media-first cards in a scrollable list.                                                                           |
 | **"view post screen"** / **"single post view"** | The `FeedItemScreen` — the dedicated full-screen detail view for a single post, navigated to from compact/card layout rows and from other non-single-layout screens. |
 
 ### Images
