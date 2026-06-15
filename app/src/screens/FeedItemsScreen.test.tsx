@@ -22,6 +22,10 @@ jest.mock("../database", () => ({
   savePost: jest.fn(),
   unsavePost: jest.fn(),
   getSavedItemIdsForFeed: jest.fn(),
+  getFeeds: jest.fn().mockResolvedValue([]),
+  getFeedByUrl: jest.fn().mockResolvedValue(null),
+  addFeed: jest.fn().mockResolvedValue(1),
+  deleteFeed: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock("../feedRefresher", () => ({

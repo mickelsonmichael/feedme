@@ -20,6 +20,9 @@ import {
   removeFromReadLater,
   savePost,
   unsavePost,
+  addFeed,
+  deleteFeed,
+  getFeedByUrl,
 } from "../database";
 import { getItemRawXml } from "../database";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -33,6 +36,7 @@ import {
   formatDate,
   isRedditCommentsUrl,
 } from "../components/FeedItemContent";
+import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
 
@@ -63,6 +67,21 @@ export default function FeedItemScreen({ route, navigation }: Props) {
       ) ?? null,
     [contentLinks]
   );
+  const redditAuthor = React.useMemo(
+    () => extractRedditAuthor(item.content),
+    [item.content]
+  );
+  const redditAuthorFeedUrl = redditAuthor
+    ? buildRedditFeedUrl(`u/${redditAuthor}`)
+    : null;
+  const [authorFeedId, setAuthorFeedId] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (!redditAuthorFeedUrl) return;
+    getFeedByUrl(redditAuthorFeedUrl)
+      .then((feed) => setAuthorFeedId(feed?.id ?? null))
+      .catch(() => {});
+  }, [redditAuthorFeedUrl]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: item.feedTitle || "post" });
@@ -357,7 +376,10 @@ export default function FeedItemScreen({ route, navigation }: Props) {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={styles.moreMenuItem}
+              style={[
+                styles.moreMenuItem,
+                { borderBottomColor: colors.border },
+              ]}
               onPress={() => {
                 handleViewXml();
                 setShowMoreMenu(false);
@@ -369,6 +391,58 @@ export default function FeedItemScreen({ route, navigation }: Props) {
                 View XML
               </Text>
             </TouchableOpacity>
+
+            {redditAuthor ? (
+              <TouchableOpacity
+                style={styles.moreMenuItem}
+                onPress={async () => {
+                  if (!redditAuthorFeedUrl) return;
+                  try {
+                    if (authorFeedId !== null) {
+                      await deleteFeed(authorFeedId);
+                      setAuthorFeedId(null);
+                    } else {
+                      const newFeedId = await addFeed({
+                        title: `Reddit - u/${redditAuthor}`,
+                        url: redditAuthorFeedUrl,
+                        description: null,
+                        use_proxy: 0,
+                        nsfw: 0,
+                        show_only_in_tag: 0,
+                        show_only_in_custom_feed: 0,
+                        collapse_repeated: 0,
+                      });
+                      setAuthorFeedId(newFeedId);
+                    }
+                  } catch {
+                    Alert.alert("Error", "Could not update subscription.");
+                  }
+                  setShowMoreMenu(false);
+                }}
+                activeOpacity={0.7}
+                accessibilityLabel={
+                  authorFeedId !== null
+                    ? `Unfollow u/${redditAuthor}`
+                    : `Follow u/${redditAuthor}`
+                }
+              >
+                <Feather
+                  name={authorFeedId !== null ? "user-minus" : "user-plus"}
+                  size={16}
+                  color={authorFeedId !== null ? colors.accent : colors.ink}
+                />
+                <Text
+                  style={[
+                    styles.moreMenuItemText,
+                    {
+                      color: authorFeedId !== null ? colors.accent : colors.ink,
+                    },
+                  ]}
+                >
+                  {authorFeedId !== null ? "Unfollow User" : "Follow User"}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </TouchableOpacity>
       ) : null}

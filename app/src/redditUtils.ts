@@ -54,6 +54,18 @@ export function getSubreddit(rawValue: string): string {
 }
 
 /**
+ * Extracts the Reddit username from a feed item's HTML content.
+ * Matches the standard Reddit RSS pattern where the author is linked as
+ * `href="https://www.reddit.com/user/USERNAME"`.
+ * Returns null if no Reddit author link is found.
+ */
+export function extractRedditAuthor(content: string | null): string | null {
+  if (!content) return null;
+  const match = content.match(/reddit\.com\/user\/([^"/?#\s]+)/i);
+  return match ? match[1] : null;
+}
+
+/**
  * Constructs the RSS feed URL for a Reddit subreddit or user.
  * Subreddit is assumed when no prefix is provided.
  * Whitespace is trimmed automatically.

@@ -26,9 +26,13 @@ import {
   savePost,
   unsavePost,
   getSavedItemIdsForFeed,
+  getFeeds,
+  addFeed,
+  deleteFeed,
+  getFeedByUrl,
 } from "../database";
 import { refreshFeeds } from "../feedRefresher";
-import { FeedItem, RootStackParamList } from "../types";
+import { Feed, FeedItem, RootStackParamList } from "../types";
 import { toggleExpandedId } from "../expandItemIds";
 import { MetaText } from "../components/ui";
 import { Feather } from "@expo/vector-icons";
@@ -36,6 +40,7 @@ import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedPostCard } from "../components/FeedPostCard";
 import { openUrlWithPreference } from "../linkOpening";
+import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItems">;
 
@@ -48,12 +53,28 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [rawXmlItem, setRawXmlItem] = useState<FeedItem | null>(null);
+  const [allFeeds, setAllFeeds] = useState<Feed[]>([]);
   const listRef = useRef<FlashListRef<FeedItem>>(null);
   const pendingScrollToTopRef = useRef(false);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: feed.title });
   }, [navigation, feed.title]);
+
+  const followedRedditUsers = useMemo(() => {
+    const users = new Set<string>();
+    for (const f of allFeeds) {
+      const match = f.url.match(/reddit\.com\/user\/([^/?#.\s]+)/i);
+      if (match) users.add(match[1].toLowerCase());
+    }
+    return users;
+  }, [allFeeds]);
+
+  useEffect(() => {
+    getFeeds()
+      .then(setAllFeeds)
+      .catch(() => {});
+  }, []);
 
   const loadItems = useCallback(async () => {
     try {
@@ -252,34 +273,72 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     setRawXmlItem(itemsByIdRef.current.get(id) ?? null);
   }, []);
 
+  const handleFollowAuthor = useCallback(async (id: number) => {
+    const item = itemsByIdRef.current.get(id);
+    if (!item) return;
+    const authorName = extractRedditAuthor(item.content);
+    if (!authorName) return;
+    const feedUrl = buildRedditFeedUrl(`u/${authorName}`);
+    try {
+      const existingFeed = await getFeedByUrl(feedUrl);
+      if (existingFeed) {
+        await deleteFeed(existingFeed.id);
+      } else {
+        await addFeed({
+          title: `Reddit - u/${authorName}`,
+          url: feedUrl,
+          description: null,
+          use_proxy: 0,
+          nsfw: 0,
+          show_only_in_tag: 0,
+          show_only_in_custom_feed: 0,
+          collapse_repeated: 0,
+        });
+      }
+      const updatedFeeds = await getFeeds();
+      setAllFeeds(updatedFeeds);
+    } catch {
+      Alert.alert("Error", "Could not update subscription.");
+    }
+  }, []);
+
   const renderItem = useCallback(
-    ({ item }: { item: FeedItem }) => (
-      <FeedPostCard
-        item={item}
-        feedTitle={feed.title}
-        layout="compact"
-        nsfw={feed.nsfw === 1}
-        useProxy={feed.use_proxy === 1}
-        saved={savedIds.has(item.id)}
-        expanded={expandedIds.has(item.id)}
-        showExpand
-        showRawXml
-        expandedMediaTestID={`expanded-media-${item.id}`}
-        onOpenItem={handleOpenItem}
-        onToggleExpand={handleToggleExpand}
-        onToggleRead={toggleRead}
-        onToggleSave={toggleSave}
-        onOpenOriginalLink={handleOpenOriginalLink}
-        onOpenContentLink={handleOpenContentLink}
-        onOpenRawXml={handleOpenRawXml}
-      />
-    ),
+    ({ item }: { item: FeedItem }) => {
+      const itemRedditAuthor = extractRedditAuthor(item.content);
+      const itemAuthorFollowed = itemRedditAuthor
+        ? followedRedditUsers.has(itemRedditAuthor.toLowerCase())
+        : undefined;
+      return (
+        <FeedPostCard
+          item={item}
+          feedTitle={feed.title}
+          layout="compact"
+          nsfw={feed.nsfw === 1}
+          useProxy={feed.use_proxy === 1}
+          saved={savedIds.has(item.id)}
+          expanded={expandedIds.has(item.id)}
+          showExpand
+          showRawXml
+          expandedMediaTestID={`expanded-media-${item.id}`}
+          onOpenItem={handleOpenItem}
+          onToggleExpand={handleToggleExpand}
+          onToggleRead={toggleRead}
+          onToggleSave={toggleSave}
+          onOpenOriginalLink={handleOpenOriginalLink}
+          onOpenContentLink={handleOpenContentLink}
+          onOpenRawXml={handleOpenRawXml}
+          authorFollowed={itemAuthorFollowed}
+          onFollowAuthor={itemRedditAuthor ? handleFollowAuthor : undefined}
+        />
+      );
+    },
     [
       feed.title,
       feed.nsfw,
       feed.use_proxy,
       savedIds,
       expandedIds,
+      followedRedditUsers,
       handleOpenItem,
       handleToggleExpand,
       toggleRead,
@@ -287,6 +346,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       handleOpenOriginalLink,
       handleOpenContentLink,
       handleOpenRawXml,
+      handleFollowAuthor,
     ]
   );
 

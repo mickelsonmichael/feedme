@@ -19,6 +19,7 @@ import {
   fetchRedditGalleryImageUrlsCached,
 } from "../redditGallery";
 import { extractGifEmbedUrl, extractGifEmbedUrlFromContent } from "../gifUtils";
+import { extractRedditAuthor } from "../redditUtils";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { SanitizedHtmlContent } from "./SanitizedHtmlContent";
 import { MetaText } from "./ui";
@@ -61,6 +62,9 @@ type Props = {
   onOpenOriginalLink: (id: number) => void;
   onOpenContentLink: (url: string) => void;
   onOpenRawXml?: (id: number) => void;
+  /** undefined = no Reddit author detected; false = not followed; true = followed */
+  authorFollowed?: boolean;
+  onFollowAuthor?: (id: number) => void;
 };
 
 function FeedPostCardComponent({
@@ -87,6 +91,8 @@ function FeedPostCardComponent({
   onOpenOriginalLink,
   onOpenContentLink,
   onOpenRawXml,
+  authorFollowed,
+  onFollowAuthor,
 }: Props) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
@@ -119,6 +125,10 @@ function FeedPostCardComponent({
         (link) => link.label === "Comments" && isRedditCommentsUrl(link.url)
       ) ?? null,
     [contentLinks]
+  );
+  const redditAuthor = useMemo(
+    () => extractRedditAuthor(item.content),
+    [item.content]
   );
   const visibleContentLinks = useMemo(
     () =>
@@ -283,6 +293,25 @@ function FeedPostCardComponent({
                 />
               </TouchableOpacity>
             ) : null}
+            {redditAuthor && onFollowAuthor ? (
+              <TouchableOpacity
+                style={styles.iconActionBtn}
+                onPress={() => onFollowAuthor(item.id)}
+                activeOpacity={0.6}
+                hitSlop={8}
+                accessibilityLabel={
+                  authorFollowed
+                    ? `Unfollow u/${redditAuthor}`
+                    : `Follow u/${redditAuthor}`
+                }
+              >
+                <Feather
+                  name={authorFollowed ? "user-minus" : "user-plus"}
+                  size={18}
+                  color={authorFollowed ? colors.accent : colors.inkSoft}
+                />
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       </View>
@@ -421,6 +450,25 @@ function FeedPostCardComponent({
             accessibilityLabel="Open Reddit comments"
           >
             <Feather name="message-circle" size={18} color={colors.inkSoft} />
+          </TouchableOpacity>
+        ) : null}
+        {redditAuthor && onFollowAuthor ? (
+          <TouchableOpacity
+            style={styles.iconActionBtn}
+            onPress={() => onFollowAuthor(item.id)}
+            activeOpacity={0.6}
+            hitSlop={8}
+            accessibilityLabel={
+              authorFollowed
+                ? `Unfollow u/${redditAuthor}`
+                : `Follow u/${redditAuthor}`
+            }
+          >
+            <Feather
+              name={authorFollowed ? "user-minus" : "user-plus"}
+              size={18}
+              color={authorFollowed ? colors.accent : colors.inkSoft}
+            />
           </TouchableOpacity>
         ) : null}
         {showRawXml && onOpenRawXml ? (
@@ -736,7 +784,9 @@ function arePropsEqual(prev: Props, next: Props): boolean {
     prev.onToggleReadLater === next.onToggleReadLater &&
     prev.onOpenOriginalLink === next.onOpenOriginalLink &&
     prev.onOpenContentLink === next.onOpenContentLink &&
-    prev.onOpenRawXml === next.onOpenRawXml
+    prev.onOpenRawXml === next.onOpenRawXml &&
+    prev.authorFollowed === next.authorFollowed &&
+    prev.onFollowAuthor === next.onFollowAuthor
   );
 }
 

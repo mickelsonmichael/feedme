@@ -273,6 +273,12 @@ export async function getFeedById(feedId: number): Promise<Feed | null> {
   return feed ? normalizeFeed(feed) : null;
 }
 
+export async function getFeedByUrl(url: string): Promise<Feed | null> {
+  const state = loadState();
+  const feed = state.feeds.find((entry) => entry.url === url);
+  return feed ? normalizeFeed(feed) : null;
+}
+
 export async function addFeed({
   title,
   url,

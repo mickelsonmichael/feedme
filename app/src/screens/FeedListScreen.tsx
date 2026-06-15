@@ -41,6 +41,9 @@ import {
   startItemViewTime,
   endItemViewTime,
   getItemRawXml,
+  addFeed,
+  deleteFeed,
+  getFeedByUrl,
 } from "../database";
 import { Feather } from "@expo/vector-icons";
 import { refreshFeeds } from "../feedRefresher";
@@ -78,6 +81,7 @@ import { loadConfig, saveConfig } from "../storage";
 import { openUrlWithPreference } from "../linkOpening";
 import { resolveCustomFeedIcon } from "../customFeedIcons";
 import { FeedItemContent, formatDate } from "../components/FeedItemContent";
+import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -456,6 +460,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
     [feeds]
   );
 
+  const followedRedditUsers = useMemo(() => {
+    const users = new Set<string>();
+    for (const feed of feeds) {
+      const match = feed.url.match(/reddit\.com\/user\/([^/?#.\s]+)/i);
+      if (match) users.add(match[1].toLowerCase());
+    }
+    return users;
+  }, [feeds]);
+
   const buildFeedItemViewItem = useCallback(
     (item: FeedItemWithFeed): RootStackParamList["FeedItemView"]["item"] => ({
       itemId: item.id,
@@ -558,6 +571,35 @@ export default function FeedListScreen({ navigation, route }: Props) {
       }
     } catch {
       Alert.alert("Error", "Could not update read later status.");
+    }
+  }, []);
+
+  const handleFollowAuthor = useCallback(async (id: number) => {
+    const item = itemsByIdRef.current.get(id);
+    if (!item) return;
+    const authorName = extractRedditAuthor(item.content);
+    if (!authorName) return;
+    const feedUrl = buildRedditFeedUrl(`u/${authorName}`);
+    try {
+      const existingFeed = await getFeedByUrl(feedUrl);
+      if (existingFeed) {
+        await deleteFeed(existingFeed.id);
+      } else {
+        await addFeed({
+          title: `Reddit - u/${authorName}`,
+          url: feedUrl,
+          description: null,
+          use_proxy: 0,
+          nsfw: 0,
+          show_only_in_tag: 0,
+          show_only_in_custom_feed: 0,
+          collapse_repeated: 0,
+        });
+      }
+      const updatedFeeds = await getFeeds();
+      setFeeds(updatedFeeds);
+    } catch {
+      Alert.alert("Error", "Could not update subscription.");
     }
   }, []);
 
@@ -943,6 +985,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
     ? feedDetailsById.get(currentSingleItem.feed_id)?.nsfw === 1 ||
       customFeedNsfw
     : false;
+  const singleItemRedditAuthor = currentSingleItem
+    ? extractRedditAuthor(currentSingleItem.content)
+    : null;
+  const singleItemAuthorFollowed = singleItemRedditAuthor
+    ? followedRedditUsers.has(singleItemRedditAuthor.toLowerCase())
+    : false;
 
   // Reset the NSFW reveal state whenever the active post changes.
   useEffect(() => {
@@ -1201,6 +1249,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
       const sourceFeed = feedDetailsById.get(item.feed_id);
       const isFeedNsfw = sourceFeed?.nsfw === 1 || customFeedNsfw;
       const feedUseProxy = sourceFeed?.use_proxy === 1;
+      const itemRedditAuthor = extractRedditAuthor(item.content);
+      const itemAuthorFollowed = itemRedditAuthor
+        ? followedRedditUsers.has(itemRedditAuthor.toLowerCase())
+        : undefined;
 
       if (feedLayout === "card") {
         const cardWidth = Math.min(
@@ -1226,6 +1278,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
             onToggleReadLater={toggleReadLater}
             onOpenOriginalLink={handleOpenOriginalLink}
             onOpenContentLink={handleOpenContentLink}
+            authorFollowed={itemAuthorFollowed}
+            onFollowAuthor={itemRedditAuthor ? handleFollowAuthor : undefined}
           />
         );
       }
@@ -1249,6 +1303,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
           onToggleReadLater={toggleReadLater}
           onOpenOriginalLink={handleOpenOriginalLink}
           onOpenContentLink={handleOpenContentLink}
+          authorFollowed={itemAuthorFollowed}
+          onFollowAuthor={itemRedditAuthor ? handleFollowAuthor : undefined}
         />
       );
     },
@@ -1262,6 +1318,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       readLaterIds,
       expandedIds,
       revealedNsfwCardIds,
+      followedRedditUsers,
       handleUncollapseItem,
       handleRevealRun,
       handleOpenItem,
@@ -1272,6 +1329,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       handleOpenOriginalLink,
       handleOpenContentLink,
       handleToggleExpand,
+      handleFollowAuthor,
     ]
   );
 
@@ -1645,7 +1703,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={styles.singleMoreMenuItem}
+                  style={[
+                    styles.singleMoreMenuItem,
+                    singleItemRedditAuthor
+                      ? { borderBottomColor: colors.border }
+                      : null,
+                  ]}
                   onPress={() => {
                     handleSingleViewXml(currentSingleItem.id);
                     setShowSingleMoreMenu(false);
@@ -1663,6 +1726,68 @@ export default function FeedListScreen({ navigation, route }: Props) {
                     View XML
                   </Text>
                 </TouchableOpacity>
+                {singleItemRedditAuthor ? (
+                  <TouchableOpacity
+                    style={styles.singleMoreMenuItem}
+                    onPress={async () => {
+                      const feedUrl = buildRedditFeedUrl(
+                        `u/${singleItemRedditAuthor}`
+                      );
+                      try {
+                        const existingFeed = await getFeedByUrl(feedUrl);
+                        if (existingFeed) {
+                          await deleteFeed(existingFeed.id);
+                        } else {
+                          await addFeed({
+                            title: `Reddit - u/${singleItemRedditAuthor}`,
+                            url: feedUrl,
+                            description: null,
+                            use_proxy: 0,
+                            nsfw: 0,
+                            show_only_in_tag: 0,
+                            show_only_in_custom_feed: 0,
+                            collapse_repeated: 0,
+                          });
+                        }
+                        const updatedFeeds = await getFeeds();
+                        setFeeds(updatedFeeds);
+                      } catch {
+                        Alert.alert("Error", "Could not update subscription.");
+                      }
+                      setShowSingleMoreMenu(false);
+                    }}
+                    activeOpacity={0.7}
+                    accessibilityLabel={
+                      singleItemAuthorFollowed
+                        ? `Unfollow u/${singleItemRedditAuthor}`
+                        : `Follow u/${singleItemRedditAuthor}`
+                    }
+                  >
+                    <Feather
+                      name={
+                        singleItemAuthorFollowed ? "user-minus" : "user-plus"
+                      }
+                      size={16}
+                      color={
+                        singleItemAuthorFollowed ? colors.accent : colors.ink
+                      }
+                    />
+                    <Text
+                      style={[
+                        styles.singleMoreMenuItemText,
+                        {
+                          color: singleItemAuthorFollowed
+                            ? colors.accent
+                            : colors.ink,
+                        },
+                      ]}
+                    >
+                      {singleItemAuthorFollowed
+                        ? "Unfollow User"
+                        : "Follow User"}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
               </View>
             </TouchableOpacity>
           ) : null}

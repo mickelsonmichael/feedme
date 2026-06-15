@@ -405,6 +405,15 @@ export async function getFeedById(feedId: number): Promise<Feed | null> {
   return row ?? null;
 }
 
+export async function getFeedByUrl(url: string): Promise<Feed | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<Feed>(
+    "SELECT * FROM feeds WHERE url = ?",
+    [url]
+  );
+  return row ?? null;
+}
+
 export async function addFeed({
   title,
   url,
