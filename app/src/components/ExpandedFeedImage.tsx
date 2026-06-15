@@ -4,6 +4,7 @@ import {
   Image as RNImage,
   LayoutChangeEvent,
   StyleSheet,
+  TouchableOpacity,
   View,
 } from "react-native";
 import { Image } from "expo-image";
@@ -14,6 +15,7 @@ import {
 import { proxiedImageUrl } from "../proxyFetch";
 import { NSFW_BLUR_FILTER_STYLE, NSFW_BLUR_RADIUS, radii } from "../theme";
 import { useTheme } from "../context/ThemeContext";
+import { FullscreenImageModal } from "./FullscreenImageModal";
 
 const PLACEHOLDER_HEIGHT = 200;
 
@@ -66,6 +68,7 @@ export function ExpandedFeedImage({
 }: Props) {
   const resolvedImageUrl = proxiedImageUrl(imageUrl, useProxy);
   const { colors } = useTheme();
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [contentWidth, setContentWidth] = useState<number | null>(null);
   const [sourceSize, setSourceSize] = useState<{
     width: number;
@@ -142,33 +145,46 @@ export function ExpandedFeedImage({
           <ActivityIndicator color={colors.inkSoft} />
         </View>
       ) : (
-        <View
-          style={[styles.imageBlurWrap, blur ? NSFW_BLUR_FILTER_STYLE : null]}
+        <TouchableOpacity
+          activeOpacity={0.85}
+          onPress={() => setIsFullscreen(true)}
+          accessibilityLabel="View image fullscreen"
+          testID={testID ? `${testID}-tap` : undefined}
         >
-          <Image
-            source={{ uri: resolvedImageUrl }}
-            blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
-            style={[
-              styles.image,
-              alignment === "center"
-                ? styles.centeredImage
-                : styles.leftAlignedImage,
-              constrainedSize ??
-                (didMetadataLookupFail && fallbackBoxSize !== null
-                  ? {
-                      width: fallbackBoxSize,
-                      height: fallbackBoxSize,
-                    }
-                  : styles.pendingImage),
-            ]}
-            contentFit="contain"
-            cachePolicy="memory-disk"
-            autoplay={blur ? false : undefined}
-            transition={120}
-            testID={testID}
-          />
-        </View>
+          <View
+            style={[styles.imageBlurWrap, blur ? NSFW_BLUR_FILTER_STYLE : null]}
+          >
+            <Image
+              source={{ uri: resolvedImageUrl }}
+              blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
+              style={[
+                styles.image,
+                alignment === "center"
+                  ? styles.centeredImage
+                  : styles.leftAlignedImage,
+                constrainedSize ??
+                  (didMetadataLookupFail && fallbackBoxSize !== null
+                    ? {
+                        width: fallbackBoxSize,
+                        height: fallbackBoxSize,
+                      }
+                    : styles.pendingImage),
+              ]}
+              contentFit="contain"
+              cachePolicy="memory-disk"
+              autoplay={blur ? false : undefined}
+              transition={120}
+              testID={testID}
+            />
+          </View>
+        </TouchableOpacity>
       )}
+      <FullscreenImageModal
+        visible={isFullscreen}
+        imageUrl={resolvedImageUrl}
+        blur={blur}
+        onClose={() => setIsFullscreen(false)}
+      />
     </View>
   );
 }

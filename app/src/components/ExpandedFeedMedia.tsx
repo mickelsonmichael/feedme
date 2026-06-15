@@ -46,6 +46,7 @@ import {
   spacing,
 } from "../theme";
 import { ExpandedFeedImage } from "./ExpandedFeedImage";
+import { FullscreenImageModal } from "./FullscreenImageModal";
 
 type Props = {
   itemUrl?: string | null;
@@ -96,6 +97,9 @@ export function ExpandedFeedMedia({
     useState(!deferGalleryLoad);
   const [hasRequestedGifLoad, setHasRequestedGifLoad] = useState(!deferGifLoad);
   const [hasRequestedVideoLoad, setHasRequestedVideoLoad] = useState(false);
+  const [fullscreenImageUrl, setFullscreenImageUrl] = useState<string | null>(
+    null
+  );
   const youtubeVideoId = useMemo(
     () =>
       extractYouTubeVideoId(itemUrl) ??
@@ -683,7 +687,12 @@ export function ExpandedFeedMedia({
           testID={testID}
           accessibilityLabel="Reddit gallery"
         >
-          <View
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() =>
+              setFullscreenImageUrl(galleryImageUrls[activeGalleryIndex])
+            }
+            accessibilityLabel="View image fullscreen"
             style={[
               { width: slideW, height: slideH },
               styles.galleryBlurClip,
@@ -701,7 +710,7 @@ export function ExpandedFeedMedia({
                 testID ? `${testID}-image-${activeGalleryIndex}` : undefined
               }
             />
-          </View>
+          </TouchableOpacity>
           {galleryImageUrls.length > 1 ? (
             <>
               <TouchableOpacity
@@ -744,6 +753,12 @@ export function ExpandedFeedMedia({
             </>
           ) : null}
           {galleryDots}
+          <FullscreenImageModal
+            visible={fullscreenImageUrl !== null}
+            imageUrl={fullscreenImageUrl}
+            blur={blur}
+            onClose={() => setFullscreenImageUrl(null)}
+          />
         </View>
       );
     }
@@ -766,8 +781,11 @@ export function ExpandedFeedMedia({
           testID={testID ? `${testID}-carousel` : undefined}
         >
           {galleryImageUrls.map((galleryImageUrl, index) => (
-            <View
+            <TouchableOpacity
               key={`${galleryImageUrl}:${index}`}
+              activeOpacity={0.85}
+              onPress={() => setFullscreenImageUrl(galleryImageUrl)}
+              accessibilityLabel="View image fullscreen"
               style={[
                 { width: slideW, height: slideH },
                 styles.galleryBlurClip,
@@ -783,7 +801,7 @@ export function ExpandedFeedMedia({
                 transition={120}
                 testID={testID ? `${testID}-image-${index}` : undefined}
               />
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
         {galleryImageUrls.length > 1 ? (
@@ -828,6 +846,12 @@ export function ExpandedFeedMedia({
           </>
         ) : null}
         {galleryDots}
+        <FullscreenImageModal
+          visible={fullscreenImageUrl !== null}
+          imageUrl={fullscreenImageUrl}
+          blur={blur}
+          onClose={() => setFullscreenImageUrl(null)}
+        />
       </View>
     );
   }

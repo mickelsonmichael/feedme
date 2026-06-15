@@ -9,6 +9,15 @@ This file tracks functional requirements for each screen and feature area. Updat
 
 ---
 
+## Shared Components
+
+| ID            | Requirement                                                                                                                                                                                                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| REQ-MEDIA-001 | [added] Tapping an expanded image (rendered by `ExpandedFeedImage`) shall open a fullscreen modal displaying the image at full viewport size with a dark backdrop. The modal shall include a close button (×) in the top-right corner. Tapping the close button or the backdrop shall dismiss the modal. On web, pressing Escape shall also dismiss the modal. NSFW-blurred images retain their blur in fullscreen. |
+| REQ-MEDIA-002 | [added] Tapping an image in a Reddit gallery (rendered by `ExpandedFeedMedia`) shall open the same fullscreen modal for that individual gallery image.                                                                                                                                   |
+
+---
+
 ## FeedListScreen
 
 | ID               | Requirement                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |

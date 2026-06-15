@@ -20,6 +20,10 @@ jest.mock("../context/ThemeContext", () => ({
   }),
 }));
 
+jest.mock("@expo/vector-icons", () => ({
+  Feather: "Feather",
+}));
+
 describe("ExpandedFeedImage", () => {
   afterEach(() => {
     jest.restoreAllMocks();
@@ -318,5 +322,102 @@ describe("ExpandedFeedImage", () => {
     expect(style.alignSelf).toBe("center");
     expect(style.width).toBe(360);
     expect(style.height).toBe(180);
+  });
+
+  it("opens the fullscreen modal when the image is tapped", async () => {
+    // Arrange
+    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+      success?.(800, 400);
+    });
+
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedImage
+          imageUrl="https://example.com/tap.jpg"
+          testID="expanded-image"
+        />
+      );
+    });
+
+    const wrapper = tree!.root.findByProps({
+      testID: "expanded-image-wrapper",
+    });
+
+    await act(async () => {
+      wrapper.props.onLayout({
+        nativeEvent: { layout: { width: 400, height: 0, x: 0, y: 0 } },
+      });
+    });
+
+    // Assert modal is initially closed
+    const modalBefore = tree!.root.findByProps({
+      testID: "fullscreen-image-modal",
+    });
+    expect(modalBefore.props.visible).toBe(false);
+
+    // Act – tap the image
+    const tap = tree!.root.findByProps({ testID: "expanded-image-tap" });
+    await act(async () => {
+      tap.props.onPress();
+    });
+
+    // Assert modal is now open
+    const modalAfter = tree!.root.findByProps({
+      testID: "fullscreen-image-modal",
+    });
+    expect(modalAfter.props.visible).toBe(true);
+  });
+
+  it("closes the fullscreen modal when onClose is triggered", async () => {
+    // Arrange
+    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+      success?.(800, 400);
+    });
+
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedImage
+          imageUrl="https://example.com/close.jpg"
+          testID="expanded-image"
+        />
+      );
+    });
+
+    const wrapper = tree!.root.findByProps({
+      testID: "expanded-image-wrapper",
+    });
+
+    await act(async () => {
+      wrapper.props.onLayout({
+        nativeEvent: { layout: { width: 400, height: 0, x: 0, y: 0 } },
+      });
+    });
+
+    // Open the modal
+    const tap = tree!.root.findByProps({ testID: "expanded-image-tap" });
+    await act(async () => {
+      tap.props.onPress();
+    });
+
+    expect(
+      tree!.root.findByProps({ testID: "fullscreen-image-modal" }).props.visible
+    ).toBe(true);
+
+    // Act – press close button
+    const closeBtn = tree!.root.findByProps({
+      testID: "fullscreen-image-close",
+    });
+    await act(async () => {
+      closeBtn.props.onPress();
+    });
+
+    // Assert modal is closed
+    expect(
+      tree!.root.findByProps({ testID: "fullscreen-image-modal" }).props.visible
+    ).toBe(false);
   });
 });
