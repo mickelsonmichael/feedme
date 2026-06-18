@@ -43,6 +43,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDLIST-019 | [added] In single layout, a manual refresh shall reload the feed, scroll back to the top of the article, and select the first unread post in the refreshed result when one exists; otherwise it shall select the first post.                                                                                                                      |
 | REQ-FEEDLIST-020 | [added] In single layout, the app shall record how long the user views each post. A view session starts when a post is displayed and ends when the user presses Next. Sessions that are interrupted (e.g. app force-quit) are discarded on the next startup. Pressing Previous or navigating away without pressing Next does not record a session. |
 | REQ-FEEDLIST-021 | [added] For Reddit posts with a detectable author, the "..." overflow menu in single layout shall include a "Follow User" / "Unfollow User" option using the same add/remove feed logic. In compact and card layouts, a follow/unfollow icon button (user-plus / user-minus) appears in the action row for such posts. |
+| REQ-FEEDLIST-022 | [added] In single layout, a "sliders" button in the left side of the toolbar shall toggle a collapsible filter/sort/search bar below the toolbar. The bar contains a filter menu (All/Unread), a sort menu, and a search text field. The sliders icon shall be shown in the accent color when the bar is open or a search query is active. |
 
 ---
 

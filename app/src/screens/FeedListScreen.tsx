@@ -144,6 +144,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [singleActiveIndex, setSingleActiveIndex] = useState(0);
   const [showSingleMoreMenu, setShowSingleMoreMenu] = useState(false);
   const [singleToolbarHeight, setSingleToolbarHeight] = useState(0);
+  const [showSingleFilters, setShowSingleFilters] = useState(false);
   const [singleNsfwRevealed, setSingleNsfwRevealed] = useState(false);
   /** Row ID of the active item_view_times record in single layout.
    *  Persisted as a ref (not state) to avoid triggering re-renders. */
@@ -1382,58 +1383,62 @@ export default function FeedListScreen({ navigation, route }: Props) {
       ) : null}
 
       {/* Compact filter + sort + search controls */}
-      <View style={[styles.filterRow, { borderBottomColor: colors.inkFaint }]}>
-        <View style={styles.filterControls}>
-          <CompactMenu<FilterMode>
-            value={filter === "starred" ? "all" : filter}
-            options={[
-              { value: "all", label: "All" },
-              { value: "unread", label: "Unread" },
-            ]}
-            onChange={setFilter}
-            accessibilityLabel="Filter posts"
-          />
-          {selectedFeedId === undefined &&
-          selectedTagId === undefined &&
-          selectedCustomFeedId === undefined ? (
-            <CompactMenu<SortMode>
-              value={sort}
+      {feedLayout !== "single" ? (
+        <View
+          style={[styles.filterRow, { borderBottomColor: colors.inkFaint }]}
+        >
+          <View style={styles.filterControls}>
+            <CompactMenu<FilterMode>
+              value={filter === "starred" ? "all" : filter}
               options={[
-                { value: "newest", label: "Newest" },
-                { value: "stacked", label: "Stacked" },
+                { value: "all", label: "All" },
+                { value: "unread", label: "Unread" },
               ]}
-              onChange={setSort}
-              accessibilityLabel="Sort posts"
+              onChange={setFilter}
+              accessibilityLabel="Filter posts"
             />
-          ) : (
-            <CompactMenu<SortMode>
-              value={sort}
-              options={[{ value: "newest", label: "Newest" }]}
-              onChange={setSort}
-              accessibilityLabel="Sort posts"
-            />
-          )}
+            {selectedFeedId === undefined &&
+            selectedTagId === undefined &&
+            selectedCustomFeedId === undefined ? (
+              <CompactMenu<SortMode>
+                value={sort}
+                options={[
+                  { value: "newest", label: "Newest" },
+                  { value: "stacked", label: "Stacked" },
+                ]}
+                onChange={setSort}
+                accessibilityLabel="Sort posts"
+              />
+            ) : (
+              <CompactMenu<SortMode>
+                value={sort}
+                options={[{ value: "newest", label: "Newest" }]}
+                onChange={setSort}
+                accessibilityLabel="Sort posts"
+              />
+            )}
+          </View>
+          {!isWeb ? (
+            <TouchableOpacity
+              onPress={() => setMobileSearchOpen((open) => !open)}
+              accessibilityLabel={
+                isSearchVisible ? "Close search" : "Open search"
+              }
+              activeOpacity={0.7}
+              hitSlop={8}
+              style={styles.searchIconBtn}
+            >
+              <Feather
+                name="search"
+                size={16}
+                color={isSearchVisible ? colors.accent : colors.inkSoft}
+              />
+            </TouchableOpacity>
+          ) : null}
         </View>
-        {!isWeb ? (
-          <TouchableOpacity
-            onPress={() => setMobileSearchOpen((open) => !open)}
-            accessibilityLabel={
-              isSearchVisible ? "Close search" : "Open search"
-            }
-            activeOpacity={0.7}
-            hitSlop={8}
-            style={styles.searchIconBtn}
-          >
-            <Feather
-              name="search"
-              size={16}
-              color={isSearchVisible ? colors.accent : colors.inkSoft}
-            />
-          </TouchableOpacity>
-        ) : null}
-      </View>
+      ) : null}
 
-      {!isWeb && isSearchVisible ? (
+      {feedLayout !== "single" && !isWeb && isSearchVisible ? (
         <View
           style={[styles.searchWrap, { borderBottomColor: colors.inkFaint }]}
         >
@@ -1523,59 +1528,163 @@ export default function FeedListScreen({ navigation, route }: Props) {
         currentSingleItem &&
         currentSingleViewItem ? (
         <View style={styles.fill}>
-          {/* Fixed toolbar */}
+          {/* Fixed toolbar + collapsible filter bar */}
           <View
-            style={[styles.singleToolbar, { borderBottomColor: colors.border }]}
             onLayout={(e) =>
               setSingleToolbarHeight(e.nativeEvent.layout.height)
             }
           >
-            <View style={styles.singleToolbarLeft}>
-              <TouchableOpacity
-                onPress={handleSinglePrevious}
-                disabled={singlePreviousDisabled}
-                activeOpacity={0.7}
-                accessibilityLabel="Previous post"
-                style={styles.singleToolbarButton}
-              >
-                <Feather
-                  name="chevron-left"
-                  size={20}
-                  color={singlePreviousDisabled ? colors.inkFaint : colors.ink}
-                />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleSingleNext}
-                disabled={singleNextDisabled}
-                activeOpacity={0.7}
-                accessibilityLabel="Next post"
-                style={styles.singleToolbarButton}
-              >
-                <Feather
-                  name="chevron-right"
-                  size={20}
-                  color={singleNextDisabled ? colors.inkFaint : colors.ink}
-                />
-              </TouchableOpacity>
+            <View
+              style={[
+                styles.singleToolbar,
+                { borderBottomColor: colors.border },
+              ]}
+            >
+              <View style={styles.singleToolbarLeft}>
+                <TouchableOpacity
+                  onPress={() => setShowSingleMoreMenu((v) => !v)}
+                  activeOpacity={0.7}
+                  accessibilityLabel="More options"
+                  style={styles.singleToolbarButton}
+                >
+                  <Feather
+                    name="more-horizontal"
+                    size={22}
+                    color={colors.ink}
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => setShowSingleFilters((v) => !v)}
+                  activeOpacity={0.7}
+                  accessibilityLabel={
+                    showSingleFilters ? "Hide filters" : "Show filters"
+                  }
+                  style={styles.singleToolbarButton}
+                >
+                  <Feather
+                    name="sliders"
+                    size={22}
+                    color={
+                      showSingleFilters || hasSearch
+                        ? colors.accent
+                        : colors.ink
+                    }
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => handleOpenOriginalLink(currentSingleItem.id)}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Open post link"
+                  style={styles.singleToolbarButton}
+                >
+                  <Feather name="external-link" size={22} color={colors.ink} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.singleToolbarRight}>
+                <TouchableOpacity
+                  onPress={handleSinglePrevious}
+                  disabled={singlePreviousDisabled}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Previous post"
+                  style={styles.singleToolbarButton}
+                >
+                  <Feather
+                    name="chevron-left"
+                    size={24}
+                    color={
+                      singlePreviousDisabled ? colors.inkFaint : colors.ink
+                    }
+                  />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleSingleNext}
+                  disabled={singleNextDisabled}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Next post"
+                  style={styles.singleToolbarButton}
+                >
+                  <Feather
+                    name="chevron-right"
+                    size={24}
+                    color={singleNextDisabled ? colors.inkFaint : colors.ink}
+                  />
+                </TouchableOpacity>
+              </View>
             </View>
-            <View style={styles.singleToolbarRight}>
-              <TouchableOpacity
-                onPress={() => handleOpenOriginalLink(currentSingleItem.id)}
-                activeOpacity={0.7}
-                accessibilityLabel="Open post link"
-                style={styles.singleToolbarButton}
+
+            {showSingleFilters ? (
+              <View
+                style={[
+                  styles.singleFilterBar,
+                  {
+                    borderBottomColor: colors.border,
+                    backgroundColor: colors.paperWarm,
+                  },
+                ]}
               >
-                <Feather name="external-link" size={18} color={colors.ink} />
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={() => setShowSingleMoreMenu((v) => !v)}
-                activeOpacity={0.7}
-                accessibilityLabel="More options"
-                style={styles.singleToolbarButton}
-              >
-                <Feather name="more-horizontal" size={18} color={colors.ink} />
-              </TouchableOpacity>
-            </View>
+                <View style={styles.singleFilterBarControls}>
+                  <CompactMenu<FilterMode>
+                    value={filter === "starred" ? "all" : filter}
+                    options={[
+                      { value: "all", label: "All" },
+                      { value: "unread", label: "Unread" },
+                    ]}
+                    onChange={setFilter}
+                    accessibilityLabel="Filter posts"
+                  />
+                  {selectedFeedId === undefined &&
+                  selectedTagId === undefined &&
+                  selectedCustomFeedId === undefined ? (
+                    <CompactMenu<SortMode>
+                      value={sort}
+                      options={[
+                        { value: "newest", label: "Newest" },
+                        { value: "stacked", label: "Stacked" },
+                      ]}
+                      onChange={setSort}
+                      accessibilityLabel="Sort posts"
+                    />
+                  ) : (
+                    <CompactMenu<SortMode>
+                      value={sort}
+                      options={[{ value: "newest", label: "Newest" }]}
+                      onChange={setSort}
+                      accessibilityLabel="Sort posts"
+                    />
+                  )}
+                </View>
+                <View
+                  style={[
+                    styles.searchRow,
+                    {
+                      borderColor: colors.border,
+                      backgroundColor: colors.paper,
+                    },
+                  ]}
+                >
+                  <Feather name="search" size={16} color={colors.inkSoft} />
+                  <TextInput
+                    style={[styles.searchInput, { color: colors.ink }]}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Search posts"
+                    placeholderTextColor={colors.inkSoft}
+                    autoCorrect={false}
+                    autoCapitalize="none"
+                    accessibilityLabel="Search posts"
+                  />
+                  {searchQuery.length > 0 ? (
+                    <TouchableOpacity
+                      onPress={() => setSearchQuery("")}
+                      activeOpacity={0.7}
+                      accessibilityLabel="Clear search"
+                    >
+                      <Feather name="x" size={16} color={colors.inkSoft} />
+                    </TouchableOpacity>
+                  ) : null}
+                </View>
+              </View>
+            ) : null}
           </View>
 
           {/* Overflow menu */}
@@ -2076,8 +2185,20 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   singleToolbarButton: {
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  singleFilterBar: {
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
+    gap: spacing.sm,
+    borderBottomWidth: 1,
+  },
+  singleFilterBarControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
   },
   singleMoreOverlay: {
     position: "absolute",
@@ -2090,7 +2211,7 @@ const styles = StyleSheet.create({
   singleMoreMenuContainer: {
     position: "absolute",
     top: spacing.xs,
-    right: spacing.md,
+    left: spacing.md,
     minWidth: 170,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radii.md,
