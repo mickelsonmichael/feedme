@@ -1176,7 +1176,10 @@ export async function endItemViewTime(rowId: number): Promise<void> {
     (r) => r.id === rowId && r.view_end_at === null
   );
   if (row) {
-    row.view_end_at = Math.min(Date.now(), row.view_start_at + MAX_VIEW_TIME_MS);
+    row.view_end_at = Math.min(
+      Date.now(),
+      row.view_start_at + MAX_VIEW_TIME_MS
+    );
     saveState(state);
   }
 }

@@ -1,20 +1,36 @@
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
+  Animated,
   Modal,
+  PanResponder,
   Platform,
   StyleSheet,
   TouchableOpacity,
-  View,
 } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
+import * as ScreenOrientation from "expo-screen-orientation";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   NSFW_BLUR_FILTER_STYLE,
   NSFW_BLUR_RADIUS,
   radii,
   spacing,
 } from "../theme";
-import { useTheme } from "../context/ThemeContext";
+
+const MIN_SCALE = 1;
+const MAX_SCALE = 5;
+const TAP_MAX_DURATION_MS = 300;
+const TAP_MAX_MOVEMENT_PX = 10;
+
+function getTouchDistance(
+  t0: { pageX: number; pageY: number },
+  t1: { pageX: number; pageY: number }
+) {
+  const dx = t0.pageX - t1.pageX;
+  const dy = t0.pageY - t1.pageY;
+  return Math.sqrt(dx * dx + dy * dy);
+}
 
 type Props = {
   visible: boolean;
@@ -29,12 +45,92 @@ export function FullscreenImageModal({
   blur = false,
   onClose,
 }: Props) {
-  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  // Animated values for zoom + pan
+  const scale = useRef(new Animated.Value(1)).current;
+  const translateX = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(0)).current;
+
+  // Raw ref copies so gesture callbacks can read current values synchronously
+  const scaleRef = useRef(1);
+  const translateXRef = useRef(0);
+  const translateYRef = useRef(0);
+
+  // Per-gesture tracking
+  const touchStartTime = useRef(0);
+  const gestureHadTwoFingers = useRef(false);
+  const gestureHadMovement = useRef(false);
+  // Base values at the start of the current gesture
+  const baseScale = useRef(1);
+  const baseTX = useRef(0);
+  const baseTY = useRef(0);
+  const baseStartX = useRef(0);
+  const baseStartY = useRef(0);
+  // Pinch: initial distance when a second finger is added
+  const pinchInitialDistance = useRef<number | null>(null);
+  const prevTouchCount = useRef(0);
+
+  const setScale = useCallback(
+    (v: number) => {
+      scale.setValue(v);
+      scaleRef.current = v;
+    },
+    [scale]
+  );
+  const setTX = useCallback(
+    (v: number) => {
+      translateX.setValue(v);
+      translateXRef.current = v;
+    },
+    [translateX]
+  );
+  const setTY = useCallback(
+    (v: number) => {
+      translateY.setValue(v);
+      translateYRef.current = v;
+    },
+    [translateY]
+  );
+
+  const resetZoom = useCallback(() => {
+    Animated.parallel([
+      Animated.spring(scale, { toValue: 1, useNativeDriver: true }),
+      Animated.spring(translateX, { toValue: 0, useNativeDriver: true }),
+      Animated.spring(translateY, { toValue: 0, useNativeDriver: true }),
+    ]).start(() => {
+      scaleRef.current = 1;
+      translateXRef.current = 0;
+      translateYRef.current = 0;
+    });
+  }, [scale, translateX, translateY]);
+
+  // Reset zoom when modal closes
+  useEffect(() => {
+    if (!visible) {
+      setScale(1);
+      setTX(0);
+      setTY(0);
+    }
+  }, [visible, setScale, setTX, setTY]);
+
+  // Unlock screen orientation while the modal is open (native only)
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    if (visible) {
+      ScreenOrientation.unlockAsync();
+    } else {
+      ScreenOrientation.lockAsync(
+        ScreenOrientation.OrientationLock.PORTRAIT_UP
+      );
+    }
+  }, [visible]);
 
   const handleClose = useCallback(() => {
     onClose();
   }, [onClose]);
 
+  // Keyboard dismiss on web
   useEffect(() => {
     if (!visible || Platform.OS !== "web") return;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -49,6 +145,120 @@ export function FullscreenImageModal({
     };
   }, [visible, handleClose]);
 
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (e) => {
+        const touches = e.nativeEvent.touches;
+        touchStartTime.current = Date.now();
+        gestureHadTwoFingers.current = touches.length >= 2;
+        gestureHadMovement.current = false;
+        prevTouchCount.current = touches.length;
+        pinchInitialDistance.current = null;
+
+        baseScale.current = scaleRef.current;
+        baseTX.current = translateXRef.current;
+        baseTY.current = translateYRef.current;
+        baseStartX.current = touches[0]?.pageX ?? 0;
+        baseStartY.current = touches[0]?.pageY ?? 0;
+
+        if (touches.length >= 2) {
+          pinchInitialDistance.current = getTouchDistance(
+            touches[0],
+            touches[1]
+          );
+        }
+      },
+
+      onPanResponderMove: (e, gestureState) => {
+        const touches = e.nativeEvent.touches;
+
+        // Detect when a second finger is added mid-gesture
+        if (touches.length >= 2 && prevTouchCount.current < 2) {
+          gestureHadTwoFingers.current = true;
+          pinchInitialDistance.current = getTouchDistance(
+            touches[0],
+            touches[1]
+          );
+          baseScale.current = scaleRef.current;
+        }
+        prevTouchCount.current = touches.length;
+
+        if (touches.length >= 2 && pinchInitialDistance.current !== null) {
+          // Pinch-to-zoom
+          const currentDist = getTouchDistance(touches[0], touches[1]);
+          const newScale = Math.max(
+            MIN_SCALE,
+            Math.min(
+              MAX_SCALE,
+              baseScale.current * (currentDist / pinchInitialDistance.current)
+            )
+          );
+          scaleRef.current = newScale;
+          scale.setValue(newScale);
+          gestureHadMovement.current = true;
+        } else if (touches.length === 1 && scaleRef.current > 1) {
+          // Pan when zoomed in
+          const dx = gestureState.dx;
+          const dy = gestureState.dy;
+          const newTX = baseTX.current + dx;
+          const newTY = baseTY.current + dy;
+          translateXRef.current = newTX;
+          translateYRef.current = newTY;
+          translateX.setValue(newTX);
+          translateY.setValue(newTY);
+          if (
+            Math.abs(dx) > TAP_MAX_MOVEMENT_PX ||
+            Math.abs(dy) > TAP_MAX_MOVEMENT_PX
+          ) {
+            gestureHadMovement.current = true;
+          }
+        }
+      },
+
+      onPanResponderRelease: (_, gestureState) => {
+        const elapsed = Date.now() - touchStartTime.current;
+        const moved =
+          Math.abs(gestureState.dx) > TAP_MAX_MOVEMENT_PX ||
+          Math.abs(gestureState.dy) > TAP_MAX_MOVEMENT_PX;
+
+        const isTap =
+          !gestureHadTwoFingers.current &&
+          !gestureHadMovement.current &&
+          !moved &&
+          elapsed < TAP_MAX_DURATION_MS;
+
+        if (isTap) {
+          if (scaleRef.current > 1) {
+            // Tap while zoomed → reset zoom
+            resetZoom();
+          } else {
+            // Tap at normal zoom → close
+            handleClose();
+          }
+        }
+
+        // Snap back to scale=1 if pinch released below threshold
+        if (scaleRef.current < 1.1 && !isTap) {
+          resetZoom();
+        }
+
+        prevTouchCount.current = 0;
+        pinchInitialDistance.current = null;
+        gestureHadTwoFingers.current = false;
+        gestureHadMovement.current = false;
+      },
+
+      onPanResponderTerminate: () => {
+        prevTouchCount.current = 0;
+        pinchInitialDistance.current = null;
+        gestureHadTwoFingers.current = false;
+        gestureHadMovement.current = false;
+      },
+    })
+  ).current;
+
   if (!imageUrl) return null;
 
   return (
@@ -58,21 +268,21 @@ export function FullscreenImageModal({
       animationType="fade"
       onRequestClose={handleClose}
       statusBarTranslucent
+      supportedOrientations={["portrait", "landscape"]}
       testID="fullscreen-image-modal"
     >
-      {/* Tap backdrop to close */}
-      <TouchableOpacity
+      <Animated.View
         style={styles.backdrop}
-        activeOpacity={1}
-        onPress={handleClose}
-        accessibilityLabel="Close fullscreen image"
+        {...panResponder.panHandlers}
         testID="fullscreen-image-backdrop"
+        accessibilityLabel="Close fullscreen image"
       >
-        {/* Inner view stops propagation so tapping image doesn't dismiss */}
-        <TouchableOpacity
-          activeOpacity={1}
-          style={[styles.imageWrap, blur ? NSFW_BLUR_FILTER_STYLE : null]}
-          onPress={handleClose}
+        <Animated.View
+          style={[
+            styles.imageWrap,
+            blur ? NSFW_BLUR_FILTER_STYLE : null,
+            { transform: [{ scale }, { translateX }, { translateY }] },
+          ]}
         >
           <Image
             source={{ uri: imageUrl }}
@@ -82,16 +292,16 @@ export function FullscreenImageModal({
             blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
             testID="fullscreen-image"
           />
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </Animated.View>
+      </Animated.View>
 
-      {/* Close button always on top */}
+      {/* Close button — positioned below the status bar / notch */}
       <TouchableOpacity
         style={[
           styles.closeButton,
           {
-            backgroundColor: `${colors.ink}cc`,
-            borderColor: colors.paper,
+            backgroundColor: "rgba(0,0,0,0.55)",
+            top: insets.top + spacing.sm,
           },
         ]}
         onPress={handleClose}
@@ -99,7 +309,7 @@ export function FullscreenImageModal({
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         testID="fullscreen-image-close"
       >
-        <Feather name="x" size={20} color={colors.paper} />
+        <Feather name="x" size={22} color="#fff" />
       </TouchableOpacity>
     </Modal>
   );
@@ -124,12 +334,10 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     position: "absolute",
-    top: spacing.xl,
     right: spacing.lg,
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
     borderRadius: radii.pill,
-    borderWidth: 1,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 10,
