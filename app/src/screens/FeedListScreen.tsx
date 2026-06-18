@@ -1082,8 +1082,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // when the active item changes; the timer is ended in handleSingleNext.
   // We use a ref to store the record ID so the effect doesn't need to be
   // listed as a dependency of handleSingleNext.
+  // For NSFW posts the timer is deferred until the content is revealed — see
+  // the companion effect below.
   useEffect(() => {
     if (feedLayout !== "single" || !currentSingleItem) return;
+
+    // NSFW items: timer starts on reveal, not on navigation. Always reset the
+    // ref here so a stale ID from the previous item is never carried over.
+    singleViewTimeRowIdRef.current = null;
+    if (isSingleItemNsfw) return;
 
     const itemId = currentSingleItem.id;
     const feedId = currentSingleItem.feed_id;
@@ -1113,7 +1120,40 @@ export default function FeedListScreen({ navigation, route }: Props) {
       singleViewTimeRowIdRef.current = null;
       void rowId; // keep linter happy
     };
-  }, [currentSingleItem, feedLayout]);
+  }, [currentSingleItem, feedLayout, isSingleItemNsfw]);
+
+  // For NSFW posts: start the view timer the first time the user reveals the
+  // content. The guard on singleViewTimeRowIdRef prevents double-starting if
+  // the user toggles visibility off and on again.
+  useEffect(() => {
+    if (
+      feedLayout !== "single" ||
+      !currentSingleItem ||
+      !isSingleItemNsfw ||
+      !singleNsfwRevealed ||
+      singleViewTimeRowIdRef.current !== null
+    )
+      return;
+
+    const itemId = currentSingleItem.id;
+    const feedId = currentSingleItem.feed_id;
+    let cancelled = false;
+
+    startItemViewTime(itemId, feedId)
+      .then((id) => {
+        if (!cancelled) {
+          singleViewTimeRowIdRef.current = id;
+        }
+      })
+      .catch(() => {
+        // Non-critical — silently ignore view time failures.
+      });
+
+    return () => {
+      cancelled = true;
+      // Do NOT null the ref here — the item-change effect above owns that.
+    };
+  }, [currentSingleItem, feedLayout, isSingleItemNsfw, singleNsfwRevealed]);
 
   // Inject time-bucket group dividers when grouping is active and sort is newest.
   const displayItems = useMemo<CollapsedFeedListRow[]>(() => {

@@ -1167,13 +1167,16 @@ export async function startItemViewTime(
   return id;
 }
 
+/** Maximum view session duration (30 minutes). Anything longer is capped. */
+const MAX_VIEW_TIME_MS = 30 * 60 * 1000;
+
 export async function endItemViewTime(rowId: number): Promise<void> {
   const state = loadState();
   const row = state.itemViewTimes.find(
     (r) => r.id === rowId && r.view_end_at === null
   );
   if (row) {
-    row.view_end_at = Date.now();
+    row.view_end_at = Math.min(Date.now(), row.view_start_at + MAX_VIEW_TIME_MS);
     saveState(state);
   }
 }

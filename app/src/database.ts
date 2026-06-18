@@ -749,17 +749,27 @@ export async function startItemViewTime(
   return result.lastInsertRowId;
 }
 
+/** Maximum view session duration (30 minutes). Anything longer is capped. */
+const MAX_VIEW_TIME_MS = 30 * 60 * 1000;
+
 /**
  * Record that the user has finished viewing an item by pressing Next.
  * Only the specific row identified by `rowId` is updated so concurrent or
  * overlapping sessions do not interfere with each other.
+ * The session is capped at MAX_VIEW_TIME_MS to exclude idle/background time.
  */
 export async function endItemViewTime(rowId: number): Promise<void> {
   const database = await getDatabase();
+  const row = await database.getFirstAsync<{ view_start_at: number }>(
+    "SELECT view_start_at FROM item_view_times WHERE id = ? AND view_end_at IS NULL",
+    [rowId]
+  );
+  if (!row) return;
+  const viewEndAt = Math.min(Date.now(), row.view_start_at + MAX_VIEW_TIME_MS);
   await withWriteLock(() =>
     database.runAsync(
       "UPDATE item_view_times SET view_end_at = ? WHERE id = ? AND view_end_at IS NULL",
-      [Date.now(), rowId]
+      [viewEndAt, rowId]
     )
   );
 }
