@@ -58,9 +58,23 @@ const MAX_RATE_LIMIT_RETRIES = 2;
 /** Hard cap on how long (ms) we will wait before a single retry when the user
  *  is actively waiting for the refresh to complete. */
 const MAX_RETRY_DELAY_MS = 8_000;
+/** Maximum number of automatic retries for transient network errors (timeouts
+ *  and connection failures), which are common on mobile radios. */
+const MAX_TRANSIENT_RETRIES = 1;
+/** Brief pause before a transient retry to let the radio stabilise. */
+const TRANSIENT_RETRY_DELAY_MS = 500;
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Returns true for transient network errors that are safe to retry once. */
+function isTransientNetworkError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const msg = error.message;
+  return (
+    msg.startsWith("Request timed out") || msg === "Network request failed"
+  );
+}
 
 /**
  * Returns the delay in ms to wait before the next retry after a 429.
@@ -122,7 +136,8 @@ export async function fetchFeedWithMeta(
     new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.timeout = timeoutMs;
-      xhr.ontimeout = () => reject(new Error("Request timed out"));
+      xhr.ontimeout = () =>
+        reject(new Error(`Request timed out after ${timeoutMs / 1000}s`));
       xhr.onerror = () => reject(new Error("Network request failed"));
       xhr.onload = () => {
         const etag = xhr.getResponseHeader?.("ETag") ?? null;
@@ -204,9 +219,11 @@ export async function fetchFeedWithMeta(
     };
   };
 
-  /** Retry a fetch call up to MAX_RATE_LIMIT_RETRIES times when it is
-   *  rate-limited.  Returns the successful result along with the last seen
-   *  rate-limit headers (so the caller can persist them even on success). */
+  /** Retry a fetch call handling both 429 rate-limit and transient network
+   *  errors.  Rate-limit retries are capped at MAX_RATE_LIMIT_RETRIES;
+   *  transient retries (timeout / connection failure) are capped at
+   *  MAX_TRANSIENT_RETRIES. Returns the successful result along with the last
+   *  seen rate-limit headers (so the caller can persist them even on success). */
   const fetchWithRetry = async (
     fetchFn: () => Promise<XhrResult>
   ): Promise<{
@@ -214,23 +231,38 @@ export async function fetchFeedWithMeta(
     rateLimitHeaders: RateLimitHeaders | null;
   }> => {
     let lastHeaders: RateLimitHeaders | null = null;
-    for (let attempt = 0; attempt <= MAX_RATE_LIMIT_RETRIES; attempt++) {
+    let rateLimitAttempt = 0;
+    let transientAttempt = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
       try {
         const result = await fetchFn();
         return { result, rateLimitHeaders: lastHeaders };
       } catch (err) {
-        if (err instanceof RateLimitError && attempt < MAX_RATE_LIMIT_RETRIES) {
+        if (
+          err instanceof RateLimitError &&
+          rateLimitAttempt < MAX_RATE_LIMIT_RETRIES
+        ) {
           lastHeaders = err.rateLimitHeaders;
-          const delay = computeRetryDelay(err.rateLimitHeaders, attempt);
+          const delay = computeRetryDelay(
+            err.rateLimitHeaders,
+            rateLimitAttempt
+          );
+          rateLimitAttempt++;
           await sleep(delay);
+          continue;
+        }
+        if (
+          isTransientNetworkError(err) &&
+          transientAttempt < MAX_TRANSIENT_RETRIES
+        ) {
+          transientAttempt++;
+          await sleep(TRANSIENT_RETRY_DELAY_MS);
           continue;
         }
         throw err;
       }
     }
-    // Unreachable: the loop always returns or throws.
-    /* istanbul ignore next */
-    throw new Error("Unreachable");
   };
 
   if (forceProxy && proxyUrl) {

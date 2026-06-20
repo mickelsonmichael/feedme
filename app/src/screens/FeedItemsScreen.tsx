@@ -97,9 +97,15 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     try {
       // Explicit single-feed refresh: bypass adaptive scheduling so the
       // user actually gets a fresh fetch even if the feed is in backoff.
-      const errors = await refreshFeeds([feed], { force: true });
+      let feedError: string | null = null;
+      const errors = await refreshFeeds([feed], {
+        force: true,
+        onFeedFailure: (_, error) => {
+          feedError = error.message;
+        },
+      });
       if (errors > 0) {
-        Alert.alert("Refresh Error", "Failed to refresh feed.");
+        Alert.alert("Refresh Error", feedError ?? "Failed to refresh feed.");
       }
       await loadItems();
     } finally {

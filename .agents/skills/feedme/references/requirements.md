@@ -44,6 +44,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDLIST-020 | [added] In single layout, the app shall record how long the user views each post. A view session starts when a post is displayed and ends when the user presses Next. Sessions that are interrupted (e.g. app force-quit) are discarded on the next startup. Pressing Previous or navigating away without pressing Next does not record a session. |
 | REQ-FEEDLIST-021 | [added] For Reddit posts with a detectable author, the "..." overflow menu in single layout shall include a "Follow User" / "Unfollow User" option using the same add/remove feed logic. In compact and card layouts, a follow/unfollow icon button (user-plus / user-minus) appears in the action row for such posts. |
 | REQ-FEEDLIST-022 | [added] In single layout, a "sliders" button in the left side of the toolbar shall toggle a collapsible filter/sort/search bar below the toolbar. The bar contains a filter menu (All/Unread), a sort menu, and a search text field. The sliders icon shall be shown in the accent color when the bar is open or a search query is active. |
+| REQ-FEEDLIST-023 | [added] When a feed refresh cycle completes with one or more failures, the error alert shall list up to three failed feed titles alongside their specific error messages (e.g. HTTP status or network error). This helps diagnose connectivity issues without requiring navigation to individual feed detail screens. |
 
 ---
 
@@ -72,6 +73,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDITEMS-005 | The screen title shall display the feed's title.                                                                                   |
 | REQ-FEEDITEMS-006 | Opening an item's original link via the external-link button shall mark the item as read if it is not already read.                |
 | REQ-FEEDITEMS-007 | [added] For Reddit posts with a detectable author, the action row shall show a follow/unfollow icon button. Tapping it when not following auto-adds the author's Reddit user feed (`https://www.reddit.com/user/USERNAME.rss`). Tapping it when already following removes that feed. The button icon and color reflect the current follow state. |
+| REQ-FEEDITEMS-008 | [added] When a pull-to-refresh fails, the error alert shall display the actual error message (e.g. the HTTP status or network error text) rather than a generic fallback. |
 
 ---
 

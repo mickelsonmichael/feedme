@@ -43,6 +43,10 @@ type RefreshFeedsOptions = {
    *  `next_fetch_at`. Used for explicit single-feed refresh — pull-to-refresh
    *  on the aggregated list leaves this falsy so adaptive scheduling kicks in. */
   force?: boolean;
+  /** Called for each feed that fails to refresh, with the feed and the error
+   *  that caused the failure. Useful for surfacing per-feed diagnostics to the
+   *  UI without requiring a follow-up DB query. */
+  onFeedFailure?: (feed: Feed, error: Error) => void;
 };
 
 const DEFAULT_CONCURRENCY = 6;
@@ -167,6 +171,7 @@ export async function refreshFeeds(
           feed.id,
           `${(error as Error).message}${fallbackSuffix}`
         );
+        options.onFeedFailure?.(feed, error as Error);
         await scheduleNextFailure(feed);
         await recordFeedFetchOutcome(feed.id, false);
         failed += 1;

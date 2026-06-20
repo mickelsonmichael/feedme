@@ -347,12 +347,29 @@ export default function FeedListScreen({ navigation, route }: Props) {
             failed: 0,
             skipped: 0,
           });
+          const feedFailures: Array<{ title: string; error: string }> = [];
           const errors = await refreshFeeds(feedsToRefresh, {
             onProgress: setRefreshProgress,
             force: false,
+            concurrency: Platform.OS === "web" ? 6 : 3,
+            onFeedFailure: (feed, error) => {
+              feedFailures.push({ title: feed.title, error: error.message });
+            },
           });
           if (errors > 0) {
-            Alert.alert("Refresh", `${errors} feed(s) could not be refreshed.`);
+            const MAX_SHOWN = 3;
+            const details = feedFailures
+              .slice(0, MAX_SHOWN)
+              .map(({ title, error }) => `\u2022 ${title}: ${error}`)
+              .join("\n");
+            const overflow =
+              feedFailures.length > MAX_SHOWN
+                ? `\n\u2026and ${feedFailures.length - MAX_SHOWN} more`
+                : "";
+            Alert.alert(
+              "Refresh",
+              `${errors} feed(s) could not be refreshed.\n\n${details}${overflow}`
+            );
           }
         } else {
           setRefreshProgress({

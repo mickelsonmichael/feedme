@@ -537,26 +537,216 @@ describe("fetchFeedWithMeta", () => {
     expect(mockXhr.timeout).toBe(7_500);
   });
 
-  it("throws 'Request timed out' when xhr.ontimeout fires", async () => {
-    // Arrange — simulate native-level timeout (OkHttp / NSURLSession)
+  it("throws with timeout message after both attempts time out", async () => {
+    // Arrange — simulate native timeout firing on every send(); retry also times out
+    jest.useFakeTimers();
+    type FakeXhr = {
+      open: jest.Mock;
+      send: jest.Mock;
+      setRequestHeader: jest.Mock;
+      getResponseHeader: jest.Mock;
+      status: number;
+      statusText: string;
+      responseText: string;
+      timeout: number;
+      ontimeout: (() => void) | null;
+      onerror: (() => void) | null;
+      onload: (() => void) | null;
+    };
+    (globalThis as unknown as Record<string, unknown>).XMLHttpRequest = jest.fn(
+      () => {
+        const xhr: FakeXhr = {
+          open: jest.fn(),
+          send: jest.fn(function (this: FakeXhr) {
+            Promise.resolve().then(() => this.ontimeout?.());
+          }),
+          setRequestHeader: jest.fn(),
+          getResponseHeader: jest.fn(() => null),
+          status: 200,
+          statusText: "OK",
+          responseText: "",
+          timeout: 0,
+          ontimeout: null,
+          onerror: null,
+          onload: null,
+        };
+        return xhr;
+      }
+    );
+
+    // Act
     const promise = fetchFeedWithMeta(
       "https://example.com/feed.xml",
       undefined,
       5_000
     );
-    mockXhr.ontimeout?.();
+    const assertion = expect(promise).rejects.toThrow(
+      "Request timed out after 5s"
+    );
+    await jest.runAllTimersAsync();
 
     // Assert
-    await expect(promise).rejects.toThrow("Request timed out");
+    await assertion;
+    jest.useRealTimers();
   });
 
-  it("throws 'Network request failed' when xhr.onerror fires", async () => {
-    // Arrange
+  it("throws 'Network request failed' after both attempts fail with a network error", async () => {
+    // Arrange — simulate onerror firing on every send()
+    jest.useFakeTimers();
+    type FakeXhr = {
+      open: jest.Mock;
+      send: jest.Mock;
+      setRequestHeader: jest.Mock;
+      getResponseHeader: jest.Mock;
+      status: number;
+      statusText: string;
+      responseText: string;
+      timeout: number;
+      ontimeout: (() => void) | null;
+      onerror: (() => void) | null;
+      onload: (() => void) | null;
+    };
+    (globalThis as unknown as Record<string, unknown>).XMLHttpRequest = jest.fn(
+      () => {
+        const xhr: FakeXhr = {
+          open: jest.fn(),
+          send: jest.fn(function (this: FakeXhr) {
+            Promise.resolve().then(() => this.onerror?.());
+          }),
+          setRequestHeader: jest.fn(),
+          getResponseHeader: jest.fn(() => null),
+          status: 200,
+          statusText: "OK",
+          responseText: "",
+          timeout: 0,
+          ontimeout: null,
+          onerror: null,
+          onload: null,
+        };
+        return xhr;
+      }
+    );
+
+    // Act
     const promise = fetchFeedWithMeta("https://example.com/feed.xml");
-    mockXhr.onerror?.();
+    const assertion = expect(promise).rejects.toThrow("Network request failed");
+    await jest.runAllTimersAsync();
 
     // Assert
-    await expect(promise).rejects.toThrow("Network request failed");
+    await assertion;
+    jest.useRealTimers();
+  });
+
+  it("retries after a timeout and resolves when the second attempt succeeds", async () => {
+    // Arrange — first send() fires ontimeout, second fires onload with a valid feed
+    jest.useFakeTimers();
+    type FakeXhr = {
+      open: jest.Mock;
+      send: jest.Mock;
+      setRequestHeader: jest.Mock;
+      getResponseHeader: jest.Mock;
+      status: number;
+      statusText: string;
+      responseText: string;
+      timeout: number;
+      ontimeout: (() => void) | null;
+      onerror: (() => void) | null;
+      onload: (() => void) | null;
+    };
+    let callCount = 0;
+    (globalThis as unknown as Record<string, unknown>).XMLHttpRequest = jest.fn(
+      () => {
+        const isFirst = ++callCount === 1;
+        const xhr: FakeXhr = {
+          open: jest.fn(),
+          send: jest.fn(
+            isFirst
+              ? function (this: FakeXhr) {
+                  Promise.resolve().then(() => this.ontimeout?.());
+                }
+              : function (this: FakeXhr) {
+                  Promise.resolve().then(() => this.onload?.());
+                }
+          ),
+          setRequestHeader: jest.fn(),
+          getResponseHeader: jest.fn(() => null),
+          status: isFirst ? 200 : 200,
+          statusText: "OK",
+          responseText: isFirst ? "" : RSS_FEED,
+          timeout: 0,
+          ontimeout: null,
+          onerror: null,
+          onload: null,
+        };
+        return xhr;
+      }
+    );
+
+    // Act
+    const promise = fetchFeedWithMeta("https://example.com/feed.xml");
+    await jest.runAllTimersAsync();
+    const result = await promise;
+
+    // Assert
+    expect(result.items).toHaveLength(2);
+    expect(callCount).toBe(2);
+    jest.useRealTimers();
+  });
+
+  it("retries after a network error and resolves when the second attempt succeeds", async () => {
+    // Arrange — first send() fires onerror, second fires onload with a valid feed
+    jest.useFakeTimers();
+    type FakeXhr = {
+      open: jest.Mock;
+      send: jest.Mock;
+      setRequestHeader: jest.Mock;
+      getResponseHeader: jest.Mock;
+      status: number;
+      statusText: string;
+      responseText: string;
+      timeout: number;
+      ontimeout: (() => void) | null;
+      onerror: (() => void) | null;
+      onload: (() => void) | null;
+    };
+    let callCount = 0;
+    (globalThis as unknown as Record<string, unknown>).XMLHttpRequest = jest.fn(
+      () => {
+        const isFirst = ++callCount === 1;
+        const xhr: FakeXhr = {
+          open: jest.fn(),
+          send: jest.fn(
+            isFirst
+              ? function (this: FakeXhr) {
+                  Promise.resolve().then(() => this.onerror?.());
+                }
+              : function (this: FakeXhr) {
+                  Promise.resolve().then(() => this.onload?.());
+                }
+          ),
+          setRequestHeader: jest.fn(),
+          getResponseHeader: jest.fn(() => null),
+          status: 200,
+          statusText: "OK",
+          responseText: isFirst ? "" : RSS_FEED,
+          timeout: 0,
+          ontimeout: null,
+          onerror: null,
+          onload: null,
+        };
+        return xhr;
+      }
+    );
+
+    // Act
+    const promise = fetchFeedWithMeta("https://example.com/feed.xml");
+    await jest.runAllTimersAsync();
+    const result = await promise;
+
+    // Assert
+    expect(result.items).toHaveLength(2);
+    expect(callCount).toBe(2);
+    jest.useRealTimers();
   });
 
   it("throws when the server responds with a non-2xx status", async () => {

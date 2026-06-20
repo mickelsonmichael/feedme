@@ -553,4 +553,47 @@ describe("refreshFeeds", () => {
       JSON.stringify(rateLimitHeaders)
     );
   });
+
+  it("calls onFeedFailure for each failed feed with the error", async () => {
+    // Arrange
+    const feeds = [makeFeed(1), makeFeed(2)];
+    mockFetchFeedWithMeta
+      .mockRejectedValueOnce(new Error("Network request failed"))
+      .mockResolvedValueOnce({
+        items: [parsedItem],
+        usedProxy: false,
+        notModified: false,
+        etag: null,
+        lastModified: null,
+        rateLimitHeaders: null,
+      });
+    const failures: Array<{ id: number; message: string }> = [];
+
+    // Act
+    const errors = await refreshFeeds(feeds, {
+      onFeedFailure: (feed, error) => {
+        failures.push({ id: feed.id, message: error.message });
+      },
+    });
+
+    // Assert
+    expect(errors).toBe(1);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toEqual({
+      id: 1,
+      message: "Network request failed",
+    });
+  });
+
+  it("does not call onFeedFailure when all feeds succeed", async () => {
+    // Arrange
+    const feeds = [makeFeed(1)];
+    const onFeedFailure = jest.fn();
+
+    // Act
+    await refreshFeeds(feeds, { onFeedFailure });
+
+    // Assert
+    expect(onFeedFailure).not.toHaveBeenCalled();
+  });
 });
