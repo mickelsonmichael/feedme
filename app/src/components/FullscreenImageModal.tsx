@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import {
   Animated,
+  GestureResponderEvent,
   Modal,
-  PanResponder,
   Platform,
   StyleSheet,
   TouchableOpacity,
@@ -145,83 +145,127 @@ export function FullscreenImageModal({
     };
   }, [visible, handleClose]);
 
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderGrant: (e) => {
-        const touches = e.nativeEvent.touches;
-        touchStartTime.current = Date.now();
-        gestureHadTwoFingers.current = touches.length >= 2;
-        gestureHadMovement.current = false;
-        prevTouchCount.current = touches.length;
-        pinchInitialDistance.current = null;
+  // Ctrl+wheel zoom for web desktop
+  useEffect(() => {
+    if (!visible || Platform.OS !== "web") return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handler = (e: any) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.1 : 0.9;
+      const newScale = Math.max(
+        MIN_SCALE,
+        Math.min(MAX_SCALE, scaleRef.current * factor)
+      );
+      scale.setValue(newScale);
+      scaleRef.current = newScale;
+      if (newScale <= 1) {
+        translateX.setValue(0);
+        translateY.setValue(0);
+        translateXRef.current = 0;
+        translateYRef.current = 0;
+      }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (globalThis as any).addEventListener?.("wheel", handler, {
+      passive: false,
+    });
+    return () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).removeEventListener?.("wheel", handler);
+    };
+  }, [visible, scale, translateX, translateY]);
 
+  // Direct touch handlers — more reliable than PanResponder for multi-touch
+  // in React Native's new architecture where nativeEvent.touches can be
+  // unreliable inside PanResponder callbacks.
+
+  const handleTouchStart = useCallback((e: GestureResponderEvent) => {
+    const touches = e.nativeEvent.touches;
+    touchStartTime.current = Date.now();
+    gestureHadTwoFingers.current = touches.length >= 2;
+    gestureHadMovement.current = false;
+    prevTouchCount.current = touches.length;
+    pinchInitialDistance.current = null;
+    baseScale.current = scaleRef.current;
+    baseTX.current = translateXRef.current;
+    baseTY.current = translateYRef.current;
+    baseStartX.current = touches[0]?.pageX ?? 0;
+    baseStartY.current = touches[0]?.pageY ?? 0;
+    if (touches.length >= 2) {
+      pinchInitialDistance.current = getTouchDistance(touches[0], touches[1]);
+    }
+  }, []);
+
+  const handleTouchMove = useCallback(
+    (e: GestureResponderEvent) => {
+      const touches = e.nativeEvent.touches;
+
+      if (touches.length >= 2 && prevTouchCount.current < 2) {
+        // Second finger added mid-gesture
+        gestureHadTwoFingers.current = true;
+        pinchInitialDistance.current = getTouchDistance(touches[0], touches[1]);
         baseScale.current = scaleRef.current;
         baseTX.current = translateXRef.current;
         baseTY.current = translateYRef.current;
+      } else if (touches.length === 1 && prevTouchCount.current >= 2) {
+        // One finger lifted from a pinch — reset pan base for smooth continuation
         baseStartX.current = touches[0]?.pageX ?? 0;
         baseStartY.current = touches[0]?.pageY ?? 0;
+        baseTX.current = translateXRef.current;
+        baseTY.current = translateYRef.current;
+        pinchInitialDistance.current = null;
+      }
+      prevTouchCount.current = touches.length;
 
-        if (touches.length >= 2) {
-          pinchInitialDistance.current = getTouchDistance(
-            touches[0],
-            touches[1]
-          );
-        }
-      },
-
-      onPanResponderMove: (e, gestureState) => {
-        const touches = e.nativeEvent.touches;
-
-        // Detect when a second finger is added mid-gesture
-        if (touches.length >= 2 && prevTouchCount.current < 2) {
-          gestureHadTwoFingers.current = true;
-          pinchInitialDistance.current = getTouchDistance(
-            touches[0],
-            touches[1]
-          );
-          baseScale.current = scaleRef.current;
-        }
-        prevTouchCount.current = touches.length;
-
-        if (touches.length >= 2 && pinchInitialDistance.current !== null) {
-          // Pinch-to-zoom
-          const currentDist = getTouchDistance(touches[0], touches[1]);
-          const newScale = Math.max(
-            MIN_SCALE,
-            Math.min(
-              MAX_SCALE,
-              baseScale.current * (currentDist / pinchInitialDistance.current)
-            )
-          );
-          scaleRef.current = newScale;
-          scale.setValue(newScale);
+      if (touches.length >= 2 && pinchInitialDistance.current !== null) {
+        // Pinch-to-zoom
+        const currentDist = getTouchDistance(touches[0], touches[1]);
+        const newScale = Math.max(
+          MIN_SCALE,
+          Math.min(
+            MAX_SCALE,
+            baseScale.current * (currentDist / pinchInitialDistance.current)
+          )
+        );
+        scaleRef.current = newScale;
+        scale.setValue(newScale);
+        gestureHadMovement.current = true;
+      } else if (touches.length === 1 && scaleRef.current > 1) {
+        // Pan when zoomed in
+        const dx = (touches[0]?.pageX ?? 0) - baseStartX.current;
+        const dy = (touches[0]?.pageY ?? 0) - baseStartY.current;
+        const newTX = baseTX.current + dx;
+        const newTY = baseTY.current + dy;
+        translateXRef.current = newTX;
+        translateYRef.current = newTY;
+        translateX.setValue(newTX);
+        translateY.setValue(newTY);
+        if (
+          Math.abs(dx) > TAP_MAX_MOVEMENT_PX ||
+          Math.abs(dy) > TAP_MAX_MOVEMENT_PX
+        ) {
           gestureHadMovement.current = true;
-        } else if (touches.length === 1 && scaleRef.current > 1) {
-          // Pan when zoomed in
-          const dx = gestureState.dx;
-          const dy = gestureState.dy;
-          const newTX = baseTX.current + dx;
-          const newTY = baseTY.current + dy;
-          translateXRef.current = newTX;
-          translateYRef.current = newTY;
-          translateX.setValue(newTX);
-          translateY.setValue(newTY);
-          if (
-            Math.abs(dx) > TAP_MAX_MOVEMENT_PX ||
-            Math.abs(dy) > TAP_MAX_MOVEMENT_PX
-          ) {
-            gestureHadMovement.current = true;
-          }
         }
-      },
+      }
+    },
+    [scale, translateX, translateY]
+  );
 
-      onPanResponderRelease: (_, gestureState) => {
+  const handleTouchEnd = useCallback(
+    (e: GestureResponderEvent) => {
+      const remainingTouches = e.nativeEvent.touches;
+
+      if (remainingTouches.length === 0) {
+        // All fingers lifted — check for tap or snap
         const elapsed = Date.now() - touchStartTime.current;
+        const changedTouches = e.nativeEvent.changedTouches;
+        const lastTouch = changedTouches[0];
+        const dx = lastTouch ? lastTouch.pageX - baseStartX.current : 0;
+        const dy = lastTouch ? lastTouch.pageY - baseStartY.current : 0;
         const moved =
-          Math.abs(gestureState.dx) > TAP_MAX_MOVEMENT_PX ||
-          Math.abs(gestureState.dy) > TAP_MAX_MOVEMENT_PX;
+          Math.abs(dx) > TAP_MAX_MOVEMENT_PX ||
+          Math.abs(dy) > TAP_MAX_MOVEMENT_PX;
 
         const isTap =
           !gestureHadTwoFingers.current &&
@@ -231,10 +275,8 @@ export function FullscreenImageModal({
 
         if (isTap) {
           if (scaleRef.current > 1) {
-            // Tap while zoomed → reset zoom
             resetZoom();
           } else {
-            // Tap at normal zoom → close
             handleClose();
           }
         }
@@ -248,16 +290,27 @@ export function FullscreenImageModal({
         pinchInitialDistance.current = null;
         gestureHadTwoFingers.current = false;
         gestureHadMovement.current = false;
-      },
-
-      onPanResponderTerminate: () => {
-        prevTouchCount.current = 0;
+      } else if (remainingTouches.length === 1 && prevTouchCount.current >= 2) {
+        // One finger lifted from pinch — reset pan base
+        baseStartX.current = remainingTouches[0]?.pageX ?? 0;
+        baseStartY.current = remainingTouches[0]?.pageY ?? 0;
+        baseTX.current = translateXRef.current;
+        baseTY.current = translateYRef.current;
+        prevTouchCount.current = 1;
         pinchInitialDistance.current = null;
-        gestureHadTwoFingers.current = false;
-        gestureHadMovement.current = false;
-      },
-    })
-  ).current;
+      } else {
+        prevTouchCount.current = remainingTouches.length;
+      }
+    },
+    [resetZoom, handleClose]
+  );
+
+  const handleTouchCancel = useCallback(() => {
+    prevTouchCount.current = 0;
+    pinchInitialDistance.current = null;
+    gestureHadTwoFingers.current = false;
+    gestureHadMovement.current = false;
+  }, []);
 
   if (!imageUrl) return null;
 
@@ -273,7 +326,10 @@ export function FullscreenImageModal({
     >
       <Animated.View
         style={styles.backdrop}
-        {...panResponder.panHandlers}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchCancel}
         testID="fullscreen-image-backdrop"
         accessibilityLabel="Close fullscreen image"
       >
