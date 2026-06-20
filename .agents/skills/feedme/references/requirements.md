@@ -242,3 +242,22 @@ This file tracks functional requirements for each screen and feature area. Updat
 | REQ-FEEDSEARCH-004 | Search results shall display each feed's title, URL, and how it was discovered.                                                                           |
 | REQ-FEEDSEARCH-005 | The user shall be able to subscribe to any result with a single tap; duplicate subscriptions shall be reported inline rather than via an error dialog.    |
 | REQ-FEEDSEARCH-006 | When discovery fails (network error or no feeds found), the screen shall display an inline error/empty-state message.                                     |
+
+
+---
+
+## Feed Refresh Engine (`feedRefresher`)
+
+These requirements govern the `refreshFeeds()` function and related scheduling logic.
+
+| ID              | Requirement                                                                                                                                                                                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| REQ-REFRESH-001 | The refresh engine shall fetch feeds with bounded concurrency (default 6) using a worker-pool pattern, so that a user with many subscriptions does not saturate the network radio or the local database.                                                           |
+| REQ-REFRESH-002 | Feeds whose `next_fetch_at` timestamp is still in the future shall be skipped (counted as `skipped` in progress) unless the caller passes `force: true`.                                                                                                           |
+| REQ-REFRESH-003 | A failure in one feed shall not abort the refresh of other feeds. Each feed's error is stored individually; the total failure count is returned to the caller.                                                                                                     |
+| REQ-REFRESH-004 | On a successful refresh (200 or 304), the engine shall reset the feed's `consecutive_failures` counter to 0 and schedule the next fetch based on the feed's learned publication cadence.                                                                           |
+| REQ-REFRESH-005 | On a failed refresh, the engine shall apply exponential backoff to `next_fetch_at` using the feed's `consecutive_failures` count.                                                                                                                                  |
+| REQ-REFRESH-006 | Each individual feed refresh shall have a 20-second wall-clock timeout. A feed that exceeds this limit is marked failed and progress advances; the in-flight request may continue in the background and will overwrite scheduling if it eventually succeeds.        |
+| REQ-REFRESH-007 | [added] When any feed returns an HTTP 429 Too Many Requests response, the engine shall propagate a host-wide rate limit for that feed's hostname for the remainder of the refresh run. Subsequent feeds from the same host shall be skipped rather than contacted. |
+| REQ-REFRESH-008 | [added] The `Retry-After` header from a 429 response shall be parsed as both an integer-seconds value and an RFC1123 HTTP-date. The resulting delay is used to set the host-wide rate limit expiry for the current refresh run.                                    |
+| REQ-REFRESH-009 | [added] Feeds skipped due to host-wide rate limiting shall be counted in the `skipped` progress bucket (not `failed`), matching the behaviour of `next_fetch_at`-based skips.                                                                                     |

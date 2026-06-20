@@ -23,6 +23,42 @@ import {
   updateFeedRateLimitInfo,
 } from "./database";
 
+/**
+ * Parses a `Retry-After` header value to a delay in milliseconds.
+ * Supports both the integer-seconds form ("60") and the RFC1123 HTTP-date
+ * form ("Wed, 25 Jun 2026 12:00:00 GMT"). Returns a 60-second fallback when
+ * the value is absent or cannot be parsed.
+ */
+export function parseRetryAfterMs(retryAfter: string | null): number {
+  const FALLBACK_MS = 60_000;
+  if (!retryAfter) return FALLBACK_MS;
+
+  // Integer-seconds form: "60"
+  const secs = Number(retryAfter);
+  if (Number.isFinite(secs) && secs > 0) {
+    return secs * 1000;
+  }
+
+  // RFC1123 HTTP-date form: "Wed, 25 Jun 2026 12:00:00 GMT"
+  const date = new Date(retryAfter);
+  if (!isNaN(date.getTime())) {
+    const delay = date.getTime() - Date.now();
+    return delay > 0 ? delay : FALLBACK_MS;
+  }
+
+  return FALLBACK_MS;
+}
+
+/** Extracts the hostname from a URL string. Returns null if the URL cannot be
+ *  parsed (e.g. relative URLs or malformed strings). */
+function extractHost(url: string): string | null {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
 export type FeedRefreshProgress = {
   total: number;
   completed: number;
@@ -99,6 +135,14 @@ export async function refreshFeeds(
 
   emitProgress();
 
+  // Per-host rate-limit tracker shared across all concurrent workers for this
+  // refresh run. Keyed by hostname (e.g. "www.reddit.com"). When any feed from
+  // a host returns a 429, the host's entry is set to the epoch-ms timestamp
+  // after which it is safe to retry. All subsequent feeds from that same host
+  // are then skipped for the remainder of this run, preventing a burst of
+  // redundant requests that would all be rate-limited anyway.
+  const hostRateLimits = new Map<string, number>();
+
   const refreshOne = async (feed: Feed): Promise<void> => {
     // Honor per-feed adaptive scheduling. `next_fetch_at` of 0 (or null on
     // freshly-migrated rows) always counts as "due now".
@@ -108,6 +152,20 @@ export async function refreshFeeds(
       completed += 1;
       emitProgress();
       return;
+    }
+
+    // Honor host-wide rate limiting. If any sibling feed from this host
+    // already received a 429 during this refresh run, skip this feed rather
+    // than firing another request we know will be rejected.
+    const host = extractHost(feed.url);
+    if (host) {
+      const rateLimitedUntil = hostRateLimits.get(host);
+      if (rateLimitedUntil !== undefined && rateLimitedUntil > Date.now()) {
+        skipped += 1;
+        completed += 1;
+        emitProgress();
+        return;
+      }
     }
 
     // work() handles all its own errors and never rejects — it resolves false
@@ -159,6 +217,15 @@ export async function refreshFeeds(
         succeeded += 1;
       } catch (error) {
         if (error instanceof RateLimitError) {
+          // Propagate the rate limit to all feeds on the same host so
+          // concurrent and subsequent workers in this refresh run don't
+          // fire requests that are guaranteed to be rejected.
+          if (host) {
+            const delayMs = parseRetryAfterMs(
+              error.rateLimitHeaders.retryAfter
+            );
+            hostRateLimits.set(host, Date.now() + delayMs);
+          }
           await updateFeedRateLimitInfo(
             feed.id,
             serializeRateLimitHeaders(error.rateLimitHeaders)

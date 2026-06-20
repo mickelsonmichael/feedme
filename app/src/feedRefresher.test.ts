@@ -1,4 +1,4 @@
-import { refreshFeeds } from "./feedRefresher";
+import { refreshFeeds, parseRetryAfterMs } from "./feedRefresher";
 import { fetchFeedWithMeta, RateLimitError } from "./feedParser";
 import * as database from "./database";
 import { Feed, ParsedFeedItem } from "./types";
@@ -83,7 +83,10 @@ const parsedItem: ParsedFeedItem = {
 };
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  // resetAllMocks clears both call records AND the once-value queue so
+  // unconsumed mockResolvedValueOnce / mockRejectedValueOnce values from
+  // one test can't contaminate the next.
+  jest.resetAllMocks();
   mockFetchFeedWithMeta.mockResolvedValue({
     items: [parsedItem],
     usedProxy: false,
@@ -595,5 +598,164 @@ describe("refreshFeeds", () => {
 
     // Assert
     expect(onFeedFailure).not.toHaveBeenCalled();
+  });
+
+  describe("host-wide rate limiting", () => {
+    it("skips feeds from the same host after a sibling receives a 429", async () => {
+      // Arrange — two reddit feeds; the first returns a 429, the second should
+      // be skipped rather than fired.
+      const feeds = [
+        makeFeed(1, { url: "https://www.reddit.com/r/programming.rss" }),
+        makeFeed(2, { url: "https://www.reddit.com/r/typescript.rss" }),
+      ];
+      const rateLimitHeaders = {
+        retryAfter: "60",
+        limit: null,
+        remaining: "0",
+        reset: null,
+        capturedAt: Date.now(),
+      };
+      mockFetchFeedWithMeta
+        .mockRejectedValueOnce(new RateLimitError(rateLimitHeaders))
+        .mockResolvedValueOnce({
+          items: [parsedItem],
+          usedProxy: false,
+          notModified: false,
+          etag: null,
+          lastModified: null,
+          rateLimitHeaders: null,
+        });
+      const onProgress = jest.fn();
+
+      // Act — run with concurrency 1 so feed 1 finishes (and updates the host
+      // map) before feed 2 is attempted.
+      const errors = await refreshFeeds(feeds, {
+        concurrency: 1,
+        onProgress,
+      });
+
+      // Assert — only feed 1 was fetched; feed 2 was skipped due to host limit
+      expect(errors).toBe(1); // feed 1 failed
+      expect(mockFetchFeedWithMeta).toHaveBeenCalledTimes(1);
+      expect(mockFetchFeedWithMeta).toHaveBeenCalledWith(
+        "https://www.reddit.com/r/programming.rss",
+        false,
+        undefined,
+        expect.any(Object)
+      );
+      expect(onProgress).toHaveBeenLastCalledWith(
+        expect.objectContaining({ failed: 1, skipped: 1, completed: 2 })
+      );
+    });
+
+    it("does not skip feeds from a different host after a 429", async () => {
+      // Arrange — one reddit feed fails with 429; an unrelated feed should
+      // still be fetched.
+      const feeds = [
+        makeFeed(1, { url: "https://www.reddit.com/r/programming.rss" }),
+        makeFeed(2, { url: "https://example.com/feed.xml" }),
+      ];
+      const rateLimitHeaders = {
+        retryAfter: "60",
+        limit: null,
+        remaining: "0",
+        reset: null,
+        capturedAt: Date.now(),
+      };
+      mockFetchFeedWithMeta
+        .mockRejectedValueOnce(new RateLimitError(rateLimitHeaders))
+        .mockResolvedValueOnce({
+          items: [parsedItem],
+          usedProxy: false,
+          notModified: false,
+          etag: null,
+          lastModified: null,
+          rateLimitHeaders: null,
+        });
+
+      // Act
+      const errors = await refreshFeeds(feeds, { concurrency: 1 });
+
+      // Assert — only feed 1 failed; feed 2 was fetched normally
+      expect(errors).toBe(1);
+      expect(mockFetchFeedWithMeta).toHaveBeenCalledTimes(2);
+      expect(mockFetchFeedWithMeta).toHaveBeenCalledWith(
+        "https://example.com/feed.xml",
+        false,
+        undefined,
+        expect.any(Object)
+      );
+    });
+
+    it("skips remaining same-host feeds when Retry-After is long", async () => {
+      // Arrange — 429 with a 2-minute Retry-After; feeds 2 and 3 should be
+      // skipped, not attempted. Use mockRejectedValueOnce so the default mock
+      // (success) would kick in for any unexpected extra calls, making an
+      // incorrect non-skip detectable via the skipped/failed counts.
+      const now = Date.now();
+      const feeds = [
+        makeFeed(1, { url: "https://www.reddit.com/r/all.rss" }),
+        makeFeed(2, { url: "https://www.reddit.com/r/popular.rss" }),
+        makeFeed(3, { url: "https://www.reddit.com/r/news.rss" }),
+      ];
+      const rateLimitHeaders = {
+        retryAfter: "120",
+        limit: null,
+        remaining: "0",
+        reset: null,
+        capturedAt: now,
+      };
+      mockFetchFeedWithMeta.mockRejectedValueOnce(
+        new RateLimitError(rateLimitHeaders)
+      );
+      const onProgress = jest.fn();
+
+      // Act
+      const errors = await refreshFeeds(feeds, { concurrency: 1, onProgress });
+
+      // Assert — feed 1 failed; feeds 2 and 3 were skipped (not attempted).
+      // If host-rate-limiting were broken, feeds 2 and 3 would succeed
+      // (via the default mock), giving skipped=0 and succeeded=2 instead.
+      expect(errors).toBe(1);
+      expect(mockFetchFeedWithMeta).toHaveBeenCalledTimes(1);
+      expect(onProgress).toHaveBeenLastCalledWith(
+        expect.objectContaining({ failed: 1, skipped: 2, completed: 3 })
+      );
+    });
+  });
+});
+
+describe("parseRetryAfterMs", () => {
+  it("parses integer seconds", () => {
+    expect(parseRetryAfterMs("60")).toBe(60_000);
+    expect(parseRetryAfterMs("1")).toBe(1_000);
+    expect(parseRetryAfterMs("3600")).toBe(3_600_000);
+  });
+
+  it("returns 60 000 ms fallback for null", () => {
+    expect(parseRetryAfterMs(null)).toBe(60_000);
+  });
+
+  it("returns 60 000 ms fallback for empty string", () => {
+    expect(parseRetryAfterMs("")).toBe(60_000);
+  });
+
+  it("returns 60 000 ms fallback for unparseable string", () => {
+    expect(parseRetryAfterMs("not-a-date-or-number")).toBe(60_000);
+  });
+
+  it("parses an RFC1123 HTTP-date form", () => {
+    // Pick a date clearly in the future relative to test execution.
+    const futureDate = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes from now
+    const httpDate = futureDate.toUTCString(); // e.g. "Sat, 21 Jun 2026 00:00:00 GMT"
+    const result = parseRetryAfterMs(httpDate);
+    // Should be approximately 5 minutes (allow 1s of clock drift in tests)
+    expect(result).toBeGreaterThan(4 * 60 * 1000);
+    expect(result).toBeLessThanOrEqual(5 * 60 * 1000 + 1000);
+  });
+
+  it("returns fallback when RFC1123 date is in the past", () => {
+    const pastDate = new Date(Date.now() - 60_000).toUTCString();
+    expect(parseRetryAfterMs(pastDate)).toBe(60_000);
   });
 });
