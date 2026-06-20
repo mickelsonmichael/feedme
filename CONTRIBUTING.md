@@ -27,7 +27,7 @@ This guide walks you through setting up a full local development environment fro
 | Node.js | 22 | Both projects |
 | npm | 10 | Both projects |
 | Git | any | Both projects |
-| OpenJDK | 17 | Android build |
+| OpenJDK | 17 (exactly; see note) | Android build |
 | Android SDK | API 34 | Android emulator |
 
 ---
@@ -59,7 +59,9 @@ npm --version
 
 ## 2. Install Java (OpenJDK)
 
-Android build tools require Java 17 or higher. Use OpenJDK.
+Android build tools require **Java 17**. Use the versioned `openjdk@17` formula — do **not** use the unversioned `openjdk` formula, which installs the latest Java release and is incompatible with the Gradle version used by this project.
+
+> **Common mistake:** Installing `brew install openjdk` (without `@17`) gives you the latest Java (currently Java 26+). Gradle will fail with `Unsupported class file major version 70`. Always install `openjdk@17` explicitly.
 
 ### macOS (Homebrew)
 
@@ -70,7 +72,7 @@ brew install openjdk@17
 Add it to your shell profile (`~/.zshrc`, `~/.bash_profile`, etc.):
 
 ```bash
-export JAVA_HOME=$(brew --prefix openjdk@17)
+export JAVA_HOME="$(brew --prefix openjdk@17)/libexec"
 export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
@@ -90,7 +92,7 @@ brew install openjdk@17
 Add to your shell profile (`~/.bashrc`, `~/.zshrc`, etc.):
 
 ```bash
-export JAVA_HOME=$(brew --prefix openjdk@17)
+export JAVA_HOME="$(brew --prefix openjdk@17)/libexec"
 export PATH="$JAVA_HOME/bin:$PATH"
 ```
 
@@ -175,8 +177,9 @@ export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
 
 ```bash
 # ~/.bashrc or ~/.zshrc
+export JAVA_HOME="$(brew --prefix openjdk@17)/libexec"
 export ANDROID_HOME="$(brew --prefix)/share/android-commandlinetools"
-export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
+export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH"
 ```
 
 ### Windows (PowerShell profile / System Properties)

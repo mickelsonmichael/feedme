@@ -15,6 +15,11 @@ config.resolver.blockList = [
   /android\/build\/.*/,
   /node_modules\/.*\/android\/\.cxx\/.*/,
   /node_modules\/.*\/android\/build\/.*/,
+  // Exclude nested react-native (0.86.x) installed as a transitive dep inside
+  // the top-level react-native package. Its JS files use TypeScript-style
+  // Readonly<> instead of Flow's $ReadOnly<>, which causes Metro codegen to
+  // fail with "Unable to determine event arguments for 'onModeChange'".
+  /node_modules\/react-native\/node_modules\/react-native\/.*/,
 ];
 
 // Allow Metro to bundle .wasm files (required by expo-sqlite on web)
