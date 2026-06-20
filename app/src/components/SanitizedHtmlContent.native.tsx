@@ -55,6 +55,7 @@ export function SanitizedHtmlContent({ html }: Props) {
         enableCSSInlineProcessing={false}
         enableExperimentalMarginCollapsing
         defaultTextProps={{ selectable: true }}
+        ignoredDomTags={["iframe"]}
       />
     </View>
   );
