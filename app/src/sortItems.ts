@@ -12,11 +12,70 @@ export function sortNewest(items: FeedItemWithFeed[]): FeedItemWithFeed[] {
 }
 
 /**
- * Items older than this horizon start accumulating a staleness penalty in the
- * stacked sort, causing them to sink below fresher items even when they hold a
- * low within-feed rank (e.g. a feed that hasn't posted in months).
+ * Number of "posting cycles" a post can age through before it starts
+ * accumulating a staleness penalty in the stacked sort.
+ *
+ * One cycle = one median inter-post gap for that feed.  A post from a feed
+ * that publishes weekly has a per-cycle length of 7 days, so its staleness
+ * horizon is 30 × 7 = 210 days.  A post from a feed that publishes hourly
+ * has a per-cycle length of ~60 min, so its horizon is 30 hours.
+ *
+ * This replaces the old fixed 30-day `STALENESS_HORIZON_MS` constant.
  */
-const STALENESS_HORIZON_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const STALENESS_HORIZON_CYCLES = 30;
+
+/**
+ * Bounds on the per-feed posting interval used for the staleness horizon.
+ *
+ * - `MIN`: 15 minutes — prevents absurd penalties on burst feeds (e.g. a
+ *   liveblog).  A 15-minute interval gives a ~7.5-hour horizon, which is
+ *   still generous enough to show recent news.
+ * - `MAX`: 365 days — prevents an effectively immortal horizon on dormant
+ *   feeds with only a handful of archived posts spaced years apart.
+ */
+const MIN_POSTING_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const MAX_POSTING_INTERVAL_MS = 365 * 24 * 60 * 60 * 1000; // 365 days
+
+/**
+ * Fallback posting interval used when a feed has fewer than 2 timestamped
+ * items and no interval can be derived.  One day gives the same staleness
+ * horizon as the old fixed 30-day constant, preserving backwards-compatible
+ * behaviour for new or near-empty feeds.
+ */
+const DEFAULT_POSTING_INTERVAL_MS = 24 * 60 * 60 * 1000; // 1 day
+
+/**
+ * Derive a feed's posting cadence as the median gap between its items'
+ * `published_at` timestamps.  Returns {@link DEFAULT_POSTING_INTERVAL_MS}
+ * when fewer than 2 usable timestamps are available, and clamps the result
+ * to `[MIN_POSTING_INTERVAL_MS, MAX_POSTING_INTERVAL_MS]`.
+ *
+ * Unlike `computeBaseInterval` in feedSchedule.ts, this function does NOT
+ * apply a 24-hour polling cap — we want the actual editorial cadence, not a
+ * fetch-scheduling interval.
+ */
+export function computeFeedPostingInterval(publishedAts: number[]): number {
+  if (publishedAts.length < 2) return DEFAULT_POSTING_INTERVAL_MS;
+
+  const sorted = [...publishedAts].sort((a, b) => b - a); // newest first
+  const gaps: number[] = [];
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const gap = sorted[i] - sorted[i + 1];
+    if (gap > 0) gaps.push(gap);
+  }
+
+  if (gaps.length === 0) return DEFAULT_POSTING_INTERVAL_MS;
+
+  gaps.sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  const median =
+    gaps.length % 2 === 0 ? (gaps[mid - 1] + gaps[mid]) / 2 : gaps[mid];
+
+  return Math.max(
+    MIN_POSTING_INTERVAL_MS,
+    Math.min(MAX_POSTING_INTERVAL_MS, median)
+  );
+}
 
 /**
  * Sort items using the "stacked" algorithm, which interleaves feeds equitably
@@ -35,21 +94,27 @@ const STALENESS_HORIZON_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
  *   sort call. It is strictly less than 1, so a rank-0 item always outranks
  *   any rank-1 item. Within the same rank, though, feeds are randomly ordered
  *   on every call — ensuring no single feed consistently appears first.
- * - `staleness_penalty = max(0, (age - HORIZON) / HORIZON)²` — zero for items
- *   younger than {@link STALENESS_HORIZON_MS}, then growing quadratically for
- *   older items.
+ * - `staleness_penalty` — zero for items younger than the feed's staleness
+ *   horizon, then growing quadratically:
  *
- * Intuitions:
- * - Every feed's newest item gets `feed_rank = 0`. The per-feed random offset
- *   shuffles which feed's newest item appears first, so the top of the list
- *   rotates across feeds on every refresh instead of always favouring the most
- *   recently-publishing feed.
- * - Within each "rank round" (rank 0, rank 1, …) items from different feeds
- *   are interleaved in a random but stable order for that sort call.
- * - A feed that hasn't posted in months has `feed_rank = 0` for its newest
- *   item, but the staleness penalty inflates its score above the penalty-free
- *   scores of active feeds, pushing stale content toward the bottom.
- * - Items with no `published_at` receive `Infinity` and sink to the very end.
+ *       effective_age   = max(0, lastSessionAt - published_at)
+ *                         [if lastSessionAt provided; else currentTime - published_at]
+ *       feed_horizon    = STALENESS_HORIZON_CYCLES × feed_posting_interval
+ *       overHorizon     = max(0, effective_age - feed_horizon)
+ *       penalty         = (overHorizon / feed_horizon)²
+ *
+ * **Velocity-normalised horizon**: `feed_posting_interval` is the median
+ * inter-post gap for that feed.  A once-weekly blog therefore has a staleness
+ * horizon of 30 weeks, while an hourly news feed has a ~30-hour horizon.
+ * This prevents quiet feeds from being penalised just because they publish
+ * infrequently.
+ *
+ * **Session-relative effective age**: When `lastSessionAt` is supplied it
+ * is used as the reference point instead of the current clock.  Items
+ * published *after* the previous session have `effective_age = 0` (brand new
+ * to the user), while items that were already visible in the prior session
+ * carry their age forward.  Items with no `published_at` receive `Infinity`
+ * and sink to the very end.
  *
  * Ties (same feed, same score) are broken by `published_at` (newer first);
  * nulls are always last.
@@ -59,11 +124,15 @@ const STALENESS_HORIZON_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
  *   deterministic testing.
  * @param rng - Optional random-number function returning a value in [0, 1)
  *   (defaults to Math.random). Inject a deterministic function in tests.
+ * @param lastSessionAt - Optional Unix timestamp (ms) of the previous session
+ *   start.  When provided, effective item age is measured relative to this
+ *   point rather than the current clock, making the sort session-aware.
  */
 export function sortStacked(
   items: FeedItemWithFeed[],
   now: () => number = Date.now,
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  lastSessionAt?: number
 ): FeedItemWithFeed[] {
   const currentTime = now();
 
@@ -78,7 +147,8 @@ export function sortStacked(
     }
   }
 
-  // Step 1: assign each item its within-feed rank (0 = newest from that feed).
+  // Step 1: assign each item its within-feed rank (0 = newest from that feed)
+  // and collect the per-feed published_at arrays needed for interval estimation.
   const rankById = new Map<number, number>();
   const byFeed = new Map<number, FeedItemWithFeed[]>();
 
@@ -101,6 +171,18 @@ export function sortStacked(
     feedItems.forEach((item, i) => rankById.set(item.id, i));
   }
 
+  // Step 1b: compute a velocity-normalised staleness horizon for every feed.
+  // The horizon is STALENESS_HORIZON_CYCLES × (median inter-post gap), so
+  // a slow-publishing feed ages out much later than a high-frequency feed.
+  const feedHorizon = new Map<number, number>();
+  for (const [feedId, feedItems] of byFeed) {
+    const publishedAts = feedItems
+      .map((i) => cappedAt.get(i.id))
+      .filter((t): t is number => t !== undefined);
+    const interval = computeFeedPostingInterval(publishedAts);
+    feedHorizon.set(feedId, STALENESS_HORIZON_CYCLES * interval);
+  }
+
   // Assign each feed a random offset in [0, 1). Because the offset is strictly
   // less than 1, a rank-0 item always outranks any rank-1 item. Within the
   // same rank, however, feeds are randomly ordered on every call, preventing
@@ -111,15 +193,29 @@ export function sortStacked(
   }
 
   // Step 2: compute a composite score for every item.
+  //
+  // When lastSessionAt is provided, use it as the reference point for
+  // effective_age: items published after the previous session have age 0
+  // (they are brand new to the user), while items that were already in the
+  // feed last session carry their age.  When lastSessionAt is absent we fall
+  // back to the current clock (original behaviour).
+  const ageReference = lastSessionAt ?? currentTime;
+
   const scored = items.map((item) => {
     if (item.published_at == null) {
       return { item, score: Infinity };
     }
 
     const rank = rankById.get(item.id) ?? 0;
-    const age = Math.max(0, currentTime - item.published_at);
-    const overHorizon = Math.max(0, age - STALENESS_HORIZON_MS);
-    const penalty = (overHorizon / STALENESS_HORIZON_MS) ** 2;
+    const horizon =
+      feedHorizon.get(item.feed_id) ??
+      STALENESS_HORIZON_CYCLES * DEFAULT_POSTING_INTERVAL_MS;
+
+    // effective_age: how long ago was this item "available" to the user?
+    // Capped at zero so future-dated items don't get a negative age.
+    const effective_age = Math.max(0, ageReference - item.published_at);
+    const overHorizon = Math.max(0, effective_age - horizon);
+    const penalty = (overHorizon / horizon) ** 2;
     const offset = feedOffset.get(item.feed_id) ?? 0;
 
     return { item, score: rank + offset + penalty };
@@ -147,17 +243,21 @@ export function sortStacked(
  * @param now - Optional clock function passed through to {@link sortStacked}.
  * @param rng - Optional random-number function passed through to
  *   {@link sortStacked}.
+ * @param lastSessionAt - Optional Unix timestamp (ms) of the previous session
+ *   start, passed through to {@link sortStacked} to enable session-aware
+ *   staleness scoring.
  */
 export function applySortMode(
   items: FeedItemWithFeed[],
   mode: SortMode,
   now?: () => number,
-  rng?: () => number
+  rng?: () => number,
+  lastSessionAt?: number
 ): FeedItemWithFeed[] {
   switch (mode) {
     case "newest":
       return sortNewest(items);
     case "stacked":
-      return sortStacked(items, now, rng);
+      return sortStacked(items, now, rng, lastSessionAt);
   }
 }

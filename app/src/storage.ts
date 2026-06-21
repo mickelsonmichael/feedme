@@ -31,6 +31,11 @@ export type WebConfig = {
    *  navigation and app restarts. Capped to a bounded length so it cannot
    *  grow unboundedly as items age out. */
   uncollapsedItemIds?: number[];
+  /** Unix timestamp (ms) recorded at the start of the previous app session.
+   *  Used by the stacked-sort algorithm to measure effective item age relative
+   *  to when the user last opened the app, so that items published after the
+   *  last session are treated as brand-new regardless of their absolute age. */
+  lastSessionAt?: number;
 };
 
 let cachedConfig: WebConfig | null = null;
@@ -129,6 +134,11 @@ function validateConfig(raw: unknown): WebConfig {
       config.uncollapsedItemIds = uncollapsedItemIds.filter(
         (n): n is number => typeof n === "number" && Number.isFinite(n)
       );
+    }
+
+    const lastSessionAt = (raw as Record<string, unknown>).lastSessionAt;
+    if (typeof lastSessionAt === "number" && Number.isFinite(lastSessionAt)) {
+      config.lastSessionAt = lastSessionAt;
     }
   }
   return config;

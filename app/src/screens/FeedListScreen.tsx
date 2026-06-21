@@ -171,6 +171,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // marking an item as read), which was causing the feed to shuffle on read.
   const sortSeedRef = useRef(Math.random());
 
+  // Timestamp of the PREVIOUS session start, used by the stacked-sort
+  // algorithm so it can treat items published after the last session as
+  // brand-new regardless of their absolute age. Loaded once from config at
+  // mount time; updated inside loadData after the new session timestamp is
+  // persisted so that within a session the reference point is stable.
+  const lastSessionAtRef = useRef<number | undefined>(
+    loadConfig().lastSessionAt
+  );
+
   // The feed_id scope (set by loadData) that handleLoadMore re-queries when
   // fetching subsequent pages.
   const scopeRef = useRef<{
@@ -292,6 +301,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
     async (refreshRemote: boolean) => {
       const generation = ++loadGenerationRef.current;
       try {
+        // Capture the previous session timestamp before updating it. The
+        // stacked-sort algorithm uses this so items published after the last
+        // session are treated as brand-new to the user.
+        const prevSessionAt = loadConfig().lastSessionAt;
+        lastSessionAtRef.current = prevSessionAt;
+        saveConfig({ lastSessionAt: Date.now() });
+
         const feedData = await getFeeds();
         setFeeds(feedData);
 
@@ -972,7 +988,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
       s = Math.imul(s, 1664525) + 1013904223;
       return (s >>> 0) / 0x100000000;
     };
-    return applySortMode(searchedItems, sort, undefined, stableRng);
+    return applySortMode(
+      searchedItems,
+      sort,
+      undefined,
+      stableRng,
+      lastSessionAtRef.current
+    );
   }, [searchedItems, sort]);
 
   const visibleItems = useMemo(() => {

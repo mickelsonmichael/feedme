@@ -1,4 +1,9 @@
-import { sortNewest, sortStacked, applySortMode } from "./sortItems";
+import {
+  sortNewest,
+  sortStacked,
+  applySortMode,
+  computeFeedPostingInterval,
+} from "./sortItems";
 import { FeedItemWithFeed } from "./types";
 
 function makeItem(
@@ -76,6 +81,7 @@ describe("sortStacked", () => {
   const NOW = 1_000_000_000_000; // ms
   const HOUR = 60 * 60 * 1000;
   const DAY = 24 * HOUR;
+  const WEEK = 7 * DAY;
   const MONTH = 30 * DAY;
   const now = () => NOW;
   // A fixed rng that returns the same offset (0.5) for every feed, making the
@@ -155,9 +161,10 @@ describe("sortStacked", () => {
     expect(top2Ids).toContain(10);
   });
 
-  it("pushes very old items from stale (infrequent) feeds to the bottom", () => {
-    // Arrange — an active hourly feed and a stale monthly feed whose newest
-    // item is many months old.
+  it("velocity-normalised horizon: quiet feed items within their cadence are not penalised", () => {
+    // Arrange — a hourly active feed and a weekly quiet feed. The weekly
+    // feed's items are up to 5 weeks old — comfortably within its 30-week
+    // staleness horizon — so they must NOT be penalised.
     const items = [
       // Hourly feed: items at 1h, 2h, 3h, 4h, 5h ago
       makeItem(1, 1, NOW - 1 * HOUR),
@@ -165,19 +172,55 @@ describe("sortStacked", () => {
       makeItem(3, 1, NOW - 3 * HOUR),
       makeItem(4, 1, NOW - 4 * HOUR),
       makeItem(5, 1, NOW - 5 * HOUR),
-      // Stale monthly feed: items at 6, 7, 8 months ago (very old)
-      makeItem(10, 2, NOW - 6 * MONTH),
-      makeItem(11, 2, NOW - 7 * MONTH),
-      makeItem(12, 2, NOW - 8 * MONTH),
+      // Weekly feed: items at 1w, 2w, 3w, 4w, 5w ago (within 30-week horizon)
+      makeItem(10, 2, NOW - 1 * WEEK),
+      makeItem(11, 2, NOW - 2 * WEEK),
+      makeItem(12, 2, NOW - 3 * WEEK),
+      makeItem(13, 2, NOW - 4 * WEEK),
+      makeItem(14, 2, NOW - 5 * WEEK),
+    ];
+
+    // Act
+    const result = sortStacked(items, now, rng);
+
+    // Assert — each feed's rank-0 item must be in the top-2 results (no
+    // penalty on either side, so interleaving is purely rank-based).
+    const top2FeedIds = result.slice(0, 2).map((i) => i.feed_id);
+    expect(new Set(top2FeedIds).size).toBe(2);
+
+    // The weekly rank-0 item (10) must appear before any rank-1 item from
+    // the hourly feed (since both are rank-0 and the weekly item has no
+    // staleness penalty despite being a week old).
+    const weeklyRank0Pos = result.findIndex((i) => i.id === 10);
+    const hourlyRank1Pos = result.findIndex((i) => i.id === 2);
+    expect(weeklyRank0Pos).toBeLessThan(hourlyRank1Pos);
+  });
+
+  it("velocity-normalised horizon: items many cycles beyond their feed's horizon are penalised", () => {
+    // Arrange — an active hourly feed and a stale weekly feed whose newest
+    // item is 100 weeks old (well beyond the 30-week staleness horizon for
+    // a once-weekly feed).
+    const items = [
+      // Hourly feed: items at 1h, 2h, 3h, 4h, 5h ago (no penalty)
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 1, NOW - 2 * HOUR),
+      makeItem(3, 1, NOW - 3 * HOUR),
+      makeItem(4, 1, NOW - 4 * HOUR),
+      makeItem(5, 1, NOW - 5 * HOUR),
+      // Very stale weekly feed: items at 100w, 101w, 102w ago
+      // (100 > 30 weekly-cycles → large staleness penalty)
+      makeItem(10, 2, NOW - 100 * WEEK),
+      makeItem(11, 2, NOW - 101 * WEEK),
+      makeItem(12, 2, NOW - 102 * WEEK),
     ];
 
     // Act
     const result = sortStacked(items, now, rng);
 
     // Assert — every fresh hourly item should rank ahead of every stale
-    // monthly item. The old monthly items must occupy the bottom slots.
+    // weekly item. The stale items must occupy the bottom slots.
     const hourlyIds = [1, 2, 3, 4, 5];
-    const monthlyIds = [10, 11, 12];
+    const staleIds = [10, 11, 12];
     expect(
       result
         .slice(0, 5)
@@ -189,7 +232,7 @@ describe("sortStacked", () => {
         .slice(5)
         .map((i) => i.id)
         .sort((a, b) => a - b)
-    ).toEqual(monthlyIds);
+    ).toEqual(staleIds);
   });
 
   it("interleaves feeds equitably: top N results contain one item from each of the N feeds", () => {
@@ -353,6 +396,137 @@ describe("sortStacked", () => {
     // Assert
     expect(JSON.stringify(items)).toBe(snapshot);
   });
+
+  describe("session-relative effective age (lastSessionAt)", () => {
+    it("items published after lastSessionAt have zero effective age", () => {
+      // Arrange — lastSessionAt = 1 day ago. Feed 1 has two items:
+      // item 1 (12h ago, published AFTER last session) and item 2 (2d ago,
+      // published BEFORE last session). Both are in the same feed, so their
+      // rank is determined by publication order.
+      // The key behaviour: item 1's effective_age = 0 (brand new to the user),
+      // item 2's effective_age = 1 day (was already in the feed last session).
+      const lastSessionAt = NOW - DAY;
+      const items = [
+        makeItem(1, 1, NOW - 12 * HOUR), // after last session → effective_age = 0
+        makeItem(2, 1, NOW - 2 * DAY), // before last session → effective_age = 1d
+      ];
+
+      // Act — with a single feed the ranking is purely by rank (rank 0, rank 1)
+      const result = sortStacked(items, now, rng, lastSessionAt);
+
+      // Assert — item 1 (newer, rank 0) must come first.
+      expect(result[0].id).toBe(1);
+      expect(result[1].id).toBe(2);
+    });
+
+    it("reduces staleness for an item that was recently introduced at the last session", () => {
+      // Arrange — two feeds, each with two items.
+      //
+      // Feed 1 (hourly): items at 60h and 61h ago.
+      //   interval ≈ 1h → horizon = 30h.
+      //   Without lastSessionAt: rank-0 (60h) has age=60h, penalty=(30/30)²=1.0.
+      //   With lastSessionAt=50h ago: effective_age = max(0, 50h-60h) = 0 → no penalty.
+      //
+      // Feed 2 (hourly): items at 5h and 10h ago.
+      //   interval ≈ 5h → horizon = 150h.
+      //   Rank-0 (5h) and rank-1 (10h): no penalty either way.
+      const lastSessionAt = NOW - 50 * HOUR;
+      const items = [
+        makeItem(1, 1, NOW - 60 * HOUR), // feed 1 rank-0 — penalised without session
+        makeItem(2, 1, NOW - 61 * HOUR), // feed 1 rank-1
+        makeItem(3, 2, NOW - 5 * HOUR), // feed 2 rank-0
+        makeItem(4, 2, NOW - 10 * HOUR), // feed 2 rank-1
+      ];
+
+      // Without lastSessionAt: feed 1 rank-0 (score ≈ 0.5 + 1.0 = 1.5) ties
+      // with feed 2 rank-1 (score = 1.5). Tie broken by recency → feed 2 rank-1
+      // (10h) appears before feed 1 rank-0 (60h).
+      const resultWithout = sortStacked(items, now, rng);
+      const withoutOrder = resultWithout.map((i) => i.id);
+      // feed 2 rank-0 first (score 0.5), then feed 2 rank-1 (score 1.5) before
+      // feed 1 rank-0 (also 1.5 but older in tie-break).
+      expect(withoutOrder[0]).toBe(3); // feed 2 rank-0
+      expect(withoutOrder[1]).toBe(4); // feed 2 rank-1 (beats feed 1 rank-0 in tie)
+      expect(withoutOrder[2]).toBe(1); // feed 1 rank-0 (penalised without session)
+
+      // With lastSessionAt = 50h ago: feed 1 rank-0 effective_age = 10h → no
+      // penalty. Score = 0.5. Ties with feed 2 rank-0 (score 0.5); feed 2 rank-0
+      // (5h) is newer → feed 2 rank-0 still first. Feed 1 rank-0 (0.5) now
+      // appears before feed 2 rank-1 (score 1.5).
+      const resultWith = sortStacked(items, now, rng, lastSessionAt);
+      const withOrder = resultWith.map((i) => i.id);
+      expect(withOrder[0]).toBe(3); // feed 2 rank-0
+      expect(withOrder[1]).toBe(1); // feed 1 rank-0 now penalty-free — moved up
+      expect(withOrder[2]).toBe(4); // feed 2 rank-1
+    });
+  });
+});
+
+describe("computeFeedPostingInterval", () => {
+  const HOUR = 60 * 60 * 1000;
+  const DAY = 24 * HOUR;
+  const WEEK = 7 * DAY;
+  const MIN_POSTING_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes (from module)
+  const DEFAULT_POSTING_INTERVAL_MS = DAY; // 1 day (from module)
+
+  it("returns the default interval when fewer than 2 timestamps are provided", () => {
+    expect(computeFeedPostingInterval([])).toBe(DEFAULT_POSTING_INTERVAL_MS);
+    expect(computeFeedPostingInterval([Date.now()])).toBe(
+      DEFAULT_POSTING_INTERVAL_MS
+    );
+  });
+
+  it("returns the median gap for a regular posting cadence", () => {
+    // Items posted every hour: gaps all = 1h, median = 1h.
+    const NOW = 1_000_000_000_000;
+    const timestamps = [NOW, NOW - HOUR, NOW - 2 * HOUR, NOW - 3 * HOUR];
+    const result = computeFeedPostingInterval(timestamps);
+    expect(result).toBe(HOUR);
+  });
+
+  it("returns the median gap for a weekly cadence", () => {
+    const NOW = 1_000_000_000_000;
+    const timestamps = [
+      NOW,
+      NOW - WEEK,
+      NOW - 2 * WEEK,
+      NOW - 3 * WEEK,
+      NOW - 4 * WEEK,
+    ];
+    const result = computeFeedPostingInterval(timestamps);
+    expect(result).toBe(WEEK);
+  });
+
+  it("clamps very small gaps to the minimum posting interval", () => {
+    // Sub-15-minute gaps (e.g. a liveblog with burst posts) are clamped.
+    const NOW = 1_000_000_000_000;
+    const timestamps = [NOW, NOW - 60_000, NOW - 120_000]; // 1-minute gaps
+    const result = computeFeedPostingInterval(timestamps);
+    expect(result).toBe(MIN_POSTING_INTERVAL_MS);
+  });
+
+  it("clamps very large gaps to the maximum posting interval (365 days)", () => {
+    const MAX = 365 * DAY;
+    const NOW = 1_000_000_000_000;
+    // Two items spaced 2 years apart.
+    const timestamps = [NOW, NOW - 2 * 365 * DAY];
+    const result = computeFeedPostingInterval(timestamps);
+    expect(result).toBe(MAX);
+  });
+
+  it("uses the median, ignoring outlier gaps", () => {
+    // 4 gaps: 1h, 1h, 1h, 100h. Sorted: [1h, 1h, 1h, 100h]. Median = 1h.
+    const NOW = 1_000_000_000_000;
+    const timestamps = [
+      NOW,
+      NOW - HOUR,
+      NOW - 2 * HOUR,
+      NOW - 3 * HOUR,
+      NOW - 103 * HOUR,
+    ];
+    const result = computeFeedPostingInterval(timestamps);
+    expect(result).toBe(HOUR);
+  });
 });
 
 describe("applySortMode", () => {
@@ -411,5 +585,33 @@ describe("applySortMode", () => {
     expect(top2).toEqual([1, 3]);
     expect(result[2].id).toBe(2);
     expect(result[3].id).toBe(4);
+  });
+
+  it("passes lastSessionAt through to sortStacked", () => {
+    // Arrange — the same setup as the session-relative test above.
+    // Feed 1 rank-0 is 60h old with a 1h feed interval, so without a session
+    // context it carries a staleness penalty. With lastSessionAt=50h ago its
+    // effective_age drops to 10h — penalty-free.
+    const HOUR = 60 * 60 * 1000;
+    const items = [
+      makeItem(1, 1, NOW - 60 * HOUR), // feed 1 rank-0 — penalised without session
+      makeItem(2, 1, NOW - 61 * HOUR), // feed 1 rank-1
+      makeItem(3, 2, NOW - 5 * HOUR), // feed 2 rank-0
+      makeItem(4, 2, NOW - 10 * HOUR), // feed 2 rank-1
+    ];
+
+    // Act
+    const result = applySortMode(
+      items,
+      "stacked",
+      now,
+      rng,
+      NOW - 50 * HOUR // lastSessionAt
+    );
+
+    // Assert — feed 1 rank-0 (now penalty-free) appears before feed 2 rank-1.
+    const id1Pos = result.findIndex((i) => i.id === 1);
+    const id4Pos = result.findIndex((i) => i.id === 4);
+    expect(id1Pos).toBeLessThan(id4Pos);
   });
 });
