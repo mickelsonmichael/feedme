@@ -8,10 +8,15 @@ type Props = {
   html: string;
 };
 
+const DEFAULT_TEXT_PROPS = { selectable: true };
+const IGNORED_DOM_TAGS: string[] = ["iframe"];
+
 export function SanitizedHtmlContent({ html }: Props) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const contentWidth = Math.max(width - spacing.lg * 2, 0);
+
+  const source = useMemo(() => ({ html }), [html]);
 
   const baseStyle = useMemo(
     () => ({
@@ -49,13 +54,13 @@ export function SanitizedHtmlContent({ html }: Props) {
     <View style={styles.wrap}>
       <RenderHTML
         contentWidth={contentWidth}
-        source={{ html }}
+        source={source}
         baseStyle={baseStyle}
         tagsStyles={tagsStyles}
         enableCSSInlineProcessing={false}
         enableExperimentalMarginCollapsing
-        defaultTextProps={{ selectable: true }}
-        ignoredDomTags={["iframe"]}
+        defaultTextProps={DEFAULT_TEXT_PROPS}
+        ignoredDomTags={IGNORED_DOM_TAGS}
       />
     </View>
   );
