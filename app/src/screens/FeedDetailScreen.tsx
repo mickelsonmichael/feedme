@@ -35,6 +35,10 @@ import {
 } from "../database";
 import { fetchFeedWithMeta } from "../feedParser";
 import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
+import {
+  isRedditUserFeedUrl,
+  setRedditIncludeComments as applyRedditIncludeComments,
+} from "../redditUtils";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { SelectedTag, TagMultiSelect } from "../components/TagMultiSelect";
@@ -84,6 +88,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
   const [showOnlyInTag, setShowOnlyInTag] = useState(false);
   const [showOnlyInCustomFeed, setShowOnlyInCustomFeed] = useState(false);
   const [collapseRepeated, setCollapseRepeated] = useState(false);
+  const [redditIncludeComments, setRedditIncludeComments] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
   const [originalTagIds, setOriginalTagIds] = useState<number[]>([]);
@@ -111,6 +116,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
       showOnlyInTag !== (feed.show_only_in_tag === 1) ||
       showOnlyInCustomFeed !== (feed.show_only_in_custom_feed === 1) ||
       collapseRepeated !== (feed.collapse_repeated === 1) ||
+      redditIncludeComments !== (feed.reddit_include_comments === 1) ||
       tagsChanged);
 
   const loadFeed = useCallback(async () => {
@@ -127,6 +133,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         setShowOnlyInTag(found.show_only_in_tag === 1);
         setShowOnlyInCustomFeed(found.show_only_in_custom_feed === 1);
         setCollapseRepeated(found.collapse_repeated === 1);
+        setRedditIncludeComments(found.reddit_include_comments === 1);
         const [feedTags, stamps, avgMs] = await Promise.all([
           getTagsForFeed(found.id),
           getAllPublishedAtForFeed(found.id),
@@ -184,6 +191,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
         show_only_in_tag: showOnlyInTag ? 1 : 0,
         show_only_in_custom_feed: showOnlyInCustomFeed ? 1 : 0,
         collapse_repeated: collapseRepeated ? 1 : 0,
+        reddit_include_comments: redditIncludeComments ? 1 : 0,
       });
 
       // Resolve any newly-created tags and persist the membership list.
@@ -276,6 +284,13 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
     } finally {
       await loadFeed();
       setRefreshing(false);
+    }
+  };
+
+  const handleToggleRedditIncludeComments = (value: boolean) => {
+    setRedditIncludeComments(value);
+    if (isRedditUserFeedUrl(url)) {
+      setUrl(applyRedditIncludeComments(url, value));
     }
   };
 
@@ -643,6 +658,32 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
               thumbColor={colors.paper}
             />
           </View>
+
+          {isRedditUserFeedUrl(url) ? (
+            <>
+              <Text style={[styles.label, { color: colors.inkSoft }]}>
+                Reddit
+              </Text>
+              <View style={styles.proxyRow}>
+                <View style={styles.proxyLabelGroup}>
+                  <Text style={[styles.label, { color: colors.inkSoft }]}>
+                    include comments
+                  </Text>
+                  <Text style={[styles.proxyHint, { color: colors.inkFaint }]}>
+                    Pull this user&apos;s comments in addition to their
+                    posts. Off by default, so the feed only shows what they
+                    submitted.
+                  </Text>
+                </View>
+                <Switch
+                  value={redditIncludeComments}
+                  onValueChange={handleToggleRedditIncludeComments}
+                  trackColor={{ false: colors.border, true: colors.accent }}
+                  thumbColor={colors.paper}
+                />
+              </View>
+            </>
+          ) : null}
 
           <NotificationSettingsSection source="feed" feedId={feed.id} />
 

@@ -77,6 +77,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
   const [useProxy, setUseProxy] = useState(false);
   const [isNsfw, setIsNsfw] = useState(false);
   const [showOnlyInTag, setShowOnlyInTag] = useState(false);
+  const [redditIncludeComments, setRedditIncludeComments] = useState(false);
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>([]);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
 
@@ -104,6 +105,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
     setUseProxy(false);
     setIsNsfw(false);
     setShowOnlyInTag(false);
+    setRedditIncludeComments(false);
     setSelectedTags([]);
   };
 
@@ -214,7 +216,9 @@ export default function AddFeedScreen({ navigation, route }: Props) {
         Alert.alert("Validation", "Please enter a subreddit or user name.");
         return;
       }
-      const redditUrl = buildRedditFeedUrl(subreddit);
+      const redditUrl = buildRedditFeedUrl(subreddit, {
+        includeComments: redditIncludeComments,
+      });
       const feedTitle =
         title.trim() ||
         `Reddit - ${target.type === "user" ? "u" : "r"}/${target.name}`;
@@ -248,6 +252,8 @@ export default function AddFeedScreen({ navigation, route }: Props) {
           nsfw: isNsfw ? 1 : 0,
           show_only_in_tag: showOnlyInTag ? 1 : 0,
           show_only_in_custom_feed: isScopedToCustomFeed ? 1 : 0,
+          reddit_include_comments:
+            target.type === "user" && redditIncludeComments ? 1 : 0,
         });
         await linkAndReturn(newFeedId);
       } catch (err) {
@@ -623,6 +629,35 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                 autoCorrect={false}
                 returnKeyType="next"
               />
+              {getRedditFeedTarget(subreddit)?.type === "user" ? (
+                <>
+                  <Text style={[styles.label, { color: colors.inkSoft }]}>
+                    Reddit
+                  </Text>
+                  <View style={styles.toggleRow}>
+                    <View style={styles.toggleLabelGroup}>
+                      <Text
+                        style={[styles.label, { color: colors.inkSoft }]}
+                      >
+                        include comments
+                      </Text>
+                      <Text
+                        style={[styles.hintText, { color: colors.inkFaint }]}
+                      >
+                        Pull this user&apos;s comments in addition to their
+                        posts. Off by default, so the feed only shows what
+                        they submitted.
+                      </Text>
+                    </View>
+                    <Switch
+                      value={redditIncludeComments}
+                      onValueChange={setRedditIncludeComments}
+                      trackColor={{ false: colors.border, true: colors.accent }}
+                      thumbColor={colors.paper}
+                    />
+                  </View>
+                </>
+              ) : null}
             </>
           ) : source === "youtube" ? (
             <>

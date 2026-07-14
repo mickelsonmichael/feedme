@@ -660,6 +660,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
           show_only_in_tag: 0,
           show_only_in_custom_feed: 0,
           collapse_repeated: 0,
+          reddit_include_comments: 0,
         });
       }
       const updatedFeeds = await getFeeds();
@@ -1932,6 +1933,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                             show_only_in_tag: 0,
                             show_only_in_custom_feed: 0,
                             collapse_repeated: 0,
+                            reddit_include_comments: 0,
                           });
                         }
                         const updatedFeeds = await getFeeds();

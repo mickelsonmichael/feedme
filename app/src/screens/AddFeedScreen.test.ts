@@ -2,6 +2,8 @@ import {
   buildRedditFeedUrl,
   getRedditFeedTarget,
   getSubreddit,
+  isRedditUserFeedUrl,
+  setRedditIncludeComments,
 } from "../redditUtils";
 
 describe("getRedditFeedTarget", () => {
@@ -201,7 +203,7 @@ describe("buildRedditFeedUrl", () => {
     expect(result).toBe("https://www.reddit.com/r/science.rss");
   });
 
-  it("builds from a /user/ path", () => {
+  it("builds from a /user/ path, defaulting to posts-only", () => {
     // Arrange
     const user = "user/mickelsonmichael";
 
@@ -209,10 +211,12 @@ describe("buildRedditFeedUrl", () => {
     const result = buildRedditFeedUrl(user);
 
     // Assert
-    expect(result).toBe("https://www.reddit.com/user/mickelsonmichael.rss");
+    expect(result).toBe(
+      "https://www.reddit.com/user/mickelsonmichael/submitted.rss"
+    );
   });
 
-  it("builds from a /u/ path", () => {
+  it("builds from a /u/ path, defaulting to posts-only", () => {
     // Arrange
     const user = "u/mickelsonmichael";
 
@@ -220,10 +224,12 @@ describe("buildRedditFeedUrl", () => {
     const result = buildRedditFeedUrl(user);
 
     // Assert
-    expect(result).toBe("https://www.reddit.com/user/mickelsonmichael.rss");
+    expect(result).toBe(
+      "https://www.reddit.com/user/mickelsonmichael/submitted.rss"
+    );
   });
 
-  it("builds from a full Reddit user URL", () => {
+  it("builds from a full Reddit user URL, defaulting to posts-only", () => {
     // Arrange
     const user = "https://www.reddit.com/user/mickelsonmichael";
 
@@ -231,6 +237,93 @@ describe("buildRedditFeedUrl", () => {
     const result = buildRedditFeedUrl(user);
 
     // Assert
+    expect(result).toBe(
+      "https://www.reddit.com/user/mickelsonmichael/submitted.rss"
+    );
+  });
+
+  it("builds the overview feed for a user when includeComments is true", () => {
+    // Arrange
+    const user = "u/mickelsonmichael";
+
+    // Act
+    const result = buildRedditFeedUrl(user, { includeComments: true });
+
+    // Assert
     expect(result).toBe("https://www.reddit.com/user/mickelsonmichael.rss");
+  });
+
+  it("ignores includeComments for a subreddit target", () => {
+    // Arrange
+    const subreddit = "pics";
+
+    // Act
+    const result = buildRedditFeedUrl(subreddit, { includeComments: true });
+
+    // Assert
+    expect(result).toBe("https://www.reddit.com/r/pics.rss");
+  });
+});
+
+describe("isRedditUserFeedUrl", () => {
+  it("returns true for a submitted-only user feed URL", () => {
+    expect(
+      isRedditUserFeedUrl(
+        "https://www.reddit.com/user/mickelsonmichael/submitted.rss"
+      )
+    ).toBe(true);
+  });
+
+  it("returns true for an overview user feed URL", () => {
+    expect(
+      isRedditUserFeedUrl("https://www.reddit.com/user/mickelsonmichael.rss")
+    ).toBe(true);
+  });
+
+  it("returns false for a subreddit feed URL", () => {
+    expect(isRedditUserFeedUrl("https://www.reddit.com/r/pics.rss")).toBe(
+      false
+    );
+  });
+
+  it("returns false for a non-Reddit URL", () => {
+    expect(isRedditUserFeedUrl("https://example.com/feed.xml")).toBe(false);
+  });
+});
+
+describe("setRedditIncludeComments", () => {
+  it("rewrites a submitted-only URL to the overview endpoint when enabling comments", () => {
+    // Arrange
+    const url = "https://www.reddit.com/user/mickelsonmichael/submitted.rss";
+
+    // Act
+    const result = setRedditIncludeComments(url, true);
+
+    // Assert
+    expect(result).toBe("https://www.reddit.com/user/mickelsonmichael.rss");
+  });
+
+  it("rewrites an overview URL to the submitted-only endpoint when disabling comments", () => {
+    // Arrange
+    const url = "https://www.reddit.com/user/mickelsonmichael.rss";
+
+    // Act
+    const result = setRedditIncludeComments(url, false);
+
+    // Assert
+    expect(result).toBe(
+      "https://www.reddit.com/user/mickelsonmichael/submitted.rss"
+    );
+  });
+
+  it("returns non-Reddit-user URLs unchanged", () => {
+    // Arrange
+    const url = "https://www.reddit.com/r/pics.rss";
+
+    // Act
+    const result = setRedditIncludeComments(url, true);
+
+    // Assert
+    expect(result).toBe(url);
   });
 });

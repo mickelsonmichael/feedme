@@ -236,6 +236,17 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
+  // Migration: add reddit_include_comments column to feeds. When 1, a
+  // Reddit user feed pulls the followed user's overview (posts + comments)
+  // instead of just their submitted posts. Default 0 (posts-only).
+  try {
+    await database.execAsync(
+      "ALTER TABLE feeds ADD COLUMN reddit_include_comments INTEGER NOT NULL DEFAULT 0"
+    );
+  } catch {
+    // Column already exists — ignore
+  }
+
   // Migration: add etag column to feeds if it doesn't exist yet
   try {
     await database.execAsync("ALTER TABLE feeds ADD COLUMN etag TEXT");
@@ -423,6 +434,7 @@ export async function addFeed({
   show_only_in_tag,
   show_only_in_custom_feed,
   collapse_repeated,
+  reddit_include_comments,
 }: Pick<
   Feed,
   | "title"
@@ -433,11 +445,12 @@ export async function addFeed({
   | "show_only_in_tag"
   | "show_only_in_custom_feed"
   | "collapse_repeated"
+  | "reddit_include_comments"
 >): Promise<number> {
   const database = await getDatabase();
   const result = await withWriteLock(() =>
     database.runAsync(
-      "INSERT INTO feeds (title, url, description, use_proxy, nsfw, show_only_in_tag, show_only_in_custom_feed, collapse_repeated) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO feeds (title, url, description, use_proxy, nsfw, show_only_in_tag, show_only_in_custom_feed, collapse_repeated, reddit_include_comments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
         title,
         url,
@@ -447,6 +460,7 @@ export async function addFeed({
         show_only_in_tag ?? 0,
         show_only_in_custom_feed ?? 0,
         collapse_repeated ?? 0,
+        reddit_include_comments ?? 0,
       ]
     )
   );
@@ -481,12 +495,13 @@ export async function updateFeed(
     | "show_only_in_tag"
     | "show_only_in_custom_feed"
     | "collapse_repeated"
+    | "reddit_include_comments"
   >
 ): Promise<void> {
   const database = await getDatabase();
   await withWriteLock(() =>
     database.runAsync(
-      "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ?, show_only_in_tag = ?, show_only_in_custom_feed = ?, collapse_repeated = ? WHERE id = ?",
+      "UPDATE feeds SET title = ?, url = ?, use_proxy = ?, nsfw = ?, show_only_in_tag = ?, show_only_in_custom_feed = ?, collapse_repeated = ?, reddit_include_comments = ? WHERE id = ?",
       [
         fields.title,
         fields.url,
@@ -495,6 +510,7 @@ export async function updateFeed(
         fields.show_only_in_tag ?? 0,
         fields.show_only_in_custom_feed ?? 0,
         fields.collapse_repeated ?? 0,
+        fields.reddit_include_comments ?? 0,
         feedId,
       ]
     )

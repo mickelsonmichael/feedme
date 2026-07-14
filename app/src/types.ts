@@ -19,6 +19,10 @@ export type Feed = {
    *  Subsequent items in the run are rendered as a single muted line that
    *  the user can tap to reveal individually. */
   collapse_repeated?: number;
+  /** When 1, a Reddit user feed pulls the followed user's overview (posts
+   *  and comments) instead of just their submitted posts. Only meaningful
+   *  for Reddit user feeds; disabled (posts-only) by default. */
+  reddit_include_comments?: number;
   /** HTTP `ETag` validator from the last successful refresh, used for
    *  conditional GETs (`If-None-Match`). */
   etag?: string | null;

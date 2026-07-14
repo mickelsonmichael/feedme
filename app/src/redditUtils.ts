@@ -69,11 +69,51 @@ export function extractRedditAuthor(content: string | null): string | null {
  * Constructs the RSS feed URL for a Reddit subreddit or user.
  * Subreddit is assumed when no prefix is provided.
  * Whitespace is trimmed automatically.
+ *
+ * For user feeds, `includeComments` controls whether the feed pulls the
+ * user's overview (posts + comments) or just their submitted posts.
+ * Defaults to posts-only, since most followers only want to see what
+ * someone posted, not every comment they left across Reddit.
  */
-export function buildRedditFeedUrl(rawValue: string): string {
+export function buildRedditFeedUrl(
+  rawValue: string,
+  options?: { includeComments?: boolean }
+): string {
   const target = getRedditFeedTarget(rawValue);
   if (!target) {
     return "";
   }
-  return `https://www.reddit.com/${target.type === "user" ? "user" : "r"}/${target.name}.rss`;
+  if (target.type === "subreddit") {
+    return `https://www.reddit.com/r/${target.name}.rss`;
+  }
+  const path = options?.includeComments ? "" : "/submitted";
+  return `https://www.reddit.com/user/${target.name}${path}.rss`;
+}
+
+/**
+ * Returns true when `url` points at a Reddit user feed (overview or
+ * submitted-only), i.e. a feed the "include comments" toggle applies to.
+ */
+export function isRedditUserFeedUrl(url: string): boolean {
+  return /^https?:\/\/(?:(?:www|old)\.)?reddit\.com\/user\/[^/?#\s]+/i.test(
+    url
+  );
+}
+
+/**
+ * Rewrites a Reddit user feed URL to match the given `includeComments`
+ * setting, preserving the username. Returns `url` unchanged if it isn't a
+ * Reddit user feed URL.
+ */
+export function setRedditIncludeComments(
+  url: string,
+  includeComments: boolean
+): string {
+  const match = url.match(
+    /^https?:\/\/(?:(?:www|old)\.)?reddit\.com\/user\/([^/?#.\s]+)/i
+  );
+  if (!match) {
+    return url;
+  }
+  return buildRedditFeedUrl(`u/${match[1]}`, { includeComments });
 }
