@@ -1,4 +1,5 @@
 ---
+name: dev-environment
 description: "Use when running commands, starting dev servers, building the app, or debugging network/runtime issues in the feedme project. Covers project structure, terminal working directories, Expo dev server, and Cloudflare Worker startup."
 ---
 

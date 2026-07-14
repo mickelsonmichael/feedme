@@ -1,0 +1,8 @@
+# These paths are symlinks sharing config between Claude Code and GitHub
+# Copilot (see CLAUDE.local.md). On checkouts without symlink support they
+# fall back to plain files containing the link target as text — mark them
+# -text so autocrlf/EOL conversion can't corrupt that target string.
+CLAUDE.md -text
+.claude/skills -text
+.claude/agents -text
+.agents/skills/dev-environment/SKILL.md -text
