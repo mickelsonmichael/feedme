@@ -817,7 +817,7 @@ export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
 export async function getItemsPage(
   options: ItemsPageOptions
 ): Promise<FeedItemWithFeed[]> {
-  const { feedIds, excludeFeedIds, offset, limit } = options;
+  const { feedIds, excludeFeedIds, offset, limit, order = "newest" } = options;
 
   // Empty feedIds means the scope contains zero feeds (e.g. a tag with no
   // tagged feeds, or a custom feed with no members) -> no items, no query.
@@ -843,15 +843,39 @@ export async function getItemsPage(
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
+  // "stacked" pages rank-major: all rank-0 items (each feed's newest), then
+  // all rank-1 items, etc. — so page 1 contains every feed's newest content
+  // regardless of how prolific other feeds are. The client-side stacked sort
+  // then reorders the loaded window (staleness demotion, daily shuffle); those
+  // adjustments only ever push items later, so rank-major paging never leaves
+  // an item unloaded that should have displayed earlier.
+  // Note: SQLite sorts NULLs last under DESC, matching the client sort.
   const rows = await database.getAllAsync<Omit<FeedItemWithFeed, "raw_xml">>(
-    `SELECT items.id, items.feed_id, items.title, items.url, items.content,
-            items.image_url, items.published_at, items.read,
-            feeds.title AS feed_title
-     FROM items
-     JOIN feeds ON items.feed_id = feeds.id
-     ${whereClause}
-     ORDER BY items.published_at DESC, items.id DESC
-     LIMIT ? OFFSET ?`,
+    order === "stacked"
+      ? `SELECT id, feed_id, title, url, content, image_url, published_at,
+                read, feed_title
+         FROM (
+           SELECT items.id, items.feed_id, items.title, items.url,
+                  items.content, items.image_url, items.published_at,
+                  items.read, feeds.title AS feed_title,
+                  ROW_NUMBER() OVER (
+                    PARTITION BY items.feed_id
+                    ORDER BY items.published_at DESC, items.id DESC
+                  ) AS feed_rank
+           FROM items
+           JOIN feeds ON items.feed_id = feeds.id
+           ${whereClause}
+         )
+         ORDER BY feed_rank ASC, published_at DESC, id DESC
+         LIMIT ? OFFSET ?`
+      : `SELECT items.id, items.feed_id, items.title, items.url, items.content,
+                items.image_url, items.published_at, items.read,
+                feeds.title AS feed_title
+         FROM items
+         JOIN feeds ON items.feed_id = feeds.id
+         ${whereClause}
+         ORDER BY items.published_at DESC, items.id DESC
+         LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
   return rows.map((row) => ({ ...row, raw_xml: null }));

@@ -106,6 +106,13 @@ export type ItemsPageOptions = {
   excludeFeedIds?: number[];
   offset: number;
   limit: number;
+  /** Row ordering for pagination.
+   *  - "newest" (default): global reverse-chronological.
+   *  - "stacked": per-feed rank-major — every feed's newest item pages out
+   *    before any feed's second-newest. Guarantees quiet feeds appear in the
+   *    first page instead of being crowded out by high-volume feeds, so the
+   *    client-side stacked sort always has every feed represented. */
+  order?: "newest" | "stacked";
 };
 
 export type SavedPost = {

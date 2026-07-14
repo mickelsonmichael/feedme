@@ -447,6 +447,30 @@ describe("database.web — getItemsPage", () => {
     const all = [...page1, ...page2, ...page3];
     expect(all.map((i) => i.id).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5]);
   });
+
+  it("order: 'stacked' pages rank-major: every feed's newest item before any feed's second-newest", async () => {
+    // Arrange: a prolific feed with 4 items and a quiet feed whose only item
+    // is older than ALL of the prolific feed's items.
+    await upsertItems(feedId, [
+      { title: "Busy1", url: "https://x/1", content: null, publishedAt: 400 },
+      { title: "Busy2", url: "https://x/2", content: null, publishedAt: 300 },
+      { title: "Busy3", url: "https://x/3", content: null, publishedAt: 200 },
+      { title: "Busy4", url: "https://x/4", content: null, publishedAt: 100 },
+    ]);
+    await upsertItems(otherFeedId, [
+      { title: "Quiet", url: "https://y/1", content: null, publishedAt: 50 },
+    ]);
+
+    // Act
+    const page1 = await getItemsPage({ offset: 0, limit: 2, order: "stacked" });
+    const page2 = await getItemsPage({ offset: 2, limit: 3, order: "stacked" });
+
+    // Assert: rank 0 pages out first (newest per feed, recency-ordered within
+    // the rank), so the quiet feed's item makes page 1 despite being the
+    // oldest item overall. Ranks 1+ follow in recency order.
+    expect(page1.map((i) => i.title)).toEqual(["Busy1", "Quiet"]);
+    expect(page2.map((i) => i.title)).toEqual(["Busy2", "Busy3", "Busy4"]);
+  });
 });
 
 describe("database.web — saved posts", () => {

@@ -176,20 +176,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
     loadConfig().markAsReadOnScroll ?? false
   );
 
-  // Stable seed for the stacked-sort RNG. Generated once and reset only when
-  // loadData fetches a fresh list from the database. This prevents the random
-  // per-feed offsets from being regenerated on every in-place item update (e.g.
-  // marking an item as read), which was causing the feed to shuffle on read.
-  const sortSeedRef = useRef(Math.random());
-
-  // Timestamp of the PREVIOUS session start, used by the stacked-sort
-  // algorithm so it can treat items published after the last session as
-  // brand-new regardless of their absolute age. Loaded once from config at
-  // mount time; updated inside loadData after the new session timestamp is
-  // persisted so that within a session the reference point is stable.
-  const lastSessionAtRef = useRef<number | undefined>(
-    loadConfig().lastSessionAt
-  );
+  // Current sort mode, readable from inside loadData/handleLoadMore without
+  // retriggering the focus effect (which would kick off a full remote refresh
+  // on a simple sort toggle). Kept in sync by the sort-change effect below,
+  // which re-queries page 0 locally whenever the mode changes.
+  const sortRef = useRef(sort);
 
   // The feed_id scope (set by loadData) that handleLoadMore re-queries when
   // fetching subsequent pages.
@@ -312,13 +303,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
     async (refreshRemote: boolean) => {
       const generation = ++loadGenerationRef.current;
       try {
-        // Capture the previous session timestamp before updating it. The
-        // stacked-sort algorithm uses this so items published after the last
-        // session are treated as brand-new to the user.
-        const prevSessionAt = loadConfig().lastSessionAt;
-        lastSessionAtRef.current = prevSessionAt;
-        saveConfig({ lastSessionAt: Date.now() });
-
         const feedData = await getFeeds();
         setFeeds(feedData);
 
@@ -373,6 +357,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
               excludeFeedIds,
               offset: 0,
               limit: PAGE_SIZE,
+              order: sortRef.current,
             }),
             getSavedItemIds(),
             getReadLaterItemIds(),
@@ -431,12 +416,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
           }
 
           if (loadGenerationRef.current === generation) {
-            // Only regenerate the sort seed once the remote refresh lands, so
-            // the cached view shown above keeps its order (no shuffle while
-            // the user is already reading) and fresh content arrives with a
-            // single reorder. Focus returns without a refresh keep the seed
-            // stable so the just-viewed item stays put.
-            sortSeedRef.current = Math.random();
             if (scrollAfterRefreshRef.current) {
               scrollAfterRefreshRef.current = false;
               pendingScrollToTopRef.current = true;
@@ -487,6 +466,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         excludeFeedIds,
         offset: itemsRef.current.length,
         limit: PAGE_SIZE,
+        order: sortRef.current,
       });
       if (loadGenerationRef.current !== generation) return; // scope changed mid-flight
       setItems((prev) => [...prev, ...nextPage]);
@@ -513,6 +493,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
       loadData(shouldRefreshOnFocus);
     }, [loadData, shouldRefreshOnFocus])
   );
+
+  // Re-page from the database when the sort mode changes: pagination order
+  // depends on the mode ("stacked" pages rank-major, "newest" pages globally
+  // reverse-chronological), so the already-loaded window may not contain the
+  // items the new mode should show first. Local re-query only — no network.
+  useEffect(() => {
+    if (sortRef.current === sort) return;
+    sortRef.current = sort;
+    loadData(false);
+  }, [sort, loadData]);
 
   const handleRefreshAll = async () => {
     setRetainedUnreadIds(new Set());
@@ -1020,24 +1010,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
     });
   }, [items, hasSearch, searchHaystacks, normalizedSearch]);
 
-  const sortedItems = useMemo(() => {
-    // Build a deterministic LCG RNG from the stable per-session seed so that
-    // the stacked sort produces the same feed ordering for every re-render
-    // within a session (e.g. after marking an item as read). The seed is only
-    // rotated inside loadData, ensuring the order genuinely varies per reload.
-    let s = (sortSeedRef.current * 0x100000000) >>> 0;
-    const stableRng = () => {
-      s = Math.imul(s, 1664525) + 1013904223;
-      return (s >>> 0) / 0x100000000;
-    };
-    return applySortMode(
-      searchedItems,
-      sort,
-      undefined,
-      stableRng,
-      lastSessionAtRef.current
-    );
-  }, [searchedItems, sort]);
+  const sortedItems = useMemo(
+    () => applySortMode(searchedItems, sort),
+    [searchedItems, sort]
+  );
 
   const visibleItems = useMemo(() => {
     const filtered = applyFilter(sortedItems, filter, savedIds);

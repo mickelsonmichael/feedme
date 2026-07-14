@@ -3,6 +3,7 @@ import {
   sortStacked,
   applySortMode,
   computeFeedPostingInterval,
+  feedDayShuffle,
 } from "./sortItems";
 import { FeedItemWithFeed } from "./types";
 
@@ -79,17 +80,11 @@ describe("sortStacked", () => {
   // Helper: a fixed "now" so tests are deterministic. Use a large value so all
   // ages are positive.
   const NOW = 1_000_000_000_000; // ms
-  const HOUR = 60 * 60 * 1000;
+  const MINUTE = 60 * 1000;
+  const HOUR = 60 * MINUTE;
   const DAY = 24 * HOUR;
   const WEEK = 7 * DAY;
-  const MONTH = 30 * DAY;
   const now = () => NOW;
-  // A fixed rng that returns the same offset (0.5) for every feed, making the
-  // offset component uniform across feeds. Within the same rank, ties are then
-  // resolved by published_at, matching the original algorithm's tie-breaking
-  // behaviour and allowing all existing assertions to hold. Tests that
-  // specifically exercise the randomisation behaviour pass their own rng.
-  const rng = () => 0.5;
 
   it("returns all items without duplicates", () => {
     // Arrange
@@ -101,7 +96,7 @@ describe("sortStacked", () => {
     ];
 
     // Act
-    const result = sortStacked(items, now, rng);
+    const result = sortStacked(items, now);
 
     // Assert
     expect(result).toHaveLength(4);
@@ -110,7 +105,7 @@ describe("sortStacked", () => {
 
   it("returns empty array for empty input", () => {
     // Arrange & Act
-    const result = sortStacked([], now, rng);
+    const result = sortStacked([], now);
 
     // Assert
     expect(result).toEqual([]);
@@ -125,140 +120,34 @@ describe("sortStacked", () => {
     ];
 
     // Act
-    const result = sortStacked(items, now, rng);
+    const result = sortStacked(items, now);
 
-    // Assert — within a single feed the score reduces to rank, and rank mirrors
-    // newest-first order, so items come out newest-first.
+    // Assert — within a single feed the score reduces to rank (demotion grows
+    // with age, so it can never invert the order), and rank mirrors
+    // newest-first order.
     expect(result.map((i) => i.id)).toEqual([2, 3, 1]);
   });
 
-  it("places the infrequent feed's newest item in the top N results (one slot per feed)", () => {
-    // Arrange — a monthly feed whose newest item is only 1 minute old, while
-    // the hourly feed's most recent item is 5 hours old. Both items have
-    // feed_rank = 0 and must appear in the top 2 positions (one per feed).
-    // We use a fixed rng that gives feed 2 a lower offset than feed 1,
-    // confirming the infrequent feed rises to the top when favoured.
-    const items = [
-      // Hourly feed (id 1): items 5h, 6h, 7h, 8h, 9h ago
-      makeItem(1, 1, NOW - 5 * HOUR),
-      makeItem(2, 1, NOW - 6 * HOUR),
-      makeItem(3, 1, NOW - 7 * HOUR),
-      makeItem(4, 1, NOW - 8 * HOUR),
-      makeItem(5, 1, NOW - 9 * HOUR),
-      // Monthly feed (id 2): newest is 1 minute old
-      makeItem(10, 2, NOW - 60 * 1000),
-      makeItem(11, 2, NOW - 1 * MONTH),
-      makeItem(12, 2, NOW - 2 * MONTH),
-    ];
-
-    // Act
-    const result = sortStacked(items, now, rng);
-
-    // Assert — both rank-0 items (id 1 and id 10) must occupy the top 2 slots;
-    // the infrequent feed is not drowned out regardless of its rng offset.
-    const top2Ids = result.slice(0, 2).map((i) => i.id);
-    expect(top2Ids).toContain(1);
-    expect(top2Ids).toContain(10);
-  });
-
-  it("velocity-normalised horizon: quiet feed items within their cadence are not penalised", () => {
-    // Arrange — a hourly active feed and a weekly quiet feed. The weekly
-    // feed's items are up to 5 weeks old — comfortably within its 30-week
-    // staleness horizon — so they must NOT be penalised.
-    const items = [
-      // Hourly feed: items at 1h, 2h, 3h, 4h, 5h ago
-      makeItem(1, 1, NOW - 1 * HOUR),
-      makeItem(2, 1, NOW - 2 * HOUR),
-      makeItem(3, 1, NOW - 3 * HOUR),
-      makeItem(4, 1, NOW - 4 * HOUR),
-      makeItem(5, 1, NOW - 5 * HOUR),
-      // Weekly feed: items at 1w, 2w, 3w, 4w, 5w ago (within 30-week horizon)
-      makeItem(10, 2, NOW - 1 * WEEK),
-      makeItem(11, 2, NOW - 2 * WEEK),
-      makeItem(12, 2, NOW - 3 * WEEK),
-      makeItem(13, 2, NOW - 4 * WEEK),
-      makeItem(14, 2, NOW - 5 * WEEK),
-    ];
-
-    // Act
-    const result = sortStacked(items, now, rng);
-
-    // Assert — each feed's rank-0 item must be in the top-2 results (no
-    // penalty on either side, so interleaving is purely rank-based).
-    const top2FeedIds = result.slice(0, 2).map((i) => i.feed_id);
-    expect(new Set(top2FeedIds).size).toBe(2);
-
-    // The weekly rank-0 item (10) must appear before any rank-1 item from
-    // the hourly feed (since both are rank-0 and the weekly item has no
-    // staleness penalty despite being a week old).
-    const weeklyRank0Pos = result.findIndex((i) => i.id === 10);
-    const hourlyRank1Pos = result.findIndex((i) => i.id === 2);
-    expect(weeklyRank0Pos).toBeLessThan(hourlyRank1Pos);
-  });
-
-  it("velocity-normalised horizon: items many cycles beyond their feed's horizon are penalised", () => {
-    // Arrange — an active hourly feed and a stale weekly feed whose newest
-    // item is 100 weeks old (well beyond the 30-week staleness horizon for
-    // a once-weekly feed).
-    const items = [
-      // Hourly feed: items at 1h, 2h, 3h, 4h, 5h ago (no penalty)
-      makeItem(1, 1, NOW - 1 * HOUR),
-      makeItem(2, 1, NOW - 2 * HOUR),
-      makeItem(3, 1, NOW - 3 * HOUR),
-      makeItem(4, 1, NOW - 4 * HOUR),
-      makeItem(5, 1, NOW - 5 * HOUR),
-      // Very stale weekly feed: items at 100w, 101w, 102w ago
-      // (100 > 30 weekly-cycles → large staleness penalty)
-      makeItem(10, 2, NOW - 100 * WEEK),
-      makeItem(11, 2, NOW - 101 * WEEK),
-      makeItem(12, 2, NOW - 102 * WEEK),
-    ];
-
-    // Act
-    const result = sortStacked(items, now, rng);
-
-    // Assert — every fresh hourly item should rank ahead of every stale
-    // weekly item. The stale items must occupy the bottom slots.
-    const hourlyIds = [1, 2, 3, 4, 5];
-    const staleIds = [10, 11, 12];
-    expect(
-      result
-        .slice(0, 5)
-        .map((i) => i.id)
-        .sort((a, b) => a - b)
-    ).toEqual(hourlyIds);
-    expect(
-      result
-        .slice(5)
-        .map((i) => i.id)
-        .sort((a, b) => a - b)
-    ).toEqual(staleIds);
-  });
-
   it("interleaves feeds equitably: top N results contain one item from each of the N feeds", () => {
-    // Arrange — two feeds with multiple recent items each. With rank-based
-    // scoring every feed's rank-0 item competes on equal footing, so the top
-    // two slots must each hold one item from a different feed.
+    // Arrange — three feeds with multiple fresh items each. Every feed's
+    // rank-0 item lands in band 0 (no demotion), so the top 3 slots must each
+    // hold one item from a different feed regardless of shuffle order.
     const items = [
-      // Hourly feed (avg interval ≈ 1h): items at 1..6 hours ago
       makeItem(1, 1, NOW - 1 * HOUR),
       makeItem(2, 1, NOW - 2 * HOUR),
       makeItem(3, 1, NOW - 3 * HOUR),
-      makeItem(4, 1, NOW - 4 * HOUR),
-      makeItem(5, 1, NOW - 5 * HOUR),
-      makeItem(6, 1, NOW - 6 * HOUR),
-      // Daily feed (avg interval ≈ 1d): items at 1..3 days ago
-      makeItem(10, 2, NOW - 1 * DAY),
-      makeItem(11, 2, NOW - 2 * DAY),
-      makeItem(12, 2, NOW - 3 * DAY),
+      makeItem(10, 2, NOW - 30 * MINUTE),
+      makeItem(11, 2, NOW - 90 * MINUTE),
+      makeItem(20, 3, NOW - 4 * HOUR),
+      makeItem(21, 3, NOW - 8 * HOUR),
     ];
 
     // Act
-    const result = sortStacked(items, now, rng);
+    const result = sortStacked(items, now);
 
-    // Assert — the top 2 results (one per feed) must come from different feeds.
-    const top2FeedIds = result.slice(0, 2).map((i) => i.feed_id);
-    expect(new Set(top2FeedIds).size).toBe(2);
+    // Assert
+    const top3FeedIds = result.slice(0, 3).map((i) => i.feed_id);
+    expect(new Set(top3FeedIds).size).toBe(3);
   });
 
   it("does not let a burst of items from one feed push another feed's newest item out of top N", () => {
@@ -266,17 +155,146 @@ describe("sortStacked", () => {
     // an hour ago. Feed 2's item must still appear in the top 2 (one per feed).
     const items = [
       ...Array.from({ length: 10 }, (_, i) =>
-        makeItem(i + 1, 1, NOW - (i + 1) * 60 * 1000)
+        makeItem(i + 1, 1, NOW - (i + 1) * MINUTE)
       ),
       makeItem(100, 2, NOW - 1 * HOUR),
     ];
 
     // Act
-    const result = sortStacked(items, now, rng);
+    const result = sortStacked(items, now);
 
     // Assert — feed 2's item must be within the top 2 positions.
     const top2Ids = result.slice(0, 2).map((i) => i.id);
     expect(top2Ids).toContain(100);
+  });
+
+  it("keeps a quiet feed's newest post in the top band when it is fresh for that feed's cadence", () => {
+    // Arrange — a quarterly blog whose newest post is 2 days old (0.02 of its
+    // 90-day cadence) alongside a feed posting every few minutes. The blog's
+    // post must share band 0 with the busy feed's newest item: in the top 2,
+    // and ahead of the busy feed's SECOND item.
+    const items = [
+      // Busy feed: posts minutes apart
+      makeItem(1, 1, NOW - 2 * MINUTE),
+      makeItem(2, 1, NOW - 20 * MINUTE),
+      makeItem(3, 1, NOW - 40 * MINUTE),
+      // Quarterly blog: newest is 2 days old, prior posts ~90 days apart
+      makeItem(10, 2, NOW - 2 * DAY),
+      makeItem(11, 2, NOW - 92 * DAY),
+      makeItem(12, 2, NOW - 182 * DAY),
+    ];
+
+    // Act
+    const result = sortStacked(items, now);
+
+    // Assert
+    const top2Ids = result.slice(0, 2).map((i) => i.id);
+    expect(top2Ids).toContain(1);
+    expect(top2Ids).toContain(10);
+    const blogPos = result.findIndex((i) => i.id === 10);
+    const busySecondPos = result.findIndex((i) => i.id === 2);
+    expect(blogPos).toBeLessThan(busySecondPos);
+  });
+
+  it("does not demote items younger than the grace window (3 cadence units)", () => {
+    // Arrange — a daily-cadence feed whose newest post is 2.5 days old: 2.5
+    // units → floor 2 → within the 2-cycle grace → no demotion, so it stays
+    // in band 0 alongside the hourly feed's newest item.
+    const items = [
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 1, NOW - 2 * HOUR),
+      // Daily feed, slightly stale but within grace
+      makeItem(10, 2, NOW - 2.5 * DAY),
+      makeItem(11, 2, NOW - 3.5 * DAY),
+    ];
+
+    // Act
+    const result = sortStacked(items, now);
+
+    // Assert — both rank-0 items occupy the top 2 slots.
+    const top2Ids = result.slice(0, 2).map((i) => i.id);
+    expect(top2Ids).toContain(1);
+    expect(top2Ids).toContain(10);
+  });
+
+  it("demotes a feed's newest post one band per cadence unit beyond the grace window", () => {
+    // Arrange — feed 2 posts daily but its newest item is 3.2 days old:
+    // floor(3.2) - 2 = 1 band of demotion → it lands in band 1, below feed
+    // 1's newest but alongside feed 1's second item.
+    const items = [
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 1, NOW - 2 * HOUR),
+      makeItem(3, 1, NOW - 3 * HOUR),
+      // Daily feed, one missed cycle beyond grace
+      makeItem(10, 2, NOW - 3.2 * DAY),
+      makeItem(11, 2, NOW - 4.2 * DAY),
+    ];
+
+    // Act
+    const result = sortStacked(items, now);
+
+    // Assert — feed 1's newest is alone in band 0; feed 2's newest has been
+    // demoted out of the top band but still precedes feed 1's THIRD item.
+    expect(result[0].id).toBe(1);
+    const demotedPos = result.findIndex((i) => i.id === 10);
+    const feed1ThirdPos = result.findIndex((i) => i.id === 3);
+    expect(demotedPos).toBeGreaterThan(0);
+    expect(demotedPos).toBeLessThan(feed1ThirdPos);
+  });
+
+  it("sinks ancient posts from dead feeds below every active feed's items", () => {
+    // Arrange — an active feed and a weekly feed that died ~2 years ago
+    // (newest post is ~100 cadence units old → demoted ~98 bands).
+    const items = [
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 1, NOW - 2 * HOUR),
+      makeItem(3, 1, NOW - 3 * HOUR),
+      makeItem(4, 1, NOW - 4 * HOUR),
+      makeItem(5, 1, NOW - 5 * HOUR),
+      // Dead weekly feed
+      makeItem(10, 2, NOW - 100 * WEEK),
+      makeItem(11, 2, NOW - 101 * WEEK),
+      makeItem(12, 2, NOW - 102 * WEEK),
+    ];
+
+    // Act
+    const result = sortStacked(items, now);
+
+    // Assert — every active item ranks ahead of every dead-feed item.
+    expect(
+      result
+        .slice(0, 5)
+        .map((i) => i.id)
+        .sort((a, b) => a - b)
+    ).toEqual([1, 2, 3, 4, 5]);
+    expect(
+      result
+        .slice(5)
+        .map((i) => i.id)
+        .sort((a, b) => a - b)
+    ).toEqual([10, 11, 12]);
+  });
+
+  it("uses a 7-day freshness unit for feeds whose cadence is unknown (single item)", () => {
+    // Arrange — two single-item feeds: one posted 2 weeks ago (2 units →
+    // within grace, band 0), one posted 6 weeks ago (6 units → demoted 3
+    // bands). The active feed anchors the band structure.
+    const items = [
+      makeItem(1, 1, NOW - 1 * HOUR),
+      makeItem(2, 1, NOW - 2 * HOUR),
+      makeItem(10, 2, NOW - 2 * WEEK), // unknown cadence, within grace
+      makeItem(20, 3, NOW - 6 * WEEK), // unknown cadence, stale
+    ];
+
+    // Act
+    const result = sortStacked(items, now);
+
+    // Assert — the 2-week-old solo post shares band 0 (top 2); the 6-week-old
+    // solo post is demoted below everything else.
+    const top2Ids = result.slice(0, 2).map((i) => i.id);
+    expect(top2Ids).toContain(1);
+    expect(top2Ids).toContain(10);
+    expect(result[result.length - 1].id).toBe(20);
   });
 
   it("treats items with null published_at as the bottom of the list", () => {
@@ -288,60 +306,68 @@ describe("sortStacked", () => {
     ];
 
     // Act
-    const result = sortStacked(items, now, rng);
+    const result = sortStacked(items, now);
 
     // Assert — the null-published item must be last.
     expect(result[result.length - 1].id).toBe(2);
   });
 
-  it("produces stable results within one call when given a fixed rng", () => {
-    // Arrange — a fixed rng makes the sort fully deterministic.
+  it("is fully deterministic: identical calls produce identical order", () => {
+    // Arrange
     const items = [
       makeItem(1, 1, NOW - 1 * HOUR),
       makeItem(2, 2, NOW - 2 * HOUR),
       makeItem(3, 1, NOW - 3 * HOUR),
       makeItem(4, 2, NOW - 4 * HOUR),
+      makeItem(5, 3, NOW - 5 * HOUR),
     ];
 
     // Act
-    const a = sortStacked(items, now, rng);
-    const b = sortStacked(items, now, rng);
+    const a = sortStacked(items, now);
+    const b = sortStacked(items, now);
+    // Input order must not matter either.
+    const c = sortStacked([...items].reverse(), now);
 
-    // Assert — same fixed rng ⟹ identical ordering both times.
+    // Assert
     expect(a.map((i) => i.id)).toEqual(b.map((i) => i.id));
+    expect(a.map((i) => i.id)).toEqual(c.map((i) => i.id));
   });
 
-  it("randomises feed ordering across calls: different rng values yield different top positions", () => {
-    // Arrange — two feeds with items of similar age (both rank-0).
-    // By controlling the rng we can force either feed to the top.
-    const items = [
-      makeItem(1, 1, NOW - 1 * HOUR),
-      makeItem(2, 1, NOW - 3 * HOUR),
-      makeItem(10, 2, NOW - 2 * HOUR),
-      makeItem(11, 2, NOW - 4 * HOUR),
-    ];
+  it("rotates the within-band feed order across days but keeps it stable within a day", () => {
+    // Arrange — five feeds, each with one fresh item (all band 0), so the
+    // visible order is purely the daily shuffle.
+    const feedIds = [1, 2, 3, 4, 5];
+    const makeDayItems = () =>
+      feedIds.map((feedId) => makeItem(feedId * 100, feedId, NOW - 1 * HOUR));
 
-    // Act — rng that gives feed 1 a lower offset places feed 1 first; the
-    // second rng gives feed 2 the lower offset, placing feed 2 first.
-    let callCount = 0;
-    const rngFavourFeed1 = () => (callCount++ === 0 ? 0.1 : 0.9);
-    const resultA = sortStacked(items, now, rngFavourFeed1);
+    // Act — the same day sorted twice, then a sweep across 10 distinct days.
+    // Items stay a fixed 1h old relative to each day's clock so demotion
+    // never kicks in and only the shuffle varies.
+    const sameDayA = sortStacked(makeDayItems(), now).map((i) => i.feed_id);
+    const sameDayB = sortStacked(makeDayItems(), now).map((i) => i.feed_id);
+    const leadersByDay = Array.from({ length: 10 }, (_, d) => {
+      const dayNow = () => NOW + d * DAY;
+      const items = feedIds.map((feedId) =>
+        makeItem(feedId * 100, feedId, dayNow() - 1 * HOUR)
+      );
+      return sortStacked(items, dayNow)[0].feed_id;
+    });
 
-    callCount = 0;
-    const rngFavourFeed2 = () => (callCount++ === 0 ? 0.9 : 0.1);
-    const resultB = sortStacked(items, now, rngFavourFeed2);
-
-    // Assert — different rng values must produce different feeds at position 0.
-    expect(resultA[0].feed_id).not.toBe(resultB[0].feed_id);
+    // Assert — stable within the day, but more than one feed leads across the
+    // 10-day sweep (deterministic: the shuffle hash is fixed, so this cannot
+    // flake).
+    expect(sameDayA).toEqual(sameDayB);
+    expect(new Set(leadersByDay).size).toBeGreaterThan(1);
   });
 
   it("caps future timestamps in within-feed ranking so they do not displace past-dated items beyond their natural rank", () => {
     // Arrange — feed 1 has a far-future item and a genuinely recent item.
     // Feed 2 has a genuinely recent item.
-    // The future item still sorts as "rank 0" within its feed (capToNow = NOW,
-    // which is newer than NOW-1H), so the genuinely-recent co-feed item stays
+    // The future item still sorts as "rank 0" within its feed (capped to NOW,
+    // which is newer than NOW-1h), so the genuinely-recent co-feed item stays
     // at rank 1. Both rank-0 items (ids 1 and 3) must appear before the
-    // rank-1 item (id 2).
+    // rank-1 item (id 2), and the future timestamp must not create a
+    // staleness demotion or negative age.
     const items = [
       makeItem(1, 1, NOW + 1 * DAY), // future-dated — rank 0 within feed 1
       makeItem(2, 1, NOW - 1 * HOUR), // genuinely recent — rank 1 within feed 1
@@ -349,10 +375,9 @@ describe("sortStacked", () => {
     ];
 
     // Act
-    const result = sortStacked(items, now, rng);
+    const result = sortStacked(items, now);
 
-    // Assert — item 2 (rank-1, score ≈ 1.5) must be last; the rank-0 items
-    // (score ≈ 0.5 each) occupy the first two positions.
+    // Assert
     expect(result[result.length - 1].id).toBe(2);
     expect(
       result
@@ -362,24 +387,23 @@ describe("sortStacked", () => {
     ).toEqual([1, 3]);
   });
 
-  it("caps future timestamps in tie-breaking so a far-future item does not automatically beat an item at exactly now", () => {
-    // Arrange — item 2 (exactly now) is first in the input array; item 1
-    // (far future) is second. With equal offsets (rng = 0.5) both score 0.5.
-    // The tie-break uses capToNow: capToNow(NOW+365d) = NOW = capToNow(NOW),
-    // leaving the scores identical and the stable-sort input order intact
-    // (item 2 first). Without the cap, item 1's raw future timestamp would win
-    // the tie unconditionally.
+  it("ranks identical timestamps within a feed by id, independent of input order", () => {
+    // Arrange — two items from one feed with the exact same published_at
+    // (common for batch-imported archives). Within-feed ranking tie-breaks by
+    // id descending, so the higher id (later insert) takes rank 0.
     const items = [
-      makeItem(2, 2, NOW), // exactly now — appears first in input
-      makeItem(1, 1, NOW + 365 * DAY), // far future  — appears second
+      makeItem(10, 1, NOW - 1 * HOUR),
+      makeItem(11, 1, NOW - 1 * HOUR), // identical timestamp, higher id
     ];
 
     // Act
-    const result = sortStacked(items, now, rng);
+    const result = sortStacked(items, now);
 
-    // Assert — item 2 must come first because the cap makes both timestamps
-    // equal (NOW) and stable sort preserves the input order.
-    expect(result[0].id).toBe(2);
+    // Assert — identical timestamps: higher id (newer insert) ranks first,
+    // and the order is stable regardless of input order.
+    expect(result.map((i) => i.id)).toEqual([11, 10]);
+    const reversed = sortStacked([...items].reverse(), now);
+    expect(reversed.map((i) => i.id)).toEqual([11, 10]);
   });
 
   it("does not mutate the original array", () => {
@@ -391,74 +415,34 @@ describe("sortStacked", () => {
     const snapshot = JSON.stringify(items);
 
     // Act
-    sortStacked(items, now, rng);
+    sortStacked(items, now);
 
     // Assert
     expect(JSON.stringify(items)).toBe(snapshot);
   });
+});
 
-  describe("session-relative effective age (lastSessionAt)", () => {
-    it("items published after lastSessionAt have zero effective age", () => {
-      // Arrange — lastSessionAt = 1 day ago. Feed 1 has two items:
-      // item 1 (12h ago, published AFTER last session) and item 2 (2d ago,
-      // published BEFORE last session). Both are in the same feed, so their
-      // rank is determined by publication order.
-      // The key behaviour: item 1's effective_age = 0 (brand new to the user),
-      // item 2's effective_age = 1 day (was already in the feed last session).
-      const lastSessionAt = NOW - DAY;
-      const items = [
-        makeItem(1, 1, NOW - 12 * HOUR), // after last session → effective_age = 0
-        makeItem(2, 1, NOW - 2 * DAY), // before last session → effective_age = 1d
-      ];
+describe("feedDayShuffle", () => {
+  it("is deterministic and bounded to [0, 1)", () => {
+    for (const feedId of [0, 1, 7, 123, 99999]) {
+      for (const day of [0, 1, 20000, 20641]) {
+        const v = feedDayShuffle(feedId, day);
+        expect(v).toBe(feedDayShuffle(feedId, day));
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThan(1);
+      }
+    }
+  });
 
-      // Act — with a single feed the ranking is purely by rank (rank 0, rank 1)
-      const result = sortStacked(items, now, rng, lastSessionAt);
-
-      // Assert — item 1 (newer, rank 0) must come first.
-      expect(result[0].id).toBe(1);
-      expect(result[1].id).toBe(2);
-    });
-
-    it("reduces staleness for an item that was recently introduced at the last session", () => {
-      // Arrange — two feeds, each with two items.
-      //
-      // Feed 1 (hourly): items at 60h and 61h ago.
-      //   interval ≈ 1h → horizon = 30h.
-      //   Without lastSessionAt: rank-0 (60h) has age=60h, penalty=(30/30)²=1.0.
-      //   With lastSessionAt=50h ago: effective_age = max(0, 50h-60h) = 0 → no penalty.
-      //
-      // Feed 2 (hourly): items at 5h and 10h ago.
-      //   interval ≈ 5h → horizon = 150h.
-      //   Rank-0 (5h) and rank-1 (10h): no penalty either way.
-      const lastSessionAt = NOW - 50 * HOUR;
-      const items = [
-        makeItem(1, 1, NOW - 60 * HOUR), // feed 1 rank-0 — penalised without session
-        makeItem(2, 1, NOW - 61 * HOUR), // feed 1 rank-1
-        makeItem(3, 2, NOW - 5 * HOUR), // feed 2 rank-0
-        makeItem(4, 2, NOW - 10 * HOUR), // feed 2 rank-1
-      ];
-
-      // Without lastSessionAt: feed 1 rank-0 (score ≈ 0.5 + 1.0 = 1.5) ties
-      // with feed 2 rank-1 (score = 1.5). Tie broken by recency → feed 2 rank-1
-      // (10h) appears before feed 1 rank-0 (60h).
-      const resultWithout = sortStacked(items, now, rng);
-      const withoutOrder = resultWithout.map((i) => i.id);
-      // feed 2 rank-0 first (score 0.5), then feed 2 rank-1 (score 1.5) before
-      // feed 1 rank-0 (also 1.5 but older in tie-break).
-      expect(withoutOrder[0]).toBe(3); // feed 2 rank-0
-      expect(withoutOrder[1]).toBe(4); // feed 2 rank-1 (beats feed 1 rank-0 in tie)
-      expect(withoutOrder[2]).toBe(1); // feed 1 rank-0 (penalised without session)
-
-      // With lastSessionAt = 50h ago: feed 1 rank-0 effective_age = 10h → no
-      // penalty. Score = 0.5. Ties with feed 2 rank-0 (score 0.5); feed 2 rank-0
-      // (5h) is newer → feed 2 rank-0 still first. Feed 1 rank-0 (0.5) now
-      // appears before feed 2 rank-1 (score 1.5).
-      const resultWith = sortStacked(items, now, rng, lastSessionAt);
-      const withOrder = resultWith.map((i) => i.id);
-      expect(withOrder[0]).toBe(3); // feed 2 rank-0
-      expect(withOrder[1]).toBe(1); // feed 1 rank-0 now penalty-free — moved up
-      expect(withOrder[2]).toBe(4); // feed 2 rank-1
-    });
+  it("varies across days for a fixed feed and across feeds on a fixed day", () => {
+    const acrossDays = new Set(
+      Array.from({ length: 14 }, (_, d) => feedDayShuffle(42, 20000 + d))
+    );
+    const acrossFeeds = new Set(
+      Array.from({ length: 14 }, (_, f) => feedDayShuffle(f + 1, 20000))
+    );
+    expect(acrossDays.size).toBeGreaterThan(1);
+    expect(acrossFeeds.size).toBeGreaterThan(1);
   });
 });
 
@@ -533,8 +517,6 @@ describe("applySortMode", () => {
   const NOW = 1_000_000_000_000;
   const HOUR = 60 * 60 * 1000;
   const now = () => NOW;
-  // Fixed rng so sortStacked results are deterministic in these tests.
-  const rng = () => 0.5;
 
   it("delegates to sortNewest when mode is 'newest'", () => {
     // Arrange
@@ -549,23 +531,25 @@ describe("applySortMode", () => {
   });
 
   it("delegates to sortStacked when mode is 'stacked'", () => {
-    // Arrange
+    // Arrange — two feeds, one fresh item each: both band 0, so the result
+    // must contain both items with one item per feed in the top 2.
     const items = [
       makeItem(1, 1, NOW - 1 * HOUR),
       makeItem(2, 2, NOW - 2 * HOUR),
     ];
 
     // Act
-    const result = applySortMode(items, "stacked", now, rng);
+    const result = applySortMode(items, "stacked", now);
 
     // Assert
     expect(result).toHaveLength(2);
+    expect(new Set(result.map((i) => i.feed_id)).size).toBe(2);
   });
 
-  it("passes the custom now and rng functions through to sortStacked", () => {
-    // Arrange — items 1 and 3 are each the newest from their own feed (rank 0),
-    // items 2 and 4 are the second newest (rank 1). With equal rng offsets,
-    // rank-0 items lead and rank-1 items follow, ordered by recency.
+  it("passes the custom now function through to sortStacked", () => {
+    // Arrange — items 1 and 3 are each the newest from their own feed
+    // (rank 0), items 2 and 4 are second-newest (rank 1). Rank-major scoring
+    // puts both rank-0 items ahead of both rank-1 items.
     const items = [
       makeItem(1, 1, NOW - 1 * HOUR),
       makeItem(2, 1, NOW - 3 * HOUR),
@@ -574,44 +558,13 @@ describe("applySortMode", () => {
     ];
 
     // Act
-    const result = applySortMode(items, "stacked", now, rng);
+    const result = applySortMode(items, "stacked", now);
 
-    // Assert — items 1 and 3 (both rank-0) lead; item 2 (3h, rank-1) beats
-    // item 4 (4h, rank-1) on recency.
+    // Assert
     const top2 = result
       .slice(0, 2)
       .map((i) => i.id)
       .sort((a, b) => a - b);
     expect(top2).toEqual([1, 3]);
-    expect(result[2].id).toBe(2);
-    expect(result[3].id).toBe(4);
-  });
-
-  it("passes lastSessionAt through to sortStacked", () => {
-    // Arrange — the same setup as the session-relative test above.
-    // Feed 1 rank-0 is 60h old with a 1h feed interval, so without a session
-    // context it carries a staleness penalty. With lastSessionAt=50h ago its
-    // effective_age drops to 10h — penalty-free.
-    const HOUR = 60 * 60 * 1000;
-    const items = [
-      makeItem(1, 1, NOW - 60 * HOUR), // feed 1 rank-0 — penalised without session
-      makeItem(2, 1, NOW - 61 * HOUR), // feed 1 rank-1
-      makeItem(3, 2, NOW - 5 * HOUR), // feed 2 rank-0
-      makeItem(4, 2, NOW - 10 * HOUR), // feed 2 rank-1
-    ];
-
-    // Act
-    const result = applySortMode(
-      items,
-      "stacked",
-      now,
-      rng,
-      NOW - 50 * HOUR // lastSessionAt
-    );
-
-    // Assert — feed 1 rank-0 (now penalty-free) appears before feed 2 rank-1.
-    const id1Pos = result.findIndex((i) => i.id === 1);
-    const id4Pos = result.findIndex((i) => i.id === 4);
-    expect(id1Pos).toBeLessThan(id4Pos);
   });
 });

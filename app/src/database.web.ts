@@ -603,7 +603,7 @@ export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
 export async function getItemsPage(
   options: ItemsPageOptions
 ): Promise<FeedItemWithFeed[]> {
-  const { feedIds, excludeFeedIds, offset, limit } = options;
+  const { feedIds, excludeFeedIds, offset, limit, order = "newest" } = options;
 
   if (feedIds != null && feedIds.length === 0) {
     return [];
@@ -617,15 +617,36 @@ export async function getItemsPage(
       ? new Set(excludeFeedIds)
       : null;
 
-  return state.items
+  const scoped = state.items
     .filter((i) => titleByFeedId.has(i.feed_id))
     .filter((i) => feedIdSet === null || feedIdSet.has(i.feed_id))
     .filter((i) => excludeSet === null || !excludeSet.has(i.feed_id))
     .map((i) => ({ ...i, feed_title: titleByFeedId.get(i.feed_id) ?? "" }))
     .sort(
       (a, b) => (b.published_at ?? 0) - (a.published_at ?? 0) || b.id - a.id
-    )
-    .slice(offset, offset + limit);
+    );
+
+  if (order === "stacked") {
+    // Rank-major paging (mirrors the SQL window-function query in
+    // database.ts): all rank-0 items (each feed's newest) page out before
+    // any feed's rank-1 item, so quiet feeds always make the first page.
+    // `scoped` is already newest-first, so per-feed encounter order = rank.
+    const rankByItemId = new Map<number, number>();
+    const seenPerFeed = new Map<number, number>();
+    for (const item of scoped) {
+      const rank = seenPerFeed.get(item.feed_id) ?? 0;
+      rankByItemId.set(item.id, rank);
+      seenPerFeed.set(item.feed_id, rank + 1);
+    }
+    scoped.sort(
+      (a, b) =>
+        (rankByItemId.get(a.id) ?? 0) - (rankByItemId.get(b.id) ?? 0) ||
+        (b.published_at ?? 0) - (a.published_at ?? 0) ||
+        b.id - a.id
+    );
+  }
+
+  return scoped.slice(offset, offset + limit);
 }
 
 export async function upsertItems(
