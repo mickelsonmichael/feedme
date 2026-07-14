@@ -1342,20 +1342,25 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    const initialPage = [
+      {
+        id: 601,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Initially selected",
+        url: "https://alpha.example/initial",
+        content: "<p>Initial body</p>",
+        image_url: null,
+        published_at: 3_000,
+        read: 0,
+      },
+    ];
     (getItemsPage as jest.Mock)
-      .mockResolvedValueOnce([
-        {
-          id: 601,
-          feed_id: 1,
-          feed_title: "Alpha",
-          title: "Initially selected",
-          url: "https://alpha.example/initial",
-          content: "<p>Initial body</p>",
-          image_url: null,
-          published_at: 3_000,
-          read: 0,
-        },
-      ])
+      // Initial mount query
+      .mockResolvedValueOnce(initialPage)
+      // Pull-to-refresh: immediate stale-while-revalidate query (unchanged)
+      .mockResolvedValueOnce(initialPage)
+      // Pull-to-refresh: post-refresh query returning the new items
       .mockResolvedValueOnce([
         {
           id: 602,

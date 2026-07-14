@@ -26,6 +26,12 @@ export type WebConfig = {
   groupFeeds?: GroupFeedsMode;
   backgroundSyncFrequency?: BackgroundSyncFrequency;
   backgroundSyncWifiOnly?: boolean;
+  /** Interval (minutes) the OS background task was last registered with.
+   *  Persisted so app launches can tell "already registered with the right
+   *  interval" apart from "needs re-registering" — unregistering and
+   *  re-registering periodic work on every launch resets the OS scheduler's
+   *  timer and is exactly what made background sync fire inconsistently. */
+  backgroundSyncRegisteredIntervalMinutes?: number;
   /** Item ids that the user has individually uncollapsed in the main feed
    *  for feeds marked "collapse repeated entries". Persists across
    *  navigation and app restarts. Capped to a bounded length so it cannot
@@ -126,6 +132,17 @@ function validateConfig(raw: unknown): WebConfig {
       .backgroundSyncWifiOnly;
     if (typeof backgroundSyncWifiOnly === "boolean") {
       config.backgroundSyncWifiOnly = backgroundSyncWifiOnly;
+    }
+
+    const backgroundSyncRegisteredIntervalMinutes = (
+      raw as Record<string, unknown>
+    ).backgroundSyncRegisteredIntervalMinutes;
+    if (
+      typeof backgroundSyncRegisteredIntervalMinutes === "number" &&
+      Number.isFinite(backgroundSyncRegisteredIntervalMinutes)
+    ) {
+      config.backgroundSyncRegisteredIntervalMinutes =
+        backgroundSyncRegisteredIntervalMinutes;
     }
 
     const uncollapsedItemIds = (raw as Record<string, unknown>)

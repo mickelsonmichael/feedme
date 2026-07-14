@@ -14,7 +14,7 @@ import {
   setFeedNotificationCheckpoint,
 } from "./database";
 import { refreshFeeds } from "./feedRefresher";
-import { loadConfig } from "./storage";
+import { loadConfig, saveConfig } from "./storage";
 import {
   DEFAULT_BACKGROUND_SYNC_FREQUENCY,
   backgroundSyncFrequencyToMinutes,
@@ -205,6 +205,11 @@ async function registerBackgroundNotificationTask(
     minimumInterval: intervalMinutes,
   });
   currentRegisteredIntervalMinutes = intervalMinutes;
+  try {
+    saveConfig({ backgroundSyncRegisteredIntervalMinutes: intervalMinutes });
+  } catch {
+    // Persistence is best-effort; worst case the next launch re-registers.
+  }
 }
 
 async function unregisterBackgroundNotificationTask(): Promise<void> {
@@ -225,6 +230,11 @@ async function unregisterBackgroundNotificationTask(): Promise<void> {
     );
   }
   currentRegisteredIntervalMinutes = null;
+  try {
+    saveConfig({ backgroundSyncRegisteredIntervalMinutes: undefined });
+  } catch {
+    // Persistence is best-effort.
+  }
 }
 
 /**
@@ -237,6 +247,9 @@ export async function updateBackgroundSyncSchedule(): Promise<void> {
   if (!isNativeNotificationsSupported()) {
     return;
   }
+  // The task *definition* lives only in JS memory, so it must be re-installed
+  // on every launch even when the OS-level registration is left untouched.
+  ensureTaskDefined();
   const frequency = getBackgroundSyncFrequency();
   const intervalMinutes = backgroundSyncFrequencyToMinutes(frequency);
 
@@ -249,7 +262,18 @@ export async function updateBackgroundSyncSchedule(): Promise<void> {
     const isRegistered = await TaskManager.isTaskRegisteredAsync(
       BACKGROUND_NOTIFICATION_TASK
     );
-    if (isRegistered && currentRegisteredIntervalMinutes === intervalMinutes) {
+    // Prefer the in-memory record (accurate within a session); fall back to
+    // the persisted value so a cold start doesn't unregister + re-register a
+    // task that is already correctly scheduled. Re-registering periodic work
+    // resets the OS scheduler's timer, so doing it on every launch meant the
+    // background sync interval restarted whenever the user opened the app —
+    // the root cause of "background sync never seems to run".
+    const knownIntervalMinutes =
+      currentRegisteredIntervalMinutes ??
+      loadConfig().backgroundSyncRegisteredIntervalMinutes ??
+      null;
+    if (isRegistered && knownIntervalMinutes === intervalMinutes) {
+      currentRegisteredIntervalMinutes = intervalMinutes;
       return;
     }
     if (isRegistered) {
@@ -281,7 +305,9 @@ export async function runBackgroundNotificationSync(): Promise<void> {
   // notifications for any items we already have locally — the wifi-only gate
   // only suppresses the network refresh, not the notification dispatch.
   if (!getBackgroundSyncWifiOnly() || (await isOnWifi())) {
-    await refreshFeeds(feeds);
+    // Lower concurrency than the foreground default: nobody is watching a
+    // progress bar here, so be gentle on the radio, battery and rate limits.
+    await refreshFeeds(feeds, { concurrency: 3 });
   }
 
   const tags = await getTags();

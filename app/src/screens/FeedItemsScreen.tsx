@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   Alert,
   StyleSheet,
-  ActivityIndicator,
   Modal,
   ScrollView,
   RefreshControl,
@@ -35,6 +34,7 @@ import { refreshFeeds } from "../feedRefresher";
 import { Feed, FeedItem, RootStackParamList } from "../types";
 import { toggleExpandedId } from "../expandItemIds";
 import { MetaText } from "../components/ui";
+import { FeedLoadingScreen } from "../components/LoadingState";
 import { Feather } from "@expo/vector-icons";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -357,17 +357,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   );
 
   if (loading) {
-    return (
-      <View
-        style={[
-          styles.container,
-          styles.center,
-          { backgroundColor: colors.paper },
-        ]}
-      >
-        <ActivityIndicator size="large" color={colors.accent} />
-      </View>
-    );
+    return <FeedLoadingScreen />;
   }
 
   return (

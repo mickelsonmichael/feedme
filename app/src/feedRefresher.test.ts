@@ -1,4 +1,8 @@
-import { refreshFeeds, parseRetryAfterMs } from "./feedRefresher";
+import {
+  refreshFeeds,
+  parseRetryAfterMs,
+  __resetHostRateLimitStateForTesting,
+} from "./feedRefresher";
 import { fetchFeedWithMeta, RateLimitError } from "./feedParser";
 import * as database from "./database";
 import { Feed, ParsedFeedItem } from "./types";
@@ -87,6 +91,9 @@ beforeEach(() => {
   // unconsumed mockResolvedValueOnce / mockRejectedValueOnce values from
   // one test can't contaminate the next.
   jest.resetAllMocks();
+  // Host rate-limit state intentionally persists across refreshFeeds calls
+  // within a session — reset it here so tests stay order-independent.
+  __resetHostRateLimitStateForTesting();
   mockFetchFeedWithMeta.mockResolvedValue({
     items: [parsedItem],
     usedProxy: false,
@@ -685,6 +692,139 @@ describe("refreshFeeds", () => {
         undefined,
         expect.any(Object)
       );
+    });
+
+    it("keeps a host rate-limited across separate refreshFeeds runs", async () => {
+      // Arrange — first run receives a 429 with a 2-minute Retry-After.
+      const feeds = [
+        makeFeed(1, { url: "https://www.reddit.com/r/programming.rss" }),
+      ];
+      const rateLimitHeaders = {
+        retryAfter: "120",
+        limit: null,
+        remaining: "0",
+        reset: null,
+        capturedAt: Date.now(),
+      };
+      mockFetchFeedWithMeta.mockRejectedValueOnce(
+        new RateLimitError(rateLimitHeaders)
+      );
+
+      // Act — first run fails with the 429; second run (e.g. the user pulls
+      // to refresh again straight away) must not contact the host at all.
+      await refreshFeeds(feeds);
+      const onProgress = jest.fn();
+      const errors = await refreshFeeds(feeds, { onProgress });
+
+      // Assert — only the first run fired a request.
+      expect(errors).toBe(0);
+      expect(mockFetchFeedWithMeta).toHaveBeenCalledTimes(1);
+      expect(onProgress).toHaveBeenLastCalledWith(
+        expect.objectContaining({ skipped: 1, completed: 1 })
+      );
+    });
+
+    it("never fires concurrent requests at a host with a 429 history", async () => {
+      // Arrange — three feeds on a host that has previously rate-limited us
+      // (rate_limit_info persisted on the feed rows). Track how many fetches
+      // to that host are in flight simultaneously.
+      const feeds = [
+        makeFeed(1, {
+          url: "https://www.reddit.com/r/a.rss",
+          rate_limit_info: "{}",
+        }),
+        makeFeed(2, { url: "https://www.reddit.com/r/b.rss" }),
+        makeFeed(3, { url: "https://www.reddit.com/r/c.rss" }),
+      ];
+      let inFlight = 0;
+      let maxInFlight = 0;
+      mockFetchFeedWithMeta.mockImplementation(async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return {
+          items: [parsedItem],
+          usedProxy: false,
+          notModified: false,
+          etag: null,
+          lastModified: null,
+          rateLimitHeaders: null,
+        };
+      });
+
+      // Act — global concurrency would otherwise allow all three at once.
+      const errors = await refreshFeeds(feeds, { concurrency: 6 });
+
+      // Assert — requests to the strict host were serialized.
+      expect(errors).toBe(0);
+      expect(mockFetchFeedWithMeta).toHaveBeenCalledTimes(3);
+      expect(maxInFlight).toBe(1);
+    });
+
+    it("caps concurrent requests to a well-behaved host at two", async () => {
+      // Arrange — four feeds on one host with no rate-limit history.
+      const feeds = [1, 2, 3, 4].map((id) =>
+        makeFeed(id, { url: `https://example.com/feed${id}.xml` })
+      );
+      let inFlight = 0;
+      let maxInFlight = 0;
+      mockFetchFeedWithMeta.mockImplementation(async () => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
+        return {
+          items: [parsedItem],
+          usedProxy: false,
+          notModified: false,
+          etag: null,
+          lastModified: null,
+          rateLimitHeaders: null,
+        };
+      });
+
+      // Act
+      const errors = await refreshFeeds(feeds, { concurrency: 6 });
+
+      // Assert — burst limited to two concurrent requests per host.
+      expect(errors).toBe(0);
+      expect(mockFetchFeedWithMeta).toHaveBeenCalledTimes(4);
+      expect(maxInFlight).toBeLessThanOrEqual(2);
+      expect(maxInFlight).toBeGreaterThan(1); // still parallel, not serial
+    });
+
+    it("refreshes the most overdue feeds first", async () => {
+      // Arrange — feeds supplied out of due-date order, run serially so the
+      // fetch order is observable.
+      const now = Date.now();
+      const feeds = [
+        makeFeed(1, {
+          url: "https://a.example.com/feed.xml",
+          next_fetch_at: now - 1_000,
+        }),
+        makeFeed(2, {
+          url: "https://b.example.com/feed.xml",
+          next_fetch_at: now - 60_000,
+        }),
+        makeFeed(3, {
+          url: "https://c.example.com/feed.xml",
+          next_fetch_at: now - 30_000,
+        }),
+      ];
+
+      // Act
+      await refreshFeeds(feeds, { concurrency: 1 });
+
+      // Assert — most overdue (feed 2) first, then feed 3, then feed 1.
+      const calledUrls = mockFetchFeedWithMeta.mock.calls.map(
+        (call) => call[0]
+      );
+      expect(calledUrls).toEqual([
+        "https://b.example.com/feed.xml",
+        "https://c.example.com/feed.xml",
+        "https://a.example.com/feed.xml",
+      ]);
     });
 
     it("skips remaining same-host feeds when Retry-After is long", async () => {

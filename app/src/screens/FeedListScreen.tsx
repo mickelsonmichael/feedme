@@ -12,7 +12,6 @@ import {
   TextInput,
   Alert,
   StyleSheet,
-  ActivityIndicator,
   ScrollView,
   RefreshControl,
   useWindowDimensions,
@@ -57,6 +56,11 @@ import {
 } from "../types";
 import { toggleExpandedId } from "../expandItemIds";
 import { MetaText } from "../components/ui";
+import {
+  FeedLoadingScreen,
+  PulsingDots,
+  RefreshProgressBar,
+} from "../components/LoadingState";
 import { CompactMenu } from "../components/CompactMenu";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -159,6 +163,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const flatListRef = useRef<FlashListRef<CollapsedFeedListRow>>(null);
   const singleScrollRef = useRef<ScrollView | null>(null);
   const pendingScrollToTopRef = useRef(false);
+  // Set by pull-to-refresh: request a scroll-to-top when the *refreshed*
+  // items commit (loadData's second, post-network commit) rather than when
+  // the immediate cached-items commit lands.
+  const scrollAfterRefreshRef = useRef(false);
+  // Same deal for single layout's "jump to first unread": it must react to
+  // the refreshed items, not the interim cached commit.
+  const selectUnreadAfterRefreshRef = useRef(false);
   const singleSelectUnreadOnNextItemsRef = useRef(false);
   const singleLastAutoMarkedIdRef = useRef<number | null>(null);
   const markAsReadOnScrollRef = useRef(
@@ -352,6 +363,37 @@ export default function FeedListScreen({ navigation, route }: Props) {
         setCustomFeedNsfw(cfNsfw);
         scopeRef.current = { feedIds: scopeFeedIds, excludeFeedIds };
 
+        // Query the local database for the current scope and commit the
+        // results if this loadData call is still the latest one. Returns
+        // whether the commit happened.
+        const queryAndCommitPage = async (): Promise<boolean> => {
+          const [itemData, ids, readLaterIdsLoaded] = await Promise.all([
+            getItemsPage({
+              feedIds: scopeFeedIds,
+              excludeFeedIds,
+              offset: 0,
+              limit: PAGE_SIZE,
+            }),
+            getSavedItemIds(),
+            getReadLaterItemIds(),
+          ]);
+          if (loadGenerationRef.current !== generation) {
+            return false;
+          }
+          setItems(itemData);
+          setHasMore(itemData.length === PAGE_SIZE);
+          setSavedIds(ids);
+          setReadLaterIds(readLaterIdsLoaded);
+          return true;
+        };
+
+        // Stale-while-revalidate: always render whatever is cached locally
+        // first, so the user sees content immediately instead of staring at a
+        // spinner while dozens of network fetches complete. The remote
+        // refresh below then updates the list in place when it finishes.
+        await queryAndCommitPage();
+        setLoading(false);
+
         if (!refreshRemote) {
           setRefreshProgress(null);
         } else if (feedsToRefresh.length > 0) {
@@ -387,6 +429,29 @@ export default function FeedListScreen({ navigation, route }: Props) {
               `${errors} feed(s) could not be refreshed.\n\n${details}${overflow}`
             );
           }
+
+          if (loadGenerationRef.current === generation) {
+            // Only regenerate the sort seed once the remote refresh lands, so
+            // the cached view shown above keeps its order (no shuffle while
+            // the user is already reading) and fresh content arrives with a
+            // single reorder. Focus returns without a refresh keep the seed
+            // stable so the just-viewed item stays put.
+            sortSeedRef.current = Math.random();
+            if (scrollAfterRefreshRef.current) {
+              scrollAfterRefreshRef.current = false;
+              pendingScrollToTopRef.current = true;
+            }
+            if (selectUnreadAfterRefreshRef.current) {
+              selectUnreadAfterRefreshRef.current = false;
+              singleSelectUnreadOnNextItemsRef.current = true;
+            }
+            // Feed rows may have new titles / error states after the refresh.
+            const refreshedFeeds = await getFeeds();
+            if (loadGenerationRef.current === generation) {
+              setFeeds(refreshedFeeds);
+            }
+            await queryAndCommitPage();
+          }
         } else {
           setRefreshProgress({
             total: 0,
@@ -397,34 +462,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
             skipped: 0,
           });
         }
-
-        const [itemData, ids] = await Promise.all([
-          getItemsPage({
-            feedIds: scopeFeedIds,
-            excludeFeedIds,
-            offset: 0,
-            limit: PAGE_SIZE,
-          }),
-          getSavedItemIds(),
-        ]);
-        const readLaterIdsLoaded = await getReadLaterItemIds();
-
-        if (loadGenerationRef.current === generation) {
-          // Only regenerate the sort seed on remote refreshes (pull-to-refresh).
-          // Keeping the seed stable when re-focusing after navigation (e.g.
-          // returning from a detail view) prevents the list from shuffling and
-          // makes the just-viewed item stay at its original position.
-          if (refreshRemote) {
-            sortSeedRef.current = Math.random();
-          }
-          setItems(itemData);
-          setHasMore(itemData.length === PAGE_SIZE);
-          setSavedIds(ids);
-          setReadLaterIds(readLaterIdsLoaded);
-        }
       } catch (err) {
         Alert.alert("Error", "Failed to load: " + (err as Error).message);
       } finally {
+        scrollAfterRefreshRef.current = false;
+        selectUnreadAfterRefreshRef.current = false;
         setLoading(false);
         setRefreshing(false);
         setRefreshProgress(null);
@@ -475,14 +517,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const handleRefreshAll = async () => {
     setRetainedUnreadIds(new Set());
     if (feedLayout === "single") {
-      singleSelectUnreadOnNextItemsRef.current = true;
+      selectUnreadAfterRefreshRef.current = true;
       singleLastAutoMarkedIdRef.current = null;
       setSingleActiveIndex(0);
     }
     setRefreshing(true);
-    // Set the flag before loadData so the useEffect watching `items` will
-    // scroll to top after React commits the freshly loaded items.
-    pendingScrollToTopRef.current = true;
+    // Ask loadData to scroll to top once the refreshed (post-network) items
+    // commit — not when the immediate cached-items commit happens.
+    scrollAfterRefreshRef.current = true;
     await loadData(true);
     // animated:false matches the tab-press scroll-to-top behavior; FlashList's
     // animated scroll can stall with variable-height rows.
@@ -1413,31 +1455,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
     ]
   );
 
-  if (loading) {
-    const totalLoading = refreshProgress?.total ?? 0;
-    const completed = refreshProgress?.completed ?? 0;
-    const activeLoading = refreshProgress?.loading ?? totalLoading;
-
-    return (
-      <View
-        style={[
-          styles.container,
-          styles.center,
-          { backgroundColor: colors.paper },
-        ]}
-      >
-        <ActivityIndicator size="large" color={colors.accent} />
-        <Text style={[styles.loadingTitle, { color: colors.ink }]}>
-          Loading feeds...
-        </Text>
-        <Text style={[styles.loadingMeta, { color: colors.inkSoft }]}>
-          {completed} completed of {totalLoading}
-        </Text>
-        <Text style={[styles.loadingMeta, { color: colors.inkSoft }]}>
-          {activeLoading} still loading
-        </Text>
-      </View>
-    );
+  // Initial load (before the first cached page lands) and first-ever refresh
+  // of an empty library both get the full skeleton treatment.
+  if (loading || (refreshing && items.length === 0 && feeds.length > 0)) {
+    return <FeedLoadingScreen progress={refreshProgress} />;
   }
 
   return (
@@ -1533,11 +1554,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
           ]}
         >
           <MetaText>
-            Refreshing feeds: {refreshProgress.completed}/
-            {refreshProgress.total} completed
+            Refreshing {refreshProgress.completed}/{refreshProgress.total}
           </MetaText>
-          <View style={styles.progressSpacer} />
-          <MetaText>{refreshProgress.loading} loading</MetaText>
+          <View style={styles.progressBarFlex}>
+            <RefreshProgressBar progress={refreshProgress} />
+          </View>
         </View>
       ) : null}
 
@@ -2120,10 +2141,9 @@ function Separator() {
 }
 
 function LoadingMoreFooter() {
-  const { colors } = useTheme();
   return (
     <View style={styles.loadMoreFooter}>
-      <ActivityIndicator size="small" color={colors.accent} />
+      <PulsingDots />
     </View>
   );
 }
@@ -2197,19 +2217,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     borderBottomWidth: 1,
   },
-  progressSpacer: {
+  progressBarFlex: {
     flex: 1,
-  },
-  loadingTitle: {
-    marginTop: spacing.md,
-    fontSize: fontSize.body,
-    fontFamily: fonts.sans,
-    fontWeight: "600",
-  },
-  loadingMeta: {
-    marginTop: spacing.xs,
-    fontSize: fontSize.meta,
-    fontFamily: fonts.sans,
+    alignItems: "flex-end",
+    marginLeft: spacing.md,
   },
   content: {
     padding: spacing.md,

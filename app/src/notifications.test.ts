@@ -1,4 +1,7 @@
-import { runBackgroundNotificationSync } from "./notifications";
+import {
+  runBackgroundNotificationSync,
+  updateBackgroundSyncSchedule,
+} from "./notifications";
 import * as database from "./database";
 import * as feedRefresher from "./feedRefresher";
 
@@ -47,6 +50,7 @@ jest.mock("./feedRefresher", () => ({ refreshFeeds: jest.fn() }));
 
 jest.mock("./storage", () => ({
   loadConfig: jest.fn().mockReturnValue({}),
+  saveConfig: jest.fn(),
 }));
 
 jest.mock("./database", () => ({
@@ -87,6 +91,8 @@ const mockRefreshFeeds = feedRefresher.refreshFeeds as jest.MockedFunction<
 >;
 import * as Notifications from "expo-notifications";
 import * as Network from "expo-network";
+import * as TaskManager from "expo-task-manager";
+import * as BackgroundTask from "expo-background-task";
 import * as storage from "./storage";
 const mockSchedule =
   Notifications.scheduleNotificationAsync as jest.MockedFunction<
@@ -262,5 +268,99 @@ describe("runBackgroundNotificationSync — wifi-only", () => {
 
     // Assert
     expect(mockRefreshFeeds).toHaveBeenCalledTimes(1);
+  });
+});
+
+// NOTE: these tests share the notifications module's in-memory record of the
+// currently-registered interval, so they are order-sensitive by design: each
+// test documents the module state it expects to inherit.
+describe("updateBackgroundSyncSchedule", () => {
+  const mockIsTaskRegistered =
+    TaskManager.isTaskRegisteredAsync as jest.MockedFunction<
+      typeof TaskManager.isTaskRegisteredAsync
+    >;
+  const mockRegisterTask =
+    BackgroundTask.registerTaskAsync as jest.MockedFunction<
+      typeof BackgroundTask.registerTaskAsync
+    >;
+  const mockUnregisterTask =
+    BackgroundTask.unregisterTaskAsync as jest.MockedFunction<
+      typeof BackgroundTask.unregisterTaskAsync
+    >;
+  const mockSaveConfig = storage.saveConfig as jest.MockedFunction<
+    typeof storage.saveConfig
+  >;
+
+  it("leaves an already-registered task alone when the persisted interval matches", async () => {
+    // Arrange — cold start: no in-memory record yet, but the task is
+    // registered and the persisted interval matches the user's setting.
+    mockLoadConfig.mockReturnValue({
+      backgroundSyncFrequency: "30m",
+      backgroundSyncRegisteredIntervalMinutes: 30,
+    });
+    mockIsTaskRegistered.mockResolvedValue(true);
+
+    // Act
+    await updateBackgroundSyncSchedule();
+
+    // Assert — re-registering would reset the OS scheduler's timer, so
+    // neither register nor unregister may be called.
+    expect(mockRegisterTask).not.toHaveBeenCalled();
+    expect(mockUnregisterTask).not.toHaveBeenCalled();
+  });
+
+  it("re-registers and persists the interval when the setting changed", async () => {
+    // Arrange — user switched from 30m to 1h (in-memory record is 30 from the
+    // previous test's early-return path).
+    mockLoadConfig.mockReturnValue({
+      backgroundSyncFrequency: "1h",
+      backgroundSyncRegisteredIntervalMinutes: 30,
+    });
+    mockIsTaskRegistered.mockResolvedValue(true);
+
+    // Act
+    await updateBackgroundSyncSchedule();
+
+    // Assert
+    expect(mockUnregisterTask).toHaveBeenCalledTimes(1);
+    expect(mockRegisterTask).toHaveBeenCalledWith(expect.any(String), {
+      minimumInterval: 60,
+    });
+    expect(mockSaveConfig).toHaveBeenCalledWith({
+      backgroundSyncRegisteredIntervalMinutes: 60,
+    });
+  });
+
+  it("registers when the task is not registered yet", async () => {
+    // Arrange — fresh install: nothing registered, nothing persisted.
+    mockLoadConfig.mockReturnValue({ backgroundSyncFrequency: "15m" });
+    mockIsTaskRegistered.mockResolvedValue(false);
+
+    // Act
+    await updateBackgroundSyncSchedule();
+
+    // Assert
+    expect(mockRegisterTask).toHaveBeenCalledWith(expect.any(String), {
+      minimumInterval: 15,
+    });
+    expect(mockSaveConfig).toHaveBeenCalledWith({
+      backgroundSyncRegisteredIntervalMinutes: 15,
+    });
+  });
+
+  it("unregisters and clears the persisted interval when sync is off", async () => {
+    // Arrange
+    mockLoadConfig.mockReturnValue({ backgroundSyncFrequency: "off" });
+    mockIsTaskRegistered.mockResolvedValue(true);
+
+    // Act
+    await updateBackgroundSyncSchedule();
+
+    // Assert
+    expect(mockUnregisterTask).toHaveBeenCalledTimes(1);
+    expect(mockRegisterTask).not.toHaveBeenCalled();
+    expect(mockSaveConfig).toHaveBeenCalledWith({
+      backgroundSyncRegisteredIntervalMinutes: undefined,
+    });
   });
 });

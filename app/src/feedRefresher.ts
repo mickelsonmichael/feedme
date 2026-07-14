@@ -90,6 +90,34 @@ const DEFAULT_CONCURRENCY = 6;
  *  episodes) from causing hundreds of sequential native DB round-trips that
  *  block the JS event loop for tens of seconds. */
 const MAX_ITEMS_PER_FEED = 100;
+/** Maximum concurrent requests to a single host. Even with a global
+ *  concurrency of 6, firing several requests at once to the same origin is
+ *  what triggered Reddit's 429s — most rate limiters count a burst, not an
+ *  average. */
+const MAX_PER_HOST_CONCURRENCY = 2;
+/** Per-host concurrency for hosts with a recorded 429 history. Once a host
+ *  has ever rate-limited us we never send it more than one request at a
+ *  time. */
+const STRICT_HOST_CONCURRENCY = 1;
+
+/**
+ * Host-level rate-limit state that persists across refresh runs for the
+ * lifetime of the app session. Keyed by hostname; the value is the epoch-ms
+ * timestamp after which the host may be contacted again. Without this, two
+ * pull-to-refreshes in quick succession would re-hammer a host that told us
+ * to back off on the first pass.
+ */
+const hostRateLimits = new Map<string, number>();
+/** Hosts that have returned a 429 at any point this session. These are
+ *  permanently demoted to serialized (one-at-a-time) fetching. */
+const strictHosts = new Set<string>();
+
+/** Test-only: clears the module-level host rate-limit state so tests are
+ *  order-independent. */
+export function __resetHostRateLimitStateForTesting(): void {
+  hostRateLimits.clear();
+  strictHosts.clear();
+}
 /**
  * Per-feed wall-clock timeout (ms). When a feed's full refresh cycle (network
  * fetch + DB write) exceeds this limit the feed is marked failed and the
@@ -135,13 +163,14 @@ export async function refreshFeeds(
 
   emitProgress();
 
-  // Per-host rate-limit tracker shared across all concurrent workers for this
-  // refresh run. Keyed by hostname (e.g. "www.reddit.com"). When any feed from
-  // a host returns a 429, the host's entry is set to the epoch-ms timestamp
-  // after which it is safe to retry. All subsequent feeds from that same host
-  // are then skipped for the remainder of this run, preventing a burst of
-  // redundant requests that would all be rate-limited anyway.
-  const hostRateLimits = new Map<string, number>();
+  // Hosts with a persisted 429 history (from previous sessions, stored on the
+  // feed row) are treated as strict from the first request of this session.
+  for (const feed of feeds) {
+    if (feed.rate_limit_info) {
+      const host = extractHost(feed.url);
+      if (host) strictHosts.add(host);
+    }
+  }
 
   const refreshOne = async (feed: Feed): Promise<void> => {
     // Honor per-feed adaptive scheduling. `next_fetch_at` of 0 (or null on
@@ -218,13 +247,15 @@ export async function refreshFeeds(
       } catch (error) {
         if (error instanceof RateLimitError) {
           // Propagate the rate limit to all feeds on the same host so
-          // concurrent and subsequent workers in this refresh run don't
-          // fire requests that are guaranteed to be rejected.
+          // concurrent and subsequent workers — in this run and any run
+          // later in the session — don't fire requests that are guaranteed
+          // to be rejected.
           if (host) {
             const delayMs = parseRetryAfterMs(
               error.rateLimitHeaders.retryAfter
             );
             hostRateLimits.set(host, Date.now() + delayMs);
+            strictHosts.add(host);
           }
           await updateFeedRateLimitInfo(
             feed.id,
@@ -278,18 +309,64 @@ export async function refreshFeeds(
     emitProgress();
   };
 
-  // Bounded-concurrency worker pool: avoid saturating the radio / DB on
-  // accounts with many subscriptions.
-  let cursor = 0;
+  // Refresh the most overdue feeds first so the content the user has waited
+  // longest for lands earliest in the run. Stable sort keeps the caller's
+  // order for equally-due feeds.
+  const pending = [...feeds].sort(
+    (a, b) => (a.next_fetch_at ?? 0) - (b.next_fetch_at ?? 0)
+  );
+
+  // Bounded-concurrency worker pool with a per-host cap: avoid saturating the
+  // radio / DB on accounts with many subscriptions, and never burst multiple
+  // simultaneous requests at a single origin (rate limiters count bursts).
+  const hostInFlight = new Map<string, number>();
+  const waiters: Array<() => void> = [];
+
+  const hostLimit = (h: string): number =>
+    strictHosts.has(h) ? STRICT_HOST_CONCURRENCY : MAX_PER_HOST_CONCURRENCY;
+
+  /** Removes and returns the first pending feed whose host has a free slot,
+   *  or null when every remaining feed's host is saturated. */
+  const takeNext = (): Feed | null => {
+    for (let i = 0; i < pending.length; i++) {
+      const host = extractHost(pending[i].url);
+      if (!host || (hostInFlight.get(host) ?? 0) < hostLimit(host)) {
+        return pending.splice(i, 1)[0];
+      }
+    }
+    return null;
+  };
+
+  const wakeWaiters = () => {
+    while (waiters.length > 0) {
+      waiters.shift()!();
+    }
+  };
+
   const workers: Promise<void>[] = [];
   const workerCount = Math.min(concurrency, feeds.length);
   for (let i = 0; i < workerCount; i++) {
     workers.push(
       (async () => {
-        while (true) {
-          const index = cursor++;
-          if (index >= feeds.length) return;
-          await refreshOne(feeds[index]);
+        while (pending.length > 0) {
+          const feed = takeNext();
+          if (feed === null) {
+            // Every remaining feed's host is busy. Wait for any in-flight
+            // fetch to finish, then rescan. refreshOne always settles (it
+            // races a wall-clock timeout), so this cannot deadlock.
+            await new Promise<void>((resolve) => waiters.push(resolve));
+            continue;
+          }
+          const host = extractHost(feed.url);
+          if (host) hostInFlight.set(host, (hostInFlight.get(host) ?? 0) + 1);
+          try {
+            await refreshOne(feed);
+          } finally {
+            if (host) {
+              hostInFlight.set(host, (hostInFlight.get(host) ?? 1) - 1);
+            }
+            wakeWaiters();
+          }
         }
       })()
     );
