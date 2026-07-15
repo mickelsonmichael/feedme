@@ -146,6 +146,20 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [singleActiveIndex, setSingleActiveIndex] = useState(0);
+  // Snapshot of visibleItems / the "scope" (everything that legitimately
+  // resets singleActiveIndex to 0 — see the effect below) as of the last
+  // render where the single-layout resync logic ran. Lets a *silent*
+  // visibleItems reload (same scope, new array reference — e.g. a
+  // focus-regain re-query picking up a background-sync write) be
+  // distinguished from a *deliberate* scope/filter/sort/search/layout
+  // change, so the active post can be re-anchored by id only in the former
+  // case. See the resync block below the visibleItems memo.
+  const [singlePrevVisibleItems, setSinglePrevVisibleItems] = useState<
+    FeedItemWithFeed[]
+  >([]);
+  const [singlePrevScopeKey, setSinglePrevScopeKey] = useState<string | null>(
+    null
+  );
   const [showSingleMoreMenu, setShowSingleMoreMenu] = useState(false);
   const [singleToolbarHeight, setSingleToolbarHeight] = useState(0);
   const [showSingleFilters, setShowSingleFilters] = useState(false);
@@ -1027,6 +1041,62 @@ export default function FeedListScreen({ navigation, route }: Props) {
       (item) => filteredIds.has(item.id) || retainedUnreadIds.has(item.id)
     );
   }, [sortedItems, filter, savedIds, retainedUnreadIds]);
+
+  // Keep the active post anchored to its identity — not its raw position —
+  // across a silent visibleItems reload (focus-regain re-query, background
+  // sync landing new items, etc). Without this, singleActiveIndex is pure
+  // index arithmetic: if the list gets reordered underneath it (e.g. a new
+  // item shifts every other item's rank in "stacked" sort), the index keeps
+  // pointing at the same slot but a different post ends up there, and
+  // Previous/Next silently walk from the wrong post.
+  //
+  // This runs as a synchronous state adjustment during render (React's
+  // documented "adjusting state when a prop changes" pattern) rather than a
+  // useEffect, so that if the index needs correcting, it happens before this
+  // render's JSX (built from the stale index) ever commits/paints — an
+  // effect-based fix would flash the wrong post for one frame first.
+  if (feedLayout === "single") {
+    const singleScopeKey = [
+      feedLayout,
+      filter,
+      normalizedSearch,
+      selectedCustomFeedId,
+      selectedFeedId,
+      selectedTagId,
+      sort,
+    ].join(" ");
+
+    if (singleScopeKey !== singlePrevScopeKey) {
+      // Deliberate scope/filter/sort/search/layout change — the reset-to-0
+      // effect below owns this transition. Just record the new baseline.
+      setSinglePrevScopeKey(singleScopeKey);
+      setSinglePrevVisibleItems(visibleItems);
+    } else if (
+      visibleItems !== singlePrevVisibleItems &&
+      !singleSelectUnreadOnNextItemsRef.current
+    ) {
+      setSinglePrevVisibleItems(visibleItems);
+
+      const prevIndex =
+        singlePrevVisibleItems.length === 0
+          ? 0
+          : Math.min(singleActiveIndex, singlePrevVisibleItems.length - 1);
+      const prevActiveItem = singlePrevVisibleItems[prevIndex] ?? null;
+
+      if (prevActiveItem) {
+        const resyncedIndex = visibleItems.findIndex(
+          (item) => item.id === prevActiveItem.id
+        );
+        if (resyncedIndex !== -1 && resyncedIndex !== singleActiveIndex) {
+          setSingleActiveIndex(resyncedIndex);
+        }
+        // If not found (deleted/filtered out), leave singleActiveIndex as-is
+        // — the clamp effect below handles an out-of-bounds fallback.
+      }
+    } else if (visibleItems !== singlePrevVisibleItems) {
+      setSinglePrevVisibleItems(visibleItems);
+    }
+  }
 
   const singleSafeIndex =
     visibleItems.length === 0

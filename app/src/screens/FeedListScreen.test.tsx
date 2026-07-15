@@ -2,7 +2,7 @@ import React from "react";
 import { ScrollView, Text, TextInput, TouchableOpacity } from "react-native";
 import { Image } from "expo-image";
 import { FlashList } from "@shopify/flash-list";
-import { CompositeScreenProps } from "@react-navigation/native";
+import { CompositeScreenProps, useFocusEffect } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NSFW_BLUR_RADIUS } from "../theme";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -97,12 +97,12 @@ jest.mock("@expo/vector-icons", () => {
 });
 
 jest.mock("@react-navigation/native", () => ({
-  useFocusEffect: (callback: () => void) => {
+  useFocusEffect: jest.fn((callback: () => void) => {
     const React = require("react");
     React.useEffect(() => {
       callback();
     }, [callback]);
-  },
+  }),
   useIsFocused: () => true,
 }));
 
@@ -1427,6 +1427,274 @@ describe("FeedListScreen", () => {
         )
     ).toBe(true);
     expect(markItemRead).toHaveBeenCalledWith(603);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("keeps the same post active in single layout after a silent reload reorders the list", async () => {
+    // Arrange: "newest" sort keeps ordering fully deterministic from
+    // published_at, isolating this test from sortStacked's own behavior.
+    (loadConfig as jest.Mock).mockReturnValue({
+      feedLayout: "single",
+      defaultSort: "newest",
+    });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    const postA = {
+      id: 701,
+      feed_id: 1,
+      feed_title: "Alpha",
+      title: "Post A",
+      url: "https://alpha.example/a",
+      content: "<p>A</p>",
+      image_url: null,
+      published_at: 3_000,
+      read: 0,
+    };
+    const postB = {
+      id: 702,
+      feed_id: 1,
+      feed_title: "Alpha",
+      title: "Post B",
+      url: "https://alpha.example/b",
+      content: "<p>B</p>",
+      image_url: null,
+      published_at: 2_000,
+      read: 0,
+    };
+    const postC = {
+      id: 703,
+      feed_id: 1,
+      feed_title: "Alpha",
+      title: "Post C",
+      url: "https://alpha.example/c",
+      content: "<p>C</p>",
+      image_url: null,
+      published_at: 1_000,
+      read: 0,
+    };
+    const postD = {
+      id: 704,
+      feed_id: 1,
+      feed_title: "Alpha",
+      title: "Post D",
+      url: "https://alpha.example/d",
+      content: "<p>D</p>",
+      image_url: null,
+      published_at: 5_000,
+      read: 0,
+    };
+    (getItemsPage as jest.Mock)
+      // Initial mount query: newest-first is A, B, C.
+      .mockResolvedValueOnce([postA, postB, postC])
+      // Silent focus-regain re-query: a new post (D) landed in the feed
+      // (e.g. a background sync write), pushing B from index 1 to index 2.
+      .mockResolvedValueOnce([postD, postA, postB, postC]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-silent-reload",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act: mount, then advance to post B (index 1).
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const nextButtons = tree!.root.findAllByProps({
+      accessibilityLabel: "Next post",
+    });
+    await act(async () => {
+      await nextButtons[0].props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) => node.props.children === "Post B"
+        )
+    ).toBe(true);
+    (markItemRead as jest.Mock).mockClear();
+
+    // Act: simulate a real focus-regain (e.g. switching tabs away and back)
+    // firing with the *same* scope, exactly like the emulator repro — not a
+    // route/filter/sort change, and not the explicit pull-to-refresh path.
+    const focusEffectCalls = (useFocusEffect as jest.Mock).mock.calls;
+    const focusCallback = focusEffectCalls[
+      focusEffectCalls.length - 1
+    ][0] as () => void;
+    await act(async () => {
+      focusCallback();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert: still on post B, even though it moved from index 1 to index 2
+    // in the reloaded/reordered list.
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) => node.props.children === "Post B"
+        )
+    ).toBe(true);
+    // Post C (formerly at index 2, now at index 3) must never have been the
+    // committed "current" item — proof there was no one-frame flash of the
+    // wrong post before the resync applied.
+    expect(markItemRead).not.toHaveBeenCalledWith(postC.id);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("falls back to a nearby valid index when the active post disappears in a silent reload", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({
+      feedLayout: "single",
+      defaultSort: "newest",
+    });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    const postA = {
+      id: 801,
+      feed_id: 1,
+      feed_title: "Alpha",
+      title: "Post A",
+      url: "https://alpha.example/a2",
+      content: "<p>A</p>",
+      image_url: null,
+      published_at: 2_000,
+      read: 0,
+    };
+    const postB = {
+      id: 802,
+      feed_id: 1,
+      feed_title: "Alpha",
+      title: "Post B",
+      url: "https://alpha.example/b2",
+      content: "<p>B</p>",
+      image_url: null,
+      published_at: 1_000,
+      read: 0,
+    };
+    const postE = {
+      id: 803,
+      feed_id: 1,
+      feed_title: "Alpha",
+      title: "Post E",
+      url: "https://alpha.example/e2",
+      content: "<p>E</p>",
+      image_url: null,
+      published_at: 500,
+      read: 0,
+    };
+    (getItemsPage as jest.Mock)
+      // Initial mount query.
+      .mockResolvedValueOnce([postA, postB])
+      // Silent focus-regain re-query: post B (the active one) is gone.
+      .mockResolvedValueOnce([postA, postE]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-silent-reload-gone",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act: mount, then advance to post B (index 1).
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const nextButtons = tree!.root.findAllByProps({
+      accessibilityLabel: "Next post",
+    });
+    await act(async () => {
+      await nextButtons[0].props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) => node.props.children === "Post B"
+        )
+    ).toBe(true);
+
+    // Act: silent refocus where the active post is no longer present.
+    const focusEffectCalls = (useFocusEffect as jest.Mock).mock.calls;
+    const focusCallback = focusEffectCalls[
+      focusEffectCalls.length - 1
+    ][0] as () => void;
+    await act(async () => {
+      focusCallback();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert: no crash, and it lands on a still-valid post rather than a
+    // blank screen — the clamp effect's existing fallback behavior.
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) => node.props.children === "Post B"
+        )
+    ).toBe(false);
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) =>
+            node.props.children === "Post A" || node.props.children === "Post E"
+        )
+    ).toBe(true);
 
     await act(async () => {
       tree!.unmount();
