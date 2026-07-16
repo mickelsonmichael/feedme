@@ -72,7 +72,15 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
-  const { feedId } = route.params;
+  const { feedId, returnToItem } = route.params;
+
+  const handleBack = useCallback(() => {
+    if (returnToItem) {
+      navigation.navigate("FeedItemView", { item: returnToItem });
+    } else {
+      navigation.navigate("Feeds");
+    }
+  }, [navigation, returnToItem]);
 
   const [feed, setFeed] = useState<Feed | null>(null);
   const [publishedAts, setPublishedAts] = useState<number[]>([]);
@@ -242,7 +250,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
     const doDelete = async () => {
       try {
         await deleteFeed(feedId);
-        navigation.navigate("Feeds");
+        handleBack();
       } catch (err) {
         const errMsg = "Could not delete feed: " + (err as Error).message;
         if (Platform.OS === "web") {
@@ -335,7 +343,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
       {!isDesktopWeb ? (
         <View style={[styles.topBar, { borderBottomColor: colors.inkFaint }]}>
           <TouchableOpacity
-            onPress={() => navigation.navigate("Feeds")}
+            onPress={handleBack}
             hitSlop={8}
             style={styles.iconBtn}
             accessibilityLabel="Go back"
@@ -405,7 +413,7 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.actionBtn, { borderColor: colors.border }]}
-                onPress={() => navigation.navigate("Feeds")}
+                onPress={handleBack}
                 activeOpacity={0.7}
                 accessibilityLabel="Back"
               >
