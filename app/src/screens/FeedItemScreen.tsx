@@ -23,6 +23,7 @@ import {
   addFeed,
   deleteFeed,
   getFeedByUrl,
+  getFeedItemWithFeedById,
 } from "../database";
 import { getItemRawXml } from "../database";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -146,6 +147,23 @@ export default function FeedItemScreen({ route, navigation }: Props) {
 
   const handleOpenContentLink = (url: string) => {
     openUrlWithPreference({ url, navigation, title: item.title });
+  };
+
+  const handleEditFeed = async () => {
+    if (item.itemId === null) return;
+    try {
+      const feedItem = await getFeedItemWithFeedById(item.itemId);
+      if (!feedItem) {
+        Alert.alert("Error", "Could not find the feed for this post.");
+        return;
+      }
+      navigation.navigate("FeedDetail", {
+        feedId: feedItem.feed_id,
+        returnToItem: item,
+      });
+    } catch {
+      Alert.alert("Error", "Could not find the feed for this post.");
+    }
   };
 
   const handleToggleSave = async () => {
@@ -389,6 +407,25 @@ export default function FeedItemScreen({ route, navigation }: Props) {
               <Feather name="code" size={16} color={colors.ink} />
               <Text style={[styles.moreMenuItemText, { color: colors.ink }]}>
                 View XML
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[
+                styles.moreMenuItem,
+                { borderBottomColor: colors.border },
+              ]}
+              onPress={() => {
+                handleEditFeed();
+                setShowMoreMenu(false);
+              }}
+              disabled={item.itemId === null}
+              activeOpacity={0.7}
+              accessibilityLabel="Edit Feed"
+            >
+              <Feather name="edit-2" size={16} color={colors.ink} />
+              <Text style={[styles.moreMenuItemText, { color: colors.ink }]}>
+                Edit Feed
               </Text>
             </TouchableOpacity>
 

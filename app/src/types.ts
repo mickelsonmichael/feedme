@@ -154,27 +154,27 @@ export type ParsedFeedItem = {
   publishedAt: number | null;
 };
 
+export type FeedItemViewItem = {
+  itemId: number | null;
+  title: string;
+  url: string | null;
+  content: string | null;
+  imageUrl: string | null;
+  publishedAt: number | null;
+  feedTitle: string;
+  read: number;
+  useProxy?: boolean;
+  nsfw?: boolean;
+};
+
 export type RootStackParamList = {
   Tabs: undefined;
   AddFeed: { from?: string; customFeedId?: number } | undefined;
   CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
   CustomFeedManage: { customFeedId: number; from?: string };
   FeedItems: { feed: Feed };
-  FeedItemView: {
-    item: {
-      itemId: number | null;
-      title: string;
-      url: string | null;
-      content: string | null;
-      imageUrl: string | null;
-      publishedAt: number | null;
-      feedTitle: string;
-      read: number;
-      useProxy?: boolean;
-      nsfw?: boolean;
-    };
-  };
-  FeedDetail: { feedId: number };
+  FeedItemView: { item: FeedItemViewItem };
+  FeedDetail: { feedId: number; returnToItem?: FeedItemViewItem };
   TagDetail: { tagId?: number; from?: string } | undefined;
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
@@ -204,21 +204,8 @@ export type TabParamList = {
   CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
   CustomFeedManage: { customFeedId: number; from?: string };
   FeedItems: { feed: Feed };
-  FeedItemView: {
-    item: {
-      itemId: number | null;
-      title: string;
-      url: string | null;
-      content: string | null;
-      imageUrl: string | null;
-      publishedAt: number | null;
-      feedTitle: string;
-      read: number;
-      useProxy?: boolean;
-      nsfw?: boolean;
-    };
-  };
-  FeedDetail: { feedId: number };
+  FeedItemView: { item: FeedItemViewItem };
+  FeedDetail: { feedId: number; returnToItem?: FeedItemViewItem };
   TagDetail: { tagId?: number; from?: string } | undefined;
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };

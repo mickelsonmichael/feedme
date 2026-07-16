@@ -1,5 +1,5 @@
 import React from "react";
-import { Text } from "react-native";
+import { Alert, Text } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedItemScreen from "../screens/FeedItemScreen";
@@ -8,6 +8,7 @@ import {
   addToReadLater,
   getReadLaterItemIds,
   getSavedItemIds,
+  getFeedItemWithFeedById,
   markItemRead,
   markItemUnread,
   removeFromReadLater,
@@ -20,6 +21,7 @@ jest.mock("../database", () => ({
   addToReadLater: jest.fn(),
   getReadLaterItemIds: jest.fn(),
   getSavedItemIds: jest.fn(),
+  getFeedItemWithFeedById: jest.fn(),
   markItemRead: jest.fn(),
   markItemUnread: jest.fn(),
   removeFromReadLater: jest.fn(),
@@ -84,6 +86,7 @@ function buildProps(read = 0): Props {
   return {
     navigation: {
       goBack: jest.fn(),
+      navigate: jest.fn(),
       setOptions: jest.fn(),
     } as unknown as Props["navigation"],
     route: {
@@ -102,6 +105,23 @@ function buildProps(read = 0): Props {
         },
       },
     } as Props["route"],
+  };
+}
+
+function buildPropsWithItemId(itemId: number | null): Props {
+  const props = buildProps();
+  return {
+    ...props,
+    route: {
+      ...props.route,
+      params: {
+        ...props.route.params,
+        item: {
+          ...props.route.params.item,
+          itemId,
+        },
+      },
+    },
   };
 }
 
@@ -132,6 +152,18 @@ describe("FeedItemScreen", () => {
     (unsavePost as jest.Mock).mockResolvedValue(undefined);
     (addToReadLater as jest.Mock).mockResolvedValue(undefined);
     (removeFromReadLater as jest.Mock).mockResolvedValue(undefined);
+    (getFeedItemWithFeedById as jest.Mock).mockResolvedValue({
+      id: 22,
+      feed_id: 5,
+      title: "Test title",
+      url: "https://example.com/item",
+      content: "<p>Test content</p>",
+      image_url: null,
+      raw_xml: null,
+      published_at: 1_700_000_000_000,
+      read: 1,
+      feed_title: "Test Feed",
+    });
     (openUrlWithPreference as jest.Mock).mockClear();
   });
 
@@ -317,6 +349,113 @@ describe("FeedItemScreen", () => {
     expect(String(htmlNode!.props.children)).toContain("HTML:<p>Hello</p>");
     expect(String(htmlNode!.props.children)).not.toContain("<script>");
     expect(String(htmlNode!.props.children)).toContain('href="#"');
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("navigates to Edit Feed with the resolved feedId and the post to return to", async () => {
+    // Arrange
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedItemScreen {...props} />);
+      await Promise.resolve();
+    });
+
+    const moreButton = tree!.root.findByProps({
+      accessibilityLabel: "More options",
+    });
+    await act(async () => {
+      moreButton.props.onPress();
+    });
+
+    const editFeedButton = tree!.root.findByProps({
+      accessibilityLabel: "Edit Feed",
+    });
+
+    // Act
+    await act(async () => {
+      await editFeedButton.props.onPress();
+    });
+
+    // Assert
+    expect(getFeedItemWithFeedById).toHaveBeenCalledWith(22);
+    expect(props.navigation.navigate).toHaveBeenCalledWith("FeedDetail", {
+      feedId: 5,
+      returnToItem: props.route.params.item,
+    });
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("disables Edit Feed when the post has no live item id", async () => {
+    // Arrange
+    const props = buildPropsWithItemId(null);
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedItemScreen {...props} />);
+      await Promise.resolve();
+    });
+
+    const moreButton = tree!.root.findByProps({
+      accessibilityLabel: "More options",
+    });
+    await act(async () => {
+      moreButton.props.onPress();
+    });
+
+    const editFeedButton = tree!.root.findByProps({
+      accessibilityLabel: "Edit Feed",
+    });
+
+    // Assert
+    expect(editFeedButton.props.disabled).toBe(true);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows an error and does not navigate when the feed can no longer be found", async () => {
+    // Arrange
+    (getFeedItemWithFeedById as jest.Mock).mockResolvedValue(null);
+    jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedItemScreen {...props} />);
+      await Promise.resolve();
+    });
+
+    const moreButton = tree!.root.findByProps({
+      accessibilityLabel: "More options",
+    });
+    await act(async () => {
+      moreButton.props.onPress();
+    });
+
+    const editFeedButton = tree!.root.findByProps({
+      accessibilityLabel: "Edit Feed",
+    });
+
+    // Act
+    await act(async () => {
+      await editFeedButton.props.onPress();
+    });
+
+    // Assert
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Error",
+      "Could not find the feed for this post."
+    );
+    expect(props.navigation.navigate).not.toHaveBeenCalled();
 
     await act(async () => {
       tree!.unmount();
