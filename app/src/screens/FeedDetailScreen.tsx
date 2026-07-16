@@ -670,9 +670,8 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
                     include comments
                   </Text>
                   <Text style={[styles.proxyHint, { color: colors.inkFaint }]}>
-                    Pull this user&apos;s comments in addition to their
-                    posts. Off by default, so the feed only shows what they
-                    submitted.
+                    Pull this user&apos;s comments in addition to their posts.
+                    Off by default, so the feed only shows what they submitted.
                   </Text>
                 </View>
                 <Switch

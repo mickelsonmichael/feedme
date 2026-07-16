@@ -26,6 +26,7 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import FeedListScreen from "./src/screens/FeedListScreen";
 import AddFeedScreen from "./src/screens/AddFeedScreen";
 import FeedItemsScreen from "./src/screens/FeedItemsScreen";
@@ -778,17 +779,19 @@ function AppContent() {
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <ThemeProvider>
-        <HeaderContentProvider>
-          <FeedScrollProvider>
-            <ErrorBoundary>
-              <AppContent />
-            </ErrorBoundary>
-          </FeedScrollProvider>
-        </HeaderContentProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.root}>
+      <SafeAreaProvider>
+        <ThemeProvider>
+          <HeaderContentProvider>
+            <FeedScrollProvider>
+              <ErrorBoundary>
+                <AppContent />
+              </ErrorBoundary>
+            </FeedScrollProvider>
+          </HeaderContentProvider>
+        </ThemeProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 

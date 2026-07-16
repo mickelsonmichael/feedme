@@ -86,6 +86,8 @@ import { openUrlWithPreference } from "../linkOpening";
 import { resolveCustomFeedIcon } from "../customFeedIcons";
 import { FeedItemContent, formatDate } from "../components/FeedItemContent";
 import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { resolveSingleSwipeDirection } from "../singleSwipeDirection";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -1347,6 +1349,26 @@ export default function FeedListScreen({ navigation, route }: Props) {
     visibleItems.length,
   ]);
 
+  const singleSwipeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-20, 20])
+        .failOffsetY([-10, 10])
+        .onEnd((e) => {
+          const direction = resolveSingleSwipeDirection(
+            e.translationX,
+            e.translationY,
+            e.velocityX
+          );
+          if (direction === "next") {
+            handleSingleNext();
+          } else if (direction === "previous") {
+            handleSinglePrevious();
+          }
+        }),
+    [handleSingleNext, handleSinglePrevious]
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: CollapsedFeedListRow }) => {
       if (isGroupDivider(item)) {
@@ -2050,97 +2072,117 @@ export default function FeedListScreen({ navigation, route }: Props) {
           ) : null}
 
           {/* Scrollable content */}
-          <ScrollView
-            ref={singleScrollRef}
-            contentContainerStyle={[
-              styles.content,
-              isDesktopWeb ? styles.desktopContent : null,
-            ]}
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefreshAll}
-                colors={[colors.accent]}
-                tintColor={colors.accent}
-              />
-            }
-            onScroll={handleScroll}
-            scrollEventThrottle={64}
-            showsVerticalScrollIndicator={false}
-          >
-            <View
-              style={[
-                styles.singleInner,
-                isDesktopWeb ? styles.singleDesktopInner : null,
-              ]}
-            >
-              <View style={styles.singlePostHeader}>
-                <Text
-                  style={[styles.singlePostMeta, { color: colors.inkSoft }]}
-                >
-                  {currentSingleItem.feed_title} -{" "}
-                  {formatDate(currentSingleItem.published_at)}
-                </Text>
-                <Text style={[styles.singlePostTitle, { color: colors.ink }]}>
-                  {currentSingleItem.title}
-                </Text>
-              </View>
-              <View
-                style={[
-                  styles.singlePostSeparator,
-                  { backgroundColor: colors.border },
+          {(() => {
+            const singleScrollView = (
+              <ScrollView
+                ref={singleScrollRef}
+                contentContainerStyle={[
+                  styles.content,
+                  isDesktopWeb ? styles.desktopContent : null,
                 ]}
-              />
-              {isSingleItemNsfw ? (
-                <TouchableOpacity
-                  onPress={() => setSingleNsfwRevealed((v) => !v)}
-                  style={[styles.singleNsfwRevealButton]}
-                  activeOpacity={0.7}
-                  accessibilityLabel={
-                    singleNsfwRevealed
-                      ? "Hide NSFW content"
-                      : "Reveal NSFW content"
-                  }
-                  accessibilityRole="button"
-                >
-                  <Text
-                    style={[
-                      styles.singleNsfwRevealText,
-                      { color: colors.inkSoft },
-                    ]}
-                  >
-                    {singleNsfwRevealed ? "Hide NSFW" : "Reveal NSFW"}
-                  </Text>
-                  <Feather
-                    name={singleNsfwRevealed ? "chevron-up" : "chevron-down"}
-                    size={16}
-                    color={colors.inkSoft}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={handleRefreshAll}
+                    colors={[colors.accent]}
+                    tintColor={colors.accent}
                   />
-                </TouchableOpacity>
-              ) : null}
-
-              {isSingleItemNsfw && !singleNsfwRevealed ? (
-                <View style={styles.singleNsfwPlaceholder}>
-                  <Feather name="eye-off" size={48} color={colors.inkFaint} />
-                  <Text
+                }
+                onScroll={handleScroll}
+                scrollEventThrottle={64}
+                showsVerticalScrollIndicator={false}
+              >
+                <View
+                  style={[
+                    styles.singleInner,
+                    isDesktopWeb ? styles.singleDesktopInner : null,
+                  ]}
+                >
+                  <View style={styles.singlePostHeader}>
+                    <Text
+                      style={[styles.singlePostMeta, { color: colors.inkSoft }]}
+                    >
+                      {currentSingleItem.feed_title} -{" "}
+                      {formatDate(currentSingleItem.published_at)}
+                    </Text>
+                    <Text
+                      style={[styles.singlePostTitle, { color: colors.ink }]}
+                    >
+                      {currentSingleItem.title}
+                    </Text>
+                  </View>
+                  <View
                     style={[
-                      styles.singleNsfwPlaceholderText,
-                      { color: colors.inkFaint },
+                      styles.singlePostSeparator,
+                      { backgroundColor: colors.border },
                     ]}
-                  >
-                    NSFW content hidden
-                  </Text>
+                  />
+                  {isSingleItemNsfw ? (
+                    <TouchableOpacity
+                      onPress={() => setSingleNsfwRevealed((v) => !v)}
+                      style={[styles.singleNsfwRevealButton]}
+                      activeOpacity={0.7}
+                      accessibilityLabel={
+                        singleNsfwRevealed
+                          ? "Hide NSFW content"
+                          : "Reveal NSFW content"
+                      }
+                      accessibilityRole="button"
+                    >
+                      <Text
+                        style={[
+                          styles.singleNsfwRevealText,
+                          { color: colors.inkSoft },
+                        ]}
+                      >
+                        {singleNsfwRevealed ? "Hide NSFW" : "Reveal NSFW"}
+                      </Text>
+                      <Feather
+                        name={
+                          singleNsfwRevealed ? "chevron-up" : "chevron-down"
+                        }
+                        size={16}
+                        color={colors.inkSoft}
+                      />
+                    </TouchableOpacity>
+                  ) : null}
+
+                  {isSingleItemNsfw && !singleNsfwRevealed ? (
+                    <View style={styles.singleNsfwPlaceholder}>
+                      <Feather
+                        name="eye-off"
+                        size={48}
+                        color={colors.inkFaint}
+                      />
+                      <Text
+                        style={[
+                          styles.singleNsfwPlaceholderText,
+                          { color: colors.inkFaint },
+                        ]}
+                      >
+                        NSFW content hidden
+                      </Text>
+                    </View>
+                  ) : (
+                    <FeedItemContent
+                      item={currentSingleViewItem}
+                      bionicReading={bionicReading}
+                      onOpenContentLink={handleOpenContentLink}
+                      includeRedditCommentsInLinks
+                    />
+                  )}
                 </View>
-              ) : (
-                <FeedItemContent
-                  item={currentSingleViewItem}
-                  bionicReading={bionicReading}
-                  onOpenContentLink={handleOpenContentLink}
-                  includeRedditCommentsInLinks
-                />
-              )}
-            </View>
-          </ScrollView>
+              </ScrollView>
+            );
+
+            return isWeb ? (
+              singleScrollView
+            ) : (
+              <GestureDetector gesture={singleSwipeGesture}>
+                {singleScrollView}
+              </GestureDetector>
+            );
+          })()}
         </View>
       ) : (
         <FlashList

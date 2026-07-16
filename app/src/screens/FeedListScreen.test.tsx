@@ -1,5 +1,12 @@
 import React from "react";
-import { ScrollView, Text, TextInput, TouchableOpacity } from "react-native";
+import {
+  Platform,
+  ScrollView,
+  Text,
+  TextInput,
+  TouchableOpacity,
+} from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
 import { Image } from "expo-image";
 import { FlashList } from "@shopify/flash-list";
 import { CompositeScreenProps, useFocusEffect } from "@react-navigation/native";
@@ -58,19 +65,21 @@ jest.mock("../storage", () => ({
   saveConfig: jest.fn(),
 }));
 
+const mockThemeColors = {
+  paper: "#faf8f3",
+  paperWarm: "#efeae0",
+  ink: "#1e1a3a",
+  inkSoft: "#6a6487",
+  inkFaint: "#b8b2cc",
+  accent: "#3d358f",
+  accentSoft: "#7e78c4",
+  highlight: "#ffe27a",
+  danger: "#b44b4b",
+};
+
 jest.mock("../context/ThemeContext", () => ({
   useTheme: () => ({
-    colors: {
-      paper: "#faf8f3",
-      paperWarm: "#efeae0",
-      ink: "#1e1a3a",
-      inkSoft: "#6a6487",
-      inkFaint: "#b8b2cc",
-      accent: "#3d358f",
-      accentSoft: "#7e78c4",
-      highlight: "#ffe27a",
-      danger: "#b44b4b",
-    },
+    colors: mockThemeColors,
   }),
 }));
 
@@ -1018,6 +1027,268 @@ describe("FeedListScreen", () => {
     await act(async () => {
       tree!.unmount();
     });
+  });
+
+  it("advances to the next post when swiping left in single layout on native", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue(makeItems(2, 601));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-swipe-native",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const gestureDetector = tree!.root.findByType(GestureDetector);
+    const gesture = gestureDetector.props.gesture as {
+      handlers: { onEnd: (event: unknown) => void };
+    };
+
+    await act(async () => {
+      gesture.handlers.onEnd({
+        translationX: -100,
+        translationY: 0,
+        velocityX: -900,
+      });
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) =>
+            node.props.children === "Post 602"
+        )
+    ).toBe(true);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("returns to the previous post when swiping right in single layout on native", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue(makeItems(2, 701));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-swipe-native-prev",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const gestureDetectorForward = tree!.root.findByType(GestureDetector);
+
+    await act(async () => {
+      (
+        gestureDetectorForward.props.gesture as {
+          handlers: { onEnd: (event: unknown) => void };
+        }
+      ).handlers.onEnd({
+        translationX: -100,
+        translationY: 0,
+        velocityX: -900,
+      });
+      await Promise.resolve();
+    });
+
+    const gestureDetectorBack = tree!.root.findByType(GestureDetector);
+
+    await act(async () => {
+      (
+        gestureDetectorBack.props.gesture as {
+          handlers: { onEnd: (event: unknown) => void };
+        }
+      ).handlers.onEnd({ translationX: 100, translationY: 0, velocityX: 900 });
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) =>
+            node.props.children === "Post 701"
+        )
+    ).toBe(true);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("ignores a mostly-vertical drag in single layout on native", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue(makeItems(2, 801));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-swipe-vertical",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const gestureDetector = tree!.root.findByType(GestureDetector);
+
+    await act(async () => {
+      (
+        gestureDetector.props.gesture as {
+          handlers: { onEnd: (event: unknown) => void };
+        }
+      ).handlers.onEnd({
+        translationX: -100,
+        translationY: 200,
+        velocityX: -900,
+      });
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(
+      tree!.root
+        .findAllByType(Text)
+        .some(
+          (node: renderer.ReactTestInstance) =>
+            node.props.children === "Post 801"
+        )
+    ).toBe(true);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("does not render a swipe GestureDetector in single layout on web", async () => {
+    // Arrange
+    const originalPlatformOS = Platform.OS;
+    Platform.OS = "web";
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue(makeItems(2, 901));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-swipe-web",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    try {
+      // Act
+      await act(async () => {
+        tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Assert
+      expect(tree!.root.findAllByType(GestureDetector)).toHaveLength(0);
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    } finally {
+      Platform.OS = originalPlatformOS;
+    }
   });
 
   it("blurs compact thumbnails for NSFW feeds", async () => {

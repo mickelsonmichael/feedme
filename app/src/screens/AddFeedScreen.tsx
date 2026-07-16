@@ -636,17 +636,15 @@ export default function AddFeedScreen({ navigation, route }: Props) {
                   </Text>
                   <View style={styles.toggleRow}>
                     <View style={styles.toggleLabelGroup}>
-                      <Text
-                        style={[styles.label, { color: colors.inkSoft }]}
-                      >
+                      <Text style={[styles.label, { color: colors.inkSoft }]}>
                         include comments
                       </Text>
                       <Text
                         style={[styles.hintText, { color: colors.inkFaint }]}
                       >
                         Pull this user&apos;s comments in addition to their
-                        posts. Off by default, so the feed only shows what
-                        they submitted.
+                        posts. Off by default, so the feed only shows what they
+                        submitted.
                       </Text>
                     </View>
                     <Switch
