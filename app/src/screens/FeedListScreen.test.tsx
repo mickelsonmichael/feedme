@@ -484,6 +484,65 @@ describe("FeedListScreen", () => {
     });
   });
 
+  it("auto-refreshes on mobile cold start when the local cache is empty", async () => {
+    // Arrange - simulates a fresh install: feeds exist, but nothing has been
+    // cached to SQLite yet, so the first local page query comes back empty.
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock)
+      .mockResolvedValueOnce([])
+      .mockResolvedValue(
+        makeItems(1, 200, 1, "Alpha").map((item) => ({
+          ...item,
+          title: "Fetched after cold-start refresh",
+        }))
+      );
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-mobile-cold-start",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert - an empty cache on mobile triggers a remote refresh even
+    // without a manual pull-to-refresh, and the refreshed items land.
+    expect(refreshFeeds).toHaveBeenCalledTimes(1);
+    const texts = tree!.root.findAllByType(Text);
+    expect(
+      texts.some((t) =>
+        t.props.children === "Fetched after cold-start refresh"
+      )
+    ).toBe(true);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
   it("opens the original post from the main feed row action", async () => {
     // Arrange
     (getFeeds as jest.Mock).mockResolvedValue([

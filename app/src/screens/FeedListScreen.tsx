@@ -389,9 +389,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
         scopeRef.current = { feedIds: scopeFeedIds, excludeFeedIds };
 
         // Query the local database for the current scope and commit the
-        // results if this loadData call is still the latest one. Returns
-        // whether the commit happened.
-        const queryAndCommitPage = async (): Promise<boolean> => {
+        // results if this loadData call is still the latest one. Returns the
+        // number of items committed, or null if this call was superseded.
+        const queryAndCommitPage = async (): Promise<number | null> => {
           const [itemData, ids, readLaterIdsLoaded] = await Promise.all([
             getItemsPage({
               feedIds: scopeFeedIds,
@@ -404,31 +404,48 @@ export default function FeedListScreen({ navigation, route }: Props) {
             getReadLaterItemIds(),
           ]);
           if (loadGenerationRef.current !== generation) {
-            return false;
+            return null;
           }
           setItems(itemData);
           setHasMore(itemData.length === PAGE_SIZE);
           setSavedIds(ids);
           setReadLaterIds(readLaterIdsLoaded);
-          return true;
+          return itemData.length;
         };
 
         // Stale-while-revalidate: always render whatever is cached locally
         // first, so the user sees content immediately instead of staring at a
         // spinner while dozens of network fetches complete. The remote
         // refresh below then updates the list in place when it finishes.
+        const firstPageCount = await queryAndCommitPage();
+        const committedFirstPage = firstPageCount !== null;
+
+        // Cold-start edge case: the local cache had nothing for this scope
+        // yet (fresh install, or the background sync task hasn't run since
+        // install). Mobile normally only refreshes on an explicit
+        // pull-to-refresh (see refreshRemote/shouldRefreshOnFocus above), so
+        // without this the user would land on the empty state and need to
+        // manually refresh to ever see content. Force a remote refresh in
+        // that case, same as a manual refresh would.
+        const forceRefreshEmptyCache =
+          committedFirstPage && firstPageCount === 0 && feedsToRefresh.length > 0;
+
         // Only clear the skeleton if this call's page actually committed —
         // if a newer loadData call has already superseded this one, letting
         // this stale call clear `loading` would hide the skeleton before the
-        // newer call's items have landed.
-        const committedFirstPage = await queryAndCommitPage();
-        if (committedFirstPage) {
+        // newer call's items have landed. When forcing a refresh of an empty
+        // cache, keep the skeleton up until that refresh lands instead of
+        // flashing the empty state first.
+        if (committedFirstPage && !forceRefreshEmptyCache) {
           setLoading(false);
         }
 
-        if (!refreshRemote) {
+        if (!refreshRemote && !forceRefreshEmptyCache) {
           setRefreshProgress(null);
         } else if (feedsToRefresh.length > 0) {
+          if (forceRefreshEmptyCache) {
+            setRefreshing(true);
+          }
           setRefreshProgress({
             total: feedsToRefresh.length,
             completed: 0,
