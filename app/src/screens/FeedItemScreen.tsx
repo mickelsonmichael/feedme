@@ -37,6 +37,7 @@ import {
   formatDate,
   isRedditCommentsUrl,
 } from "../components/FeedItemContent";
+import { FeedIcon } from "../components/FeedIcon";
 import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
@@ -499,9 +500,12 @@ export default function FeedItemScreen({ route, navigation }: Props) {
             isDesktopWeb ? styles.desktopItemHeader : null,
           ]}
         >
-          <Text style={[styles.itemMeta, { color: colors.inkSoft }]}>
-            {item.feedTitle} - {formatDate(item.publishedAt)}
-          </Text>
+          <View style={styles.itemMetaRow}>
+            <FeedIcon feedUrl={item.feedUrl} />
+            <Text style={[styles.itemMeta, { color: colors.inkSoft }]}>
+              {item.feedTitle} - {formatDate(item.publishedAt)}
+            </Text>
+          </View>
           <Text style={[styles.itemTitle, { color: colors.ink }]}>
             {item.title}
           </Text>
@@ -594,6 +598,11 @@ const styles = StyleSheet.create({
   },
   desktopItemHeader: {
     maxWidth: 920,
+  },
+  itemMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
   },
   itemMeta: {
     fontFamily: fonts.sans,

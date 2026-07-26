@@ -167,13 +167,14 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           imageUrl: item.image_url,
           publishedAt: item.published_at,
           feedTitle: feed.title,
+          feedUrl: feed.url,
           read: item.read,
           useProxy: feed.use_proxy === 1,
           nsfw: feed.nsfw === 1,
         },
       });
     },
-    [feed.title, feed.use_proxy, feed.nsfw, navigation]
+    [feed.title, feed.url, feed.use_proxy, feed.nsfw, navigation]
   );
 
   const handleOpenContentLink = useCallback(

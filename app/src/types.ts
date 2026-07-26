@@ -162,6 +162,7 @@ export type FeedItemViewItem = {
   imageUrl: string | null;
   publishedAt: number | null;
   feedTitle: string;
+  feedUrl?: string | null;
   read: number;
   useProxy?: boolean;
   nsfw?: boolean;
