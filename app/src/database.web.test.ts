@@ -13,6 +13,7 @@ import {
   addTag,
   addToReadLater,
   deleteFeed,
+  deleteRedditCommentItems,
   deleteTag,
   getAllItems,
   getFeeds,
@@ -346,6 +347,94 @@ describe("database.web — items", () => {
     const otherItems = await getItemsForFeed(otherFeedId);
     expect(otherItems).toHaveLength(1);
     expect(otherItems[0].title).toBe("c");
+  });
+});
+
+describe("database.web — deleteRedditCommentItems", () => {
+  let feedId: number;
+  let otherFeedId: number;
+
+  beforeEach(async () => {
+    feedId = await addFeed({
+      title: "Reddit user feed",
+      url: "https://www.reddit.com/user/spez.rss",
+      description: null,
+    });
+    otherFeedId = await addFeed({
+      title: "Other feed",
+      url: "https://www.reddit.com/user/other.rss",
+      description: null,
+    });
+  });
+
+  it("deletes only comment items (t1_ ids) for the given feed", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      {
+        title: "Comment on a post",
+        url: "https://reddit.com/comments/1/post/abc/",
+        content: null,
+        rawXml: "<entry><id>t1_abc</id></entry>",
+        publishedAt: 1000,
+      },
+      {
+        title: "Submitted post",
+        url: "https://reddit.com/comments/1/post/",
+        content: null,
+        rawXml: "<entry><id>t3_1</id></entry>",
+        publishedAt: 900,
+      },
+      {
+        title: "No raw XML",
+        url: "https://reddit.com/comments/2/other/",
+        content: null,
+        publishedAt: 800,
+      },
+    ]);
+    await upsertItems(otherFeedId, [
+      {
+        title: "Comment on the other feed",
+        url: "https://reddit.com/comments/9/post/xyz/",
+        content: null,
+        rawXml: "<entry><id>t1_xyz</id></entry>",
+        publishedAt: 700,
+      },
+    ]);
+
+    // Act
+    await deleteRedditCommentItems(feedId);
+
+    // Assert: the comment item is gone, the post and unknown item remain
+    const remaining = await getItemsForFeed(feedId);
+    expect(remaining.map((i) => i.title).sort()).toEqual([
+      "No raw XML",
+      "Submitted post",
+    ]);
+
+    // Assert: the other feed's items are untouched
+    const otherItems = await getItemsForFeed(otherFeedId);
+    expect(otherItems).toHaveLength(1);
+    expect(otherItems[0].title).toBe("Comment on the other feed");
+  });
+
+  it("is a no-op when the feed has no comment items", async () => {
+    // Arrange
+    await upsertItems(feedId, [
+      {
+        title: "Submitted post",
+        url: "https://reddit.com/comments/1/post/",
+        content: null,
+        rawXml: "<entry><id>t3_1</id></entry>",
+        publishedAt: 900,
+      },
+    ]);
+
+    // Act
+    await deleteRedditCommentItems(feedId);
+
+    // Assert
+    const remaining = await getItemsForFeed(feedId);
+    expect(remaining).toHaveLength(1);
   });
 });
 

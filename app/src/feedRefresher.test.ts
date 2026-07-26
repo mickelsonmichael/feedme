@@ -20,6 +20,7 @@ jest.mock("./feedParser", () => {
 
 jest.mock("./database", () => ({
   upsertItems: jest.fn(),
+  deleteRedditCommentItems: jest.fn(),
   updateFeedLastFetched: jest.fn(),
   updateFeedCacheValidators: jest.fn(),
   setFeedError: jest.fn(),
@@ -68,6 +69,10 @@ const mockUpdateFeedRateLimitInfo =
   database.updateFeedRateLimitInfo as jest.MockedFunction<
     typeof database.updateFeedRateLimitInfo
   >;
+const mockDeleteRedditCommentItems =
+  database.deleteRedditCommentItems as jest.MockedFunction<
+    typeof database.deleteRedditCommentItems
+  >;
 
 const makeFeed = (id: number, overrides: Partial<Feed> = {}): Feed => ({
   id,
@@ -111,6 +116,7 @@ beforeEach(() => {
   mockSetFeedRefreshFailure.mockResolvedValue(undefined);
   mockGetRecentPublishedAtForFeed.mockResolvedValue([]);
   mockUpdateFeedRateLimitInfo.mockResolvedValue(undefined);
+  mockDeleteRedditCommentItems.mockResolvedValue(undefined);
 });
 
 describe("refreshFeeds", () => {
@@ -862,6 +868,93 @@ describe("refreshFeeds", () => {
         expect.objectContaining({ failed: 1, skipped: 2, completed: 3 })
       );
     });
+  });
+});
+
+describe("refreshFeeds — Reddit comment exclusion", () => {
+  const redditPostItem: ParsedFeedItem = {
+    title: "Submitted post",
+    url: "https://reddit.com/r/u_spez/comments/1/post/",
+    content: "body",
+    rawXml: "<entry><id>t3_1</id></entry>",
+    publishedAt: 1000,
+  };
+  const redditCommentItem: ParsedFeedItem = {
+    title: "Comment on a post",
+    url: "https://reddit.com/r/u_spez/comments/1/post/abc/",
+    content: "comment body",
+    rawXml: "<entry><id>t1_abc</id></entry>",
+    publishedAt: 900,
+  };
+
+  it("filters out comment items and prunes stale ones when the feed excludes comments", async () => {
+    // Arrange — a Reddit user feed whose stored URL still points at the
+    // comments-inclusive overview endpoint (e.g. pasted directly, or a
+    // pre-existing feed from before the toggle existed), with the
+    // "include comments" setting off.
+    const feed = makeFeed(1, {
+      url: "https://www.reddit.com/user/spez.rss",
+      reddit_include_comments: 0,
+    });
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [redditCommentItem, redditPostItem],
+      usedProxy: false,
+      notModified: false,
+      etag: null,
+      lastModified: null,
+    });
+
+    // Act
+    await refreshFeeds([feed]);
+
+    // Assert — only the submitted post is upserted, and stale comment items
+    // already in the DB are pruned.
+    expect(mockUpsertItems).toHaveBeenCalledWith(1, [redditPostItem]);
+    expect(mockDeleteRedditCommentItems).toHaveBeenCalledWith(1);
+  });
+
+  it("keeps comment items and does not prune when the feed includes comments", async () => {
+    // Arrange
+    const feed = makeFeed(1, {
+      url: "https://www.reddit.com/user/spez.rss",
+      reddit_include_comments: 1,
+    });
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [redditCommentItem, redditPostItem],
+      usedProxy: false,
+      notModified: false,
+      etag: null,
+      lastModified: null,
+    });
+
+    // Act
+    await refreshFeeds([feed]);
+
+    // Assert
+    expect(mockUpsertItems).toHaveBeenCalledWith(1, [
+      redditCommentItem,
+      redditPostItem,
+    ]);
+    expect(mockDeleteRedditCommentItems).not.toHaveBeenCalled();
+  });
+
+  it("does not touch non-Reddit feeds", async () => {
+    // Arrange
+    const feed = makeFeed(1, { url: "https://example.com/feed" });
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [parsedItem],
+      usedProxy: false,
+      notModified: false,
+      etag: null,
+      lastModified: null,
+    });
+
+    // Act
+    await refreshFeeds([feed]);
+
+    // Assert
+    expect(mockUpsertItems).toHaveBeenCalledWith(1, [parsedItem]);
+    expect(mockDeleteRedditCommentItems).not.toHaveBeenCalled();
   });
 });
 

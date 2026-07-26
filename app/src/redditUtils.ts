@@ -1,3 +1,5 @@
+import { Feed, ParsedFeedItem } from "./types";
+
 /**
  * Extracts a Reddit feed target from a raw user-supplied value.
  * Accepts subreddit inputs:
@@ -116,4 +118,43 @@ export function setRedditIncludeComments(
     return url;
   }
   return buildRedditFeedUrl(`u/${match[1]}`, { includeComments });
+}
+
+/**
+ * Returns true when a Reddit Atom entry's raw XML is a comment rather than a
+ * submitted post. Reddit's `<id>` element encodes the fullname kind prefix:
+ * `t1_` for comments, `t3_` for links/posts. This holds regardless of which
+ * upstream URL (overview or `/submitted`) the entry was fetched from, so it
+ * works as a client-side safety net even when the fetched URL and the feed's
+ * `reddit_include_comments` setting have drifted out of sync.
+ */
+export function isRedditCommentRawXml(
+  rawXml: string | null | undefined
+): boolean {
+  if (!rawXml) return false;
+  return /<id>\s*t1_/i.test(rawXml);
+}
+
+/**
+ * Returns true when `feed` is a Reddit user feed whose "include comments"
+ * setting is off, i.e. comment items should be excluded regardless of which
+ * upstream URL is actually being fetched.
+ */
+export function shouldExcludeRedditComments(
+  feed: Pick<Feed, "url" | "reddit_include_comments">
+): boolean {
+  return isRedditUserFeedUrl(feed.url) && feed.reddit_include_comments !== 1;
+}
+
+/**
+ * Filters out Reddit comment entries from freshly-fetched items when the
+ * feed's "include comments" setting is off. No-op for non-Reddit-user feeds
+ * or when comments are explicitly included.
+ */
+export function filterExcludedRedditComments(
+  feed: Pick<Feed, "url" | "reddit_include_comments">,
+  items: ParsedFeedItem[]
+): ParsedFeedItem[] {
+  if (!shouldExcludeRedditComments(feed)) return items;
+  return items.filter((item) => !isRedditCommentRawXml(item.rawXml));
 }

@@ -11,6 +11,7 @@ import {
   PUBLISHED_AT_SAMPLE_SIZE,
 } from "./feedSchedule";
 import {
+  deleteRedditCommentItems,
   getItemCountForFeed,
   getRecentPublishedAtForFeed,
   recordFeedFetchOutcome,
@@ -22,6 +23,10 @@ import {
   updateFeedLastFetched,
   updateFeedRateLimitInfo,
 } from "./database";
+import {
+  filterExcludedRedditComments,
+  shouldExcludeRedditComments,
+} from "./redditUtils";
 
 /**
  * Parses a `Retry-After` header value to a delay in milliseconds.
@@ -227,7 +232,11 @@ export async function refreshFeeds(
           succeeded += 1;
           return;
         }
-        await upsertItems(feed.id, fetched.items.slice(0, MAX_ITEMS_PER_FEED));
+        const includedItems = filterExcludedRedditComments(feed, fetched.items);
+        await upsertItems(feed.id, includedItems.slice(0, MAX_ITEMS_PER_FEED));
+        if (shouldExcludeRedditComments(feed)) {
+          await deleteRedditCommentItems(feed.id);
+        }
         await updateFeedCacheValidators(
           feed.id,
           fetched.etag ?? null,

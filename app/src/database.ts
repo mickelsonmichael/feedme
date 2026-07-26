@@ -12,6 +12,7 @@ import {
   Tag,
   TagWithFeedCount,
 } from "./types";
+import { isRedditCommentRawXml } from "./redditUtils";
 
 // Serialises all write operations on the shared SQLite connection.
 // Prevents concurrent writes from racing and leaving the DB in an
@@ -946,6 +947,36 @@ export async function upsertItems(
       // swallow so we don't mask the original error.
     }
   }
+}
+
+/**
+ * Deletes previously-stored items for `feedId` that are Reddit comment
+ * entries (as opposed to submitted posts). Used to clean up items ingested
+ * before the feed's "include comments" setting was turned off, or before the
+ * feed's URL was rewritten to the posts-only `/submitted` endpoint — since
+ * `upsertItems` never deletes rows on its own, those items would otherwise
+ * remain visible forever.
+ */
+export async function deleteRedditCommentItems(feedId: number): Promise<void> {
+  const database = await getDatabase();
+  const rows = await database.getAllAsync<{
+    id: number;
+    raw_xml: string | null;
+  }>(
+    "SELECT id, raw_xml FROM items WHERE feed_id = ? AND raw_xml IS NOT NULL",
+    [feedId]
+  );
+  const idsToDelete = rows
+    .filter((row) => isRedditCommentRawXml(row.raw_xml))
+    .map((row) => row.id);
+  if (idsToDelete.length === 0) return;
+  const placeholders = idsToDelete.map(() => "?").join(",");
+  await withWriteLock(() =>
+    database.runAsync(
+      `DELETE FROM items WHERE id IN (${placeholders})`,
+      idsToDelete
+    )
+  );
 }
 
 export async function getItemRawXml(itemId: number): Promise<string | null> {
