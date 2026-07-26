@@ -4,7 +4,7 @@ import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
-import { TextInput } from "react-native";
+import { Text, TextInput } from "react-native";
 import FeedsScreen from "../screens/FeedsScreen";
 import { RootStackParamList, TabParamList } from "../types";
 import { getFeeds } from "../database";
@@ -367,6 +367,92 @@ describe("FeedsScreen", () => {
     expect(
       tree!.root.findByProps({ accessibilityLabel: "Open The Daily Podcast" })
     ).toBeTruthy();
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows a banner listing feeds that failed to refresh", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Reddit - r/cityporn",
+        url: "https://reddit.com/r/cityporn.rss",
+        description: null,
+        last_fetched: null,
+        error: "Rate limited (429 Too Many Requests)",
+      },
+      {
+        id: 2,
+        title: "Healthy Feed",
+        url: "https://example.com/rss.xml",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+    ]);
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<FeedsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert
+    const banner = tree!.root.findByProps({
+      accessibilityLabel: "1 feed failed to refresh",
+    });
+    expect(banner).toBeTruthy();
+    const bannerTexts = banner
+      .findAllByType(Text)
+      .map((node) =>
+        Array.isArray(node.props.children)
+          ? node.props.children.join("")
+          : node.props.children
+      )
+      .join(" ");
+    expect(bannerTexts).toContain("1 feed");
+    expect(bannerTexts).toContain("Reddit - r/cityporn");
+    expect(bannerTexts).toContain("Rate limited (429 Too Many Requests)");
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("does not show the failure banner when every feed is healthy", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Healthy Feed",
+        url: "https://example.com/rss.xml",
+        description: null,
+        last_fetched: null,
+        error: null,
+      },
+    ]);
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<FeedsScreen {...props} />);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(
+      tree!.root.findAllByProps({
+        accessibilityLabel: "1 feed failed to refresh",
+      })
+    ).toHaveLength(0);
 
     await act(async () => {
       tree!.unmount();

@@ -37,6 +37,11 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
+// Cap on how many failed feeds are listed by name in the banner before
+// collapsing the rest into an "…and N more" line, mirroring the summary the
+// aggregated Feed screen used to show in its own refresh-failure alert.
+const MAX_SHOWN_FAILURES = 3;
+
 export default function FeedsScreen({ navigation }: Props) {
   const { colors } = useTheme();
   const [feeds, setFeeds] = useState<Feed[]>([]);
@@ -47,6 +52,12 @@ export default function FeedsScreen({ navigation }: Props) {
   const [failedIconUris, setFailedIconUris] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  // Feeds currently carrying an error from their last refresh attempt.
+  // `feed.error` is persisted by the refresher and cleared on the next
+  // successful fetch, so this always reflects current state rather than a
+  // one-off refresh session.
+  const failedFeeds = useMemo(() => feeds.filter((f) => f.error), [feeds]);
 
   const loadData = useCallback(async () => {
     try {
@@ -131,6 +142,38 @@ export default function FeedsScreen({ navigation }: Props) {
           </Text>
         </TouchableOpacity>
       </View>
+
+      {failedFeeds.length > 0 ? (
+        <View
+          style={[
+            styles.errorBanner,
+            { backgroundColor: colors.danger, borderColor: colors.danger },
+          ]}
+          accessibilityLabel={`${failedFeeds.length} feed${failedFeeds.length === 1 ? "" : "s"} failed to refresh`}
+        >
+          <View style={styles.errorBannerHeader}>
+            <Feather name="alert-triangle" size={16} color={colors.paper} />
+            <Text style={[styles.errorBannerTitle, { color: colors.paper }]}>
+              {failedFeeds.length} feed{failedFeeds.length === 1 ? "" : "s"}{" "}
+              failed to refresh
+            </Text>
+          </View>
+          {failedFeeds.slice(0, MAX_SHOWN_FAILURES).map((feed) => (
+            <Text
+              key={feed.id}
+              style={[styles.errorBannerItem, { color: colors.paper }]}
+              numberOfLines={1}
+            >
+              • {feed.title}: {feed.error}
+            </Text>
+          ))}
+          {failedFeeds.length > MAX_SHOWN_FAILURES ? (
+            <Text style={[styles.errorBannerItem, { color: colors.paper }]}>
+              …and {failedFeeds.length - MAX_SHOWN_FAILURES} more
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
 
       <FlatList
         data={visibleFeeds}
@@ -485,6 +528,28 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontFamily: fonts.sans,
     fontWeight: "600",
+  },
+  errorBanner: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    padding: spacing.md,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    gap: spacing.xs,
+  },
+  errorBannerHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  errorBannerTitle: {
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    fontWeight: "700",
+  },
+  errorBannerItem: {
+    fontSize: fontSize.meta,
+    fontFamily: fonts.sans,
   },
   list: { paddingBottom: spacing.xl },
 

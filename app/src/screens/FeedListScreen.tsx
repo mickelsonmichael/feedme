@@ -61,6 +61,7 @@ import {
   PulsingDots,
   RefreshProgressBar,
 } from "../components/LoadingState";
+import { Toast } from "../components/Toast";
 import { CompactMenu } from "../components/CompactMenu";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -145,6 +146,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
   const [refreshProgress, setRefreshProgress] =
     useState<FeedRefreshProgress | null>(null);
+  // True only while a manual refresh (pull-to-refresh or the "Refresh"
+  // button) is in flight — distinct from `refreshing`, which is also set by
+  // the web auto-refresh-on-focus path. Drives the full-screen loading
+  // takeover so a manual refresh always gets the fancy loader, while an
+  // auto-refresh with existing content keeps showing that content.
+  const [manualRefreshInFlight, setManualRefreshInFlight] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [singleActiveIndex, setSingleActiveIndex] = useState(0);
@@ -392,8 +400,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
         // first, so the user sees content immediately instead of staring at a
         // spinner while dozens of network fetches complete. The remote
         // refresh below then updates the list in place when it finishes.
-        await queryAndCommitPage();
-        setLoading(false);
+        // Only clear the skeleton if this call's page actually committed —
+        // if a newer loadData call has already superseded this one, letting
+        // this stale call clear `loading` would hide the skeleton before the
+        // newer call's items have landed.
+        const committedFirstPage = await queryAndCommitPage();
+        if (committedFirstPage) {
+          setLoading(false);
+        }
 
         if (!refreshRemote) {
           setRefreshProgress(null);
@@ -406,28 +420,18 @@ export default function FeedListScreen({ navigation, route }: Props) {
             failed: 0,
             skipped: 0,
           });
-          const feedFailures: Array<{ title: string; error: string }> = [];
           const errors = await refreshFeeds(feedsToRefresh, {
             onProgress: setRefreshProgress,
             force: false,
             concurrency: Platform.OS === "web" ? 6 : 3,
-            onFeedFailure: (feed, error) => {
-              feedFailures.push({ title: feed.title, error: error.message });
-            },
           });
-          if (errors > 0) {
-            const MAX_SHOWN = 3;
-            const details = feedFailures
-              .slice(0, MAX_SHOWN)
-              .map(({ title, error }) => `\u2022 ${title}: ${error}`)
-              .join("\n");
-            const overflow =
-              feedFailures.length > MAX_SHOWN
-                ? `\n\u2026and ${feedFailures.length - MAX_SHOWN} more`
-                : "";
-            Alert.alert(
-              "Refresh",
-              `${errors} feed(s) could not be refreshed.\n\n${details}${overflow}`
+          // Keep this lightweight \u2014 just the count \u2014 since the per-feed
+          // reason is already persisted to `feed.error` and surfaced in full
+          // on the Feeds screen. A stale (superseded) call shouldn't pop a
+          // toast about a refresh the user can no longer see the result of.
+          if (errors > 0 && loadGenerationRef.current === generation) {
+            setToastMessage(
+              `${errors} feed${errors === 1 ? "" : "s"} could not be refreshed.`
             );
           }
 
@@ -458,13 +462,21 @@ export default function FeedListScreen({ navigation, route }: Props) {
           });
         }
       } catch (err) {
-        Alert.alert("Error", "Failed to load: " + (err as Error).message);
+        if (loadGenerationRef.current === generation) {
+          Alert.alert("Error", "Failed to load: " + (err as Error).message);
+        }
       } finally {
-        scrollAfterRefreshRef.current = false;
-        selectUnreadAfterRefreshRef.current = false;
-        setLoading(false);
-        setRefreshing(false);
-        setRefreshProgress(null);
+        // A superseded call must not touch shared UI state on its way out —
+        // doing so can clear `refreshing`/`loading` for the newer, still
+        // in-flight call before its items have committed, leaving the screen
+        // on the empty state until that call eventually finishes.
+        if (loadGenerationRef.current === generation) {
+          scrollAfterRefreshRef.current = false;
+          selectUnreadAfterRefreshRef.current = false;
+          setLoading(false);
+          setRefreshing(false);
+          setRefreshProgress(null);
+        }
       }
     },
     [selectedFeedId, selectedTagId, selectedCustomFeedId]
@@ -528,10 +540,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
       setSingleActiveIndex(0);
     }
     setRefreshing(true);
+    setManualRefreshInFlight(true);
     // Ask loadData to scroll to top once the refreshed (post-network) items
     // commit — not when the immediate cached-items commit happens.
     scrollAfterRefreshRef.current = true;
     await loadData(true);
+    setManualRefreshInFlight(false);
     // animated:false matches the tab-press scroll-to-top behavior; FlashList's
     // animated scroll can stall with variable-height rows.
     setIsFeedScrolled(false);
@@ -877,6 +891,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
         selectedCustomFeedId !== undefined) &&
       sort === "stacked"
     ) {
+      // Keep sortRef in lockstep with this programmatic flip so the
+      // sort-change effect above doesn't mistake it for a user-initiated
+      // toggle and fire a redundant re-page on top of the initial load.
+      sortRef.current = "newest";
       setSort("newest");
     }
   }, [selectedFeedId, selectedTagId, selectedCustomFeedId, sort]);
@@ -1524,9 +1542,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
     ]
   );
 
-  // Initial load (before the first cached page lands) and first-ever refresh
-  // of an empty library both get the full skeleton treatment.
-  if (loading || (refreshing && items.length === 0 && feeds.length > 0)) {
+  // Initial load (before the first cached page lands), a manual refresh
+  // (pull-to-refresh or the "Refresh" button), and first-ever auto-refresh of
+  // an empty library all get the full skeleton treatment. A passive
+  // auto-refresh (web focus) with existing content does NOT — that keeps
+  // showing the current items while it revalidates in the background.
+  if (
+    loading ||
+    manualRefreshInFlight ||
+    (refreshing && items.length === 0 && feeds.length > 0)
+  ) {
     return <FeedLoadingScreen progress={refreshProgress} />;
   }
 
@@ -2215,6 +2240,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
           ListFooterComponent={loadingMore ? LoadingMoreFooter : null}
         />
       )}
+      <Toast message={toastMessage} onHide={() => setToastMessage(null)} />
     </View>
   );
 }

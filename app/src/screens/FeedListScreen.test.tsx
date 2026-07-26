@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   Platform,
   ScrollView,
   Text,
@@ -655,6 +656,71 @@ describe("FeedListScreen", () => {
       .map((node: renderer.ReactTestInstance) => node.props.children);
     expect(textAfterRefresh).not.toContain("Unread post");
     expect(markItemRead).toHaveBeenCalledWith(201);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows a toast with the failed-feed count after a refresh, instead of a modal alert", async () => {
+    // Arrange
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(2);
+    (getItemsPage as jest.Mock).mockResolvedValue([
+      {
+        id: 301,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Some post",
+        url: "https://alpha.example/post",
+        content: "body",
+        image_url: null,
+        published_at: Date.now(),
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-toast",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const list = tree!.root.findByType(FlashList);
+    await act(async () => {
+      await list.props.onRefresh();
+    });
+
+    // Assert - a toast carries the count, no modal alert is shown
+    const toast = tree!.root.findByProps({ testID: "toast" });
+    expect(toast.findByType(Text).props.children).toBe(
+      "2 feeds could not be refreshed."
+    );
+    expect(alertSpy).not.toHaveBeenCalled();
 
     await act(async () => {
       tree!.unmount();
