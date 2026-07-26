@@ -23,7 +23,6 @@ import { Feather } from "@expo/vector-icons";
 import {
   extractRedditGalleryUrl,
   extractRedditVideoPostUrl,
-  fetchRedditPostMedia,
   fetchRedditPostMediaCached,
   RedditFetchError,
   RedditVideoMedia,
@@ -157,10 +156,10 @@ export function ExpandedFeedMedia({
     setIsLoadingGallery(shouldLoadGallery);
     setActiveGalleryIndex(0);
 
-    const fetcher = shouldLoadGallery
-      ? fetchRedditPostMedia
-      : fetchRedditPostMediaCached;
-    fetcher(redditPostUrl, useProxy)
+    // Always go through the cached fetcher, even when eagerly loading (single
+    // post view): this lets prefetchItemMedia() warm the result ahead of the
+    // user swiping here, so it resolves instantly instead of re-fetching.
+    fetchRedditPostMediaCached(redditPostUrl, useProxy)
       .then((media) => {
         if (!active) {
           return;

@@ -19,6 +19,7 @@ import {
   ViewToken,
   Animated,
   Easing,
+  ActivityIndicator,
 } from "react-native";
 import { FlashList, FlashListRef } from "@shopify/flash-list";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -92,6 +93,10 @@ import { FeedIcon } from "../components/FeedIcon";
 import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { resolveSingleSwipeDirection } from "../singleSwipeDirection";
+import {
+  prefetchItemMedia,
+  SINGLE_VIEW_PREFETCH_AHEAD,
+} from "../mediaPrefetch";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Feed">,
@@ -160,6 +165,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [singleActiveIndex, setSingleActiveIndex] = useState(0);
+  // True while the user has swiped past the last locally-loaded post and is
+  // waiting on handleLoadMore's DB page fetch to resolve before we can
+  // advance. Drives a spinner on the Next control instead of a silent no-op.
+  const [singleAwaitingNextPost, setSingleAwaitingNextPost] = useState(false);
   // Snapshot of visibleItems / the "scope" (everything that legitimately
   // resets singleActiveIndex to 0 — see the effect below) as of the last
   // render where the single-layout resync logic ran. Lets a *silent*
@@ -1138,7 +1147,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
   );
   const singlePreviousDisabled = singleSafeIndex === 0;
   const singleNextDisabled =
-    singleSafeIndex >= visibleItems.length - 1 && !hasMore;
+    (singleSafeIndex >= visibleItems.length - 1 && !hasMore) ||
+    singleAwaitingNextPost;
   const isSingleItemNsfw = currentSingleItem
     ? feedDetailsById.get(currentSingleItem.feed_id)?.nsfw === 1 ||
       customFeedNsfw
@@ -1234,6 +1244,44 @@ export default function FeedListScreen({ navigation, route }: Props) {
     singleSafeIndex,
     visibleItems.length,
   ]);
+
+  // Once handleLoadMore's DB page fetch resolves, advance into the newly
+  // loaded post if the user is still waiting on it (see handleSingleNext).
+  useEffect(() => {
+    if (feedLayout !== "single" || !singleAwaitingNextPost || loadingMore) {
+      return;
+    }
+
+    setSingleAwaitingNextPost(false);
+    if (singleSafeIndex < visibleItems.length - 1) {
+      setSingleActiveIndex(singleSafeIndex + 1);
+      singleScrollRef.current?.scrollTo({ y: 0, animated: false });
+      setIsFeedScrolled(false);
+    }
+  }, [
+    feedLayout,
+    loadingMore,
+    setIsFeedScrolled,
+    singleAwaitingNextPost,
+    singleSafeIndex,
+    visibleItems.length,
+  ]);
+
+  // Post text/HTML is already local (read from SQLite up front), so the only
+  // thing that can still stall a swipe is media (images, Reddit
+  // galleries/videos). Warm the next few posts' media ahead of time so it has
+  // already resolved by the time the user actually swipes there.
+  useEffect(() => {
+    if (feedLayout !== "single") {
+      return;
+    }
+
+    for (let offset = 1; offset <= SINGLE_VIEW_PREFETCH_AHEAD; offset += 1) {
+      const item = visibleItems[singleSafeIndex + offset];
+      if (!item) break;
+      prefetchItemMedia(buildFeedItemViewItem(item));
+    }
+  }, [buildFeedItemViewItem, feedLayout, singleSafeIndex, visibleItems]);
 
   // Track how long the user views each post in single layout. Start a timer
   // when the active item changes; the timer is ended in handleSingleNext.
@@ -1364,8 +1412,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (hasMore && !loadingMore) {
-      handleLoadMore();
+    if (hasMore) {
+      // Nothing loaded to advance into yet — wait for handleLoadMore's DB
+      // page fetch (already in flight if triggered by the near-end
+      // prefetch effect) and auto-advance once it resolves.
+      setSingleAwaitingNextPost(true);
+      if (!loadingMore) {
+        handleLoadMore();
+      }
     }
   }, [
     handleLoadMore,
@@ -1852,14 +1906,20 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   onPress={handleSingleNext}
                   disabled={singleNextDisabled}
                   activeOpacity={0.7}
-                  accessibilityLabel="Next post"
+                  accessibilityLabel={
+                    singleAwaitingNextPost ? "Loading next post" : "Next post"
+                  }
                   style={styles.singleToolbarButton}
                 >
-                  <Feather
-                    name="chevron-right"
-                    size={24}
-                    color={singleNextDisabled ? colors.inkFaint : colors.ink}
-                  />
+                  {singleAwaitingNextPost ? (
+                    <ActivityIndicator size="small" color={colors.inkFaint} />
+                  ) : (
+                    <Feather
+                      name="chevron-right"
+                      size={24}
+                      color={singleNextDisabled ? colors.inkFaint : colors.ink}
+                    />
+                  )}
                 </TouchableOpacity>
               </View>
             </View>

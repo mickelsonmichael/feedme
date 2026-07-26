@@ -25,6 +25,13 @@ type CachedSize = { width: number; height: number } | "failed";
 const imageSizeCache = new Map<string, CachedSize>();
 const inflightImageSizes = new Map<string, Promise<CachedSize>>();
 
+// Warms imageSizeCache for a URL that isn't rendered yet (see mediaPrefetch),
+// so ExpandedFeedImage finds a cache hit and skips its loading placeholder
+// once the item is actually swiped into view.
+export function primeImageSizeCache(url: string): void {
+  void getCachedImageSize(url);
+}
+
 function getCachedImageSize(url: string): Promise<CachedSize> {
   const cached = imageSizeCache.get(url);
   if (cached) return Promise.resolve(cached);
