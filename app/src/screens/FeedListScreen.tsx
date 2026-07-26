@@ -2126,9 +2126,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 <TouchableOpacity
                   style={[
                     styles.singleMoreMenuItem,
-                    singleItemRedditAuthor
-                      ? { borderBottomColor: colors.border }
-                      : null,
+                    { borderBottomColor: colors.border },
                   ]}
                   onPress={() => {
                     handleSingleViewXml(currentSingleItem.id);
@@ -2145,6 +2143,33 @@ export default function FeedListScreen({ navigation, route }: Props) {
                     ]}
                   >
                     View XML
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.singleMoreMenuItem,
+                    singleItemRedditAuthor
+                      ? { borderBottomColor: colors.border }
+                      : null,
+                  ]}
+                  onPress={() => {
+                    navigation.navigate("FeedDetail", {
+                      feedId: currentSingleItem.feed_id,
+                      returnToItem: currentSingleViewItem ?? undefined,
+                    });
+                    setShowSingleMoreMenu(false);
+                  }}
+                  activeOpacity={0.7}
+                  accessibilityLabel="Edit Feed"
+                >
+                  <Feather name="edit-2" size={16} color={colors.ink} />
+                  <Text
+                    style={[
+                      styles.singleMoreMenuItemText,
+                      { color: colors.ink },
+                    ]}
+                  >
+                    Edit Feed
                   </Text>
                 </TouchableOpacity>
                 {singleItemRedditAuthor ? (

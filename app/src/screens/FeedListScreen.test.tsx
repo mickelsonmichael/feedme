@@ -1900,6 +1900,77 @@ describe("FeedListScreen", () => {
     });
   });
 
+  it("navigates to Edit Feed from the single layout overflow menu", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue(makeItems(1, 701));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-edit-feed",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const moreButton = tree!.root.findByProps({
+      accessibilityLabel: "More options",
+    });
+
+    await act(async () => {
+      moreButton.props.onPress();
+    });
+
+    const editFeedButton = tree!.root.findByProps({
+      accessibilityLabel: "Edit Feed",
+    });
+
+    // Act
+    await act(async () => {
+      editFeedButton.props.onPress();
+    });
+
+    // Assert
+    expect(navigation.navigate).toHaveBeenCalledWith(
+      "FeedDetail",
+      expect.objectContaining({
+        feedId: 1,
+        returnToItem: expect.objectContaining({
+          itemId: 701,
+          title: "Post 701",
+          feedTitle: "Alpha",
+        }),
+      })
+    );
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
   it("keeps the same post active in single layout after a silent reload reorders the list", async () => {
     // Arrange: "newest" sort keeps ordering fully deterministic from
     // published_at, isolating this test from sortStacked's own behavior.
