@@ -17,6 +17,8 @@ import {
   useWindowDimensions,
   Platform,
   ViewToken,
+  Animated,
+  Easing,
 } from "react-native";
 import { FlashList, FlashListRef } from "@shopify/flash-list";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
@@ -98,6 +100,7 @@ type Props = CompositeScreenProps<
 const CARD_IMAGE_WIDTH = 100;
 const CARD_LAYOUT_WIDTH = 760;
 const PAGE_SIZE = 50;
+const SINGLE_SWIPE_ENTER_DURATION_MS = 240;
 
 export default function FeedListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
@@ -186,6 +189,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const flatListRef = useRef<FlashListRef<CollapsedFeedListRow>>(null);
   const singleScrollRef = useRef<ScrollView | null>(null);
+  /** Horizontal offset for the single-layout swipe animation: follows the
+   *  finger while dragging, then either slides the newly-revealed post in
+   *  from the swiped-from edge, or springs back to 0 for a rejected swipe. */
+  const singleSwipeTranslateX = useRef(new Animated.Value(0)).current;
   const pendingScrollToTopRef = useRef(false);
   // Set by pull-to-refresh: request a scroll-to-top when the *refreshed*
   // items commit (loadData's second, post-network commit) rather than when
@@ -1367,11 +1374,37 @@ export default function FeedListScreen({ navigation, route }: Props) {
     visibleItems.length,
   ]);
 
+  const snapSingleSwipeBack = useCallback(() => {
+    Animated.spring(singleSwipeTranslateX, {
+      toValue: 0,
+      useNativeDriver: true,
+    }).start();
+  }, [singleSwipeTranslateX]);
+
+  const runSingleSwipeEnterAnimation = useCallback(
+    (fromEdge: number) => {
+      singleSwipeTranslateX.setValue(fromEdge);
+      Animated.timing(singleSwipeTranslateX, {
+        toValue: 0,
+        duration: SINGLE_SWIPE_ENTER_DURATION_MS,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    },
+    [singleSwipeTranslateX]
+  );
+
   const singleSwipeGesture = useMemo(
     () =>
       Gesture.Pan()
         .activeOffsetX([-20, 20])
         .failOffsetY([-10, 10])
+        .onBegin(() => {
+          singleSwipeTranslateX.stopAnimation();
+        })
+        .onUpdate((e) => {
+          singleSwipeTranslateX.setValue(e.translationX);
+        })
         .onEnd((e) => {
           const direction = resolveSingleSwipeDirection(
             e.translationX,
@@ -1379,12 +1412,35 @@ export default function FeedListScreen({ navigation, route }: Props) {
             e.velocityX
           );
           if (direction === "next") {
+            const willAdvance = singleSafeIndex < visibleItems.length - 1;
             handleSingleNext();
+            if (willAdvance) {
+              runSingleSwipeEnterAnimation(viewportWidth);
+            } else {
+              snapSingleSwipeBack();
+            }
           } else if (direction === "previous") {
+            const willGoBack = singleSafeIndex > 0;
             handleSinglePrevious();
+            if (willGoBack) {
+              runSingleSwipeEnterAnimation(-viewportWidth);
+            } else {
+              snapSingleSwipeBack();
+            }
+          } else {
+            snapSingleSwipeBack();
           }
         }),
-    [handleSingleNext, handleSinglePrevious]
+    [
+      handleSingleNext,
+      handleSinglePrevious,
+      runSingleSwipeEnterAnimation,
+      singleSafeIndex,
+      singleSwipeTranslateX,
+      snapSingleSwipeBack,
+      viewportWidth,
+      visibleItems.length,
+    ]
   );
 
   const renderItem = useCallback(
@@ -2204,7 +2260,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
               singleScrollView
             ) : (
               <GestureDetector gesture={singleSwipeGesture}>
-                {singleScrollView}
+                <Animated.View
+                  style={[
+                    styles.fill,
+                    {
+                      transform: [{ translateX: singleSwipeTranslateX }],
+                    },
+                  ]}
+                >
+                  {singleScrollView}
+                </Animated.View>
               </GestureDetector>
             );
           })()}

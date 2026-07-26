@@ -1,6 +1,7 @@
 import React from "react";
 import {
   Alert,
+  Animated,
   Platform,
   ScrollView,
   Text,
@@ -1300,6 +1301,74 @@ describe("FeedListScreen", () => {
             node.props.children === "Post 801"
         )
     ).toBe(true);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("slides the post card with the finger while dragging in single layout on native", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue(makeItems(2, 1001));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-swipe-drag",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    const gestureDetector = tree!.root.findByType(GestureDetector);
+    const gesture = gestureDetector.props.gesture as {
+      handlers: { onUpdate: (event: unknown) => void };
+    };
+    const getTranslateX = () => {
+      const style = gestureDetector.findByType(Animated.View).props
+        .style as Array<{
+        transform?: Array<{ translateX: { __getValue: () => number } }>;
+      }>;
+      const withTransform = style.find((s) => s?.transform);
+      return withTransform!.transform![0].translateX.__getValue();
+    };
+
+    // Assert — starts centered, then tracks the drag distance exactly
+    expect(getTranslateX()).toBe(0);
+
+    await act(async () => {
+      gesture.handlers.onUpdate({ translationX: -45, translationY: 0 });
+    });
+    expect(getTranslateX()).toBe(-45);
+
+    await act(async () => {
+      gesture.handlers.onUpdate({ translationX: -12, translationY: 0 });
+    });
+    expect(getTranslateX()).toBe(-12);
 
     await act(async () => {
       tree!.unmount();
