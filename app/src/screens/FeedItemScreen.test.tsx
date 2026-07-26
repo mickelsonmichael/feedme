@@ -1,5 +1,6 @@
 import React from "react";
 import { Alert, Text } from "react-native";
+import { Image } from "expo-image";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedItemScreen from "../screens/FeedItemScreen";
@@ -416,6 +417,56 @@ describe("FeedItemScreen", () => {
 
     // Assert
     expect(editFeedButton.props.disabled).toBe(true);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows the feed's icon next to the feed name when a feed URL is available", async () => {
+    // Arrange
+    const props = buildProps();
+    props.route = {
+      ...props.route,
+      params: {
+        item: {
+          ...props.route.params.item,
+          feedUrl: "https://example.com/rss",
+        },
+      },
+    } as Props["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<FeedItemScreen {...props} />);
+      await Promise.resolve();
+    });
+
+    // Assert
+    const image = tree!.root.findByType(Image);
+    expect(image.props.source).toEqual({
+      uri: "https://example.com/favicon.ico",
+    });
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("omits the feed icon when no feed URL is available", async () => {
+    // Arrange
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<FeedItemScreen {...props} />);
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(tree!.root.findAllByType(Image)).toHaveLength(0);
 
     await act(async () => {
       tree!.unmount();

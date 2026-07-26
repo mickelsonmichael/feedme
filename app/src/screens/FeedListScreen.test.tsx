@@ -409,6 +409,7 @@ describe("FeedListScreen", () => {
         imageUrl: null,
         publishedAt: 1_700_000_000_000,
         feedTitle: "Alpha",
+        feedUrl: "https://alpha.example/rss.xml",
         read: 0,
         useProxy: false,
         nsfw: false,
@@ -1090,6 +1091,66 @@ describe("FeedListScreen", () => {
         )
     ).toBe(true);
     expect(markItemRead).toHaveBeenCalledWith(502);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows the feed's icon next to the feed name in single layout", async () => {
+    // Arrange
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue([
+      {
+        id: 501,
+        feed_id: 1,
+        feed_title: "Alpha",
+        title: "Single first",
+        url: "https://alpha.example/first",
+        content: "<p>First body</p>",
+        image_url: null,
+        published_at: 2_000,
+        read: 0,
+      },
+    ]);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-layout-icon",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert
+    const image = tree!.root.findByType(Image);
+    expect(image.props.source).toEqual({
+      uri: "https://alpha.example/favicon.ico",
+    });
 
     await act(async () => {
       tree!.unmount();

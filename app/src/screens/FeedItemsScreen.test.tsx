@@ -284,6 +284,7 @@ describe("FeedItemsScreen – View Raw", () => {
         imageUrl: null,
         publishedAt: mockItem.published_at,
         feedTitle: "Test Feed",
+        feedUrl: "https://example.com/feed.xml",
         read: 0,
         useProxy: false,
         nsfw: false,

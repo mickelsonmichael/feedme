@@ -88,6 +88,7 @@ import { loadConfig, saveConfig } from "../storage";
 import { openUrlWithPreference } from "../linkOpening";
 import { resolveCustomFeedIcon } from "../customFeedIcons";
 import { FeedItemContent, formatDate } from "../components/FeedItemContent";
+import { FeedIcon } from "../components/FeedIcon";
 import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { resolveSingleSwipeDirection } from "../singleSwipeDirection";
@@ -581,6 +582,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       imageUrl: item.image_url,
       publishedAt: item.published_at,
       feedTitle: item.feed_title,
+      feedUrl: feedDetailsById.get(item.feed_id)?.url ?? null,
       read: item.read,
       useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
       nsfw: feedDetailsById.get(item.feed_id)?.nsfw === 1 || customFeedNsfw,
@@ -2180,12 +2182,22 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   ]}
                 >
                   <View style={styles.singlePostHeader}>
-                    <Text
-                      style={[styles.singlePostMeta, { color: colors.inkSoft }]}
-                    >
-                      {currentSingleItem.feed_title} -{" "}
-                      {formatDate(currentSingleItem.published_at)}
-                    </Text>
+                    <View style={styles.singlePostMetaRow}>
+                      <FeedIcon
+                        feedUrl={
+                          feedDetailsById.get(currentSingleItem.feed_id)?.url
+                        }
+                      />
+                      <Text
+                        style={[
+                          styles.singlePostMeta,
+                          { color: colors.inkSoft },
+                        ]}
+                      >
+                        {currentSingleItem.feed_title} -{" "}
+                        {formatDate(currentSingleItem.published_at)}
+                      </Text>
+                    </View>
                     <Text
                       style={[styles.singlePostTitle, { color: colors.ink }]}
                     >
@@ -2415,6 +2427,11 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingHorizontal: spacing.md,
     paddingTop: spacing.md,
+  },
+  singlePostMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
   },
   singlePostMeta: {
     fontFamily: fonts.sans,
