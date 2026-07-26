@@ -14,6 +14,7 @@ const RN = require("react-native");
 jest.mock("../database", () => ({
   getFeeds: jest.fn(),
   deleteFeed: jest.fn(),
+  deleteRedditCommentItems: jest.fn(),
   updateFeed: jest.fn(),
   updateFeedLastFetched: jest.fn(),
   recordFeedFetchOutcome: jest.fn(),
@@ -34,6 +35,8 @@ jest.mock("../feedParser", () => ({
 jest.mock("../redditUtils", () => ({
   isRedditUserFeedUrl: jest.fn(() => false),
   setRedditIncludeComments: jest.fn((url: string) => url),
+  filterExcludedRedditComments: jest.fn((_feed, items) => items),
+  shouldExcludeRedditComments: jest.fn(() => false),
 }));
 
 jest.mock("@react-navigation/native", () => ({

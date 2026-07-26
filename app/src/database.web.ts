@@ -23,6 +23,7 @@ import {
   Tag,
   TagWithFeedCount,
 } from "./types";
+import { isRedditCommentRawXml } from "./redditUtils";
 
 const STORAGE_KEY = "feedme_db_v1";
 
@@ -709,6 +710,25 @@ export async function getItemRawXml(itemId: number): Promise<string | null> {
   const state = loadState();
   const item = state.items.find((i) => i.id === itemId);
   return item?.raw_xml ?? null;
+}
+
+/**
+ * Deletes previously-stored items for `feedId` that are Reddit comment
+ * entries (as opposed to submitted posts). Used to clean up items ingested
+ * before the feed's "include comments" setting was turned off, or before the
+ * feed's URL was rewritten to the posts-only `/submitted` endpoint — since
+ * `upsertItems` never deletes rows on its own, those items would otherwise
+ * remain visible forever.
+ */
+export async function deleteRedditCommentItems(feedId: number): Promise<void> {
+  const state = loadState();
+  const before = state.items.length;
+  state.items = state.items.filter(
+    (item) => !(item.feed_id === feedId && isRedditCommentRawXml(item.raw_xml))
+  );
+  if (state.items.length !== before) {
+    saveState(state);
+  }
 }
 
 export async function markItemUnread(itemId: number): Promise<void> {

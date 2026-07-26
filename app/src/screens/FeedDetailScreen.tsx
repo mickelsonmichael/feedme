@@ -21,6 +21,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import {
   getFeeds,
   deleteFeed,
+  deleteRedditCommentItems,
   updateFeed,
   updateFeedLastFetched,
   recordFeedFetchOutcome,
@@ -36,8 +37,10 @@ import {
 import { fetchFeedWithMeta } from "../feedParser";
 import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
 import {
+  filterExcludedRedditComments,
   isRedditUserFeedUrl,
   setRedditIncludeComments as applyRedditIncludeComments,
+  shouldExcludeRedditComments,
 } from "../redditUtils";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -220,7 +223,17 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
           trimmedUrl,
           useProxy
         );
-        await upsertItems(feedId, items);
+        const redditFeed = {
+          url: trimmedUrl,
+          reddit_include_comments: redditIncludeComments ? 1 : 0,
+        };
+        await upsertItems(
+          feedId,
+          filterExcludedRedditComments(redditFeed, items)
+        );
+        if (shouldExcludeRedditComments(redditFeed)) {
+          await deleteRedditCommentItems(feedId);
+        }
         await updateFeedLastFetched(feedId);
         await setFeedError(feedId, null);
         await recordFeedFetchOutcome(feedId, true);
@@ -279,7 +292,17 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
     setRefreshing(true);
     try {
       const { items, usedProxy } = await fetchFeedWithMeta(url, useProxy);
-      await upsertItems(feedId, items);
+      const redditFeed = {
+        url,
+        reddit_include_comments: redditIncludeComments ? 1 : 0,
+      };
+      await upsertItems(
+        feedId,
+        filterExcludedRedditComments(redditFeed, items)
+      );
+      if (shouldExcludeRedditComments(redditFeed)) {
+        await deleteRedditCommentItems(feedId);
+      }
       await updateFeedLastFetched(feedId);
       await setFeedError(feedId, null);
       await recordFeedFetchOutcome(feedId, true);
