@@ -617,6 +617,22 @@ export async function recordFeedFetchOutcome(
   );
 }
 
+/**
+ * Reset all user-facing statistics across every feed: fetch success/failure
+ * counters, consecutive failure streaks, and recorded item view times (used
+ * for the "avg read time" stat). Does not touch feed content, read state, or
+ * subscriptions.
+ */
+export async function resetStatistics(): Promise<void> {
+  const database = await getDatabase();
+  await withWriteLock(async () => {
+    await database.runAsync(
+      "UPDATE feeds SET fetch_success_count = 0, fetch_failure_count = 0, consecutive_failures = 0"
+    );
+    await database.runAsync("DELETE FROM item_view_times");
+  });
+}
+
 export async function setFeedNotificationSettings(
   feedId: number,
   settings: {

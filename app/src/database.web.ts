@@ -472,6 +472,17 @@ export async function recordFeedFetchOutcome(
   saveState(state);
 }
 
+export async function resetStatistics(): Promise<void> {
+  const state = loadState();
+  for (const feed of state.feeds) {
+    feed.fetch_success_count = 0;
+    feed.fetch_failure_count = 0;
+    feed.consecutive_failures = 0;
+  }
+  state.itemViewTimes = [];
+  saveState(state);
+}
+
 export async function setFeedNotificationSettings(
   feedId: number,
   settings: {

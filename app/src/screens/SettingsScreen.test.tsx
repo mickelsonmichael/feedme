@@ -1,5 +1,5 @@
 import React from "react";
-import { Platform, Text, TouchableOpacity } from "react-native";
+import { Alert, Platform, Text, TouchableOpacity } from "react-native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -7,6 +7,7 @@ import renderer, { act } from "react-test-renderer";
 import SettingsScreen from "../screens/SettingsScreen";
 import { RootStackParamList, TabParamList } from "../types";
 import { loadConfig, saveConfig } from "../storage";
+import { resetStatistics } from "../database";
 
 const mockSetMode = jest.fn();
 
@@ -19,6 +20,7 @@ jest.mock("../context/ThemeContext", () => ({
       inkFaint: "#b8b2cc",
       accent: "#3d358f",
       border: "#ccc8db",
+      danger: "#b44b4b",
     },
     mode: "system",
     setMode: mockSetMode,
@@ -40,6 +42,7 @@ jest.mock("../feedRefresher", () => ({
 
 jest.mock("../database", () => ({
   getFeeds: jest.fn().mockResolvedValue([]),
+  resetStatistics: jest.fn().mockResolvedValue(undefined),
 }));
 
 type Props = CompositeScreenProps<
@@ -165,5 +168,50 @@ describe("SettingsScreen", () => {
 
     // Assert
     expect(saveConfig).toHaveBeenCalledWith({ linkOpenMode: "external" });
+  });
+
+  it("does not reset statistics until the confirmation alert is accepted", async () => {
+    // Arrange
+    const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+    const props = buildProps();
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(<SettingsScreen {...props} />);
+    });
+
+    const resetButton = tree!.root
+      .findAllByType(TouchableOpacity)
+      .find((node: renderer.ReactTestInstance) => {
+        const labels = node.findAllByType(Text);
+        return labels.some((label) => label.props.children === "Reset statistics");
+      });
+    expect(resetButton).toBeTruthy();
+
+    await act(async () => {
+      resetButton!.props.onPress();
+    });
+
+    // Assert - confirmation is shown, but nothing is reset yet
+    expect(alertSpy).toHaveBeenCalledWith(
+      "Reset statistics?",
+      expect.any(String),
+      expect.any(Array)
+    );
+    expect(resetStatistics).not.toHaveBeenCalled();
+
+    // Act - confirm via the destructive button
+    const buttons = alertSpy.mock.calls[0][2] as {
+      text: string;
+      onPress?: () => void;
+    }[];
+    const confirmButton = buttons.find((b) => b.text === "Reset");
+    await act(async () => {
+      await confirmButton?.onPress?.();
+    });
+
+    // Assert
+    expect(resetStatistics).toHaveBeenCalledTimes(1);
   });
 });

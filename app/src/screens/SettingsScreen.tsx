@@ -11,6 +11,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import * as BackgroundTask from "expo-background-task";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
@@ -31,7 +32,7 @@ import {
   updateBackgroundSyncSchedule,
 } from "../notifications";
 import { refreshFeeds } from "../feedRefresher";
-import { getFeeds } from "../database";
+import { getFeeds, resetStatistics } from "../database";
 
 type Props = CompositeScreenProps<
   BottomTabScreenProps<TabParamList, "Settings">,
@@ -58,7 +59,7 @@ function ToggleRow({
 }) {
   const { colors } = useTheme();
   return (
-    <View style={[styles.row, { borderBottomColor: colors.inkFaint }]}>
+    <View style={styles.row}>
       <Text style={[styles.rowLabel, { color: colors.ink }]}>{label}</Text>
       <Switch
         value={value}
@@ -74,24 +75,87 @@ function Row({
   label,
   value,
   onPress,
+  danger,
+  disabled,
+  /** "nav" for a plain action/navigation row, "picker" for one that opens a
+   *  value picker — controls which trailing icon signals tappability. */
+  variant = "nav",
 }: {
   label: string;
-  value: string;
+  value?: string;
   onPress?: () => void;
+  /** Renders the label (and trailing icon) in the theme's danger color, for
+   *  destructive actions. */
+  danger?: boolean;
+  disabled?: boolean;
+  variant?: "nav" | "picker";
+}) {
+  const { colors } = useTheme();
+  const trailingColor = danger ? colors.danger : colors.inkSoft;
+  return (
+    <TouchableOpacity
+      style={[styles.row, disabled && styles.rowDisabled]}
+      onPress={onPress}
+      disabled={!onPress || disabled}
+      activeOpacity={0.6}
+    >
+      <Text
+        style={[
+          styles.rowLabel,
+          { color: danger ? colors.danger : colors.ink },
+        ]}
+      >
+        {label}
+      </Text>
+      {value ? (
+        <Text style={[styles.rowValue, { color: colors.inkSoft }]}>
+          {value}
+        </Text>
+      ) : null}
+      {onPress ? (
+        <Feather
+          name={variant === "picker" ? "chevron-down" : "chevron-right"}
+          size={18}
+          color={trailingColor}
+          style={styles.rowChevron}
+        />
+      ) : null}
+    </TouchableOpacity>
+  );
+}
+
+/** Small caption above a multi-option control within a section, used when a
+ *  section groups more than one distinct control (e.g. "Theme" and "Feed
+ *  layout" both live under "Appearance"). */
+function FieldLabel({ label }: { label: string }) {
+  const { colors } = useTheme();
+  return (
+    <Text style={[styles.fieldLabel, { color: colors.inkSoft }]}>{label}</Text>
+  );
+}
+
+/** A titled, bordered card grouping related controls. Gives each section a
+ *  clear visual boundary instead of relying on spacing alone. */
+function Section({
+  heading,
+  children,
+}: {
+  heading: string;
+  children: React.ReactNode;
 }) {
   const { colors } = useTheme();
   return (
-    <TouchableOpacity
-      style={[styles.row, { borderBottomColor: colors.inkFaint }]}
-      onPress={onPress}
-      disabled={!onPress}
-      activeOpacity={0.6}
-    >
-      <Text style={[styles.rowLabel, { color: colors.ink }]}>{label}</Text>
-      <Text style={[styles.rowValue, { color: colors.inkSoft }]}>
-        {value} ›
-      </Text>
-    </TouchableOpacity>
+    <View style={styles.section}>
+      <SectionHeading label={heading} />
+      <View
+        style={[
+          styles.sectionCard,
+          { borderColor: colors.border, backgroundColor: colors.paperWarm },
+        ]}
+      >
+        {children}
+      </View>
+    </View>
   );
 }
 
@@ -99,14 +163,10 @@ function Segmented<T extends string>({
   value,
   options,
   onChange,
-  style,
-  stretched,
 }: {
   value: T;
   options: readonly { value: T; label: string; icon?: React.ReactNode }[];
   onChange: (v: T) => void;
-  style?: object;
-  stretched?: boolean;
 }) {
   const { colors } = useTheme();
   return (
@@ -114,7 +174,6 @@ function Segmented<T extends string>({
       style={[
         styles.segmented,
         { borderColor: colors.border, backgroundColor: colors.paper },
-        style,
       ]}
     >
       {options.map((opt) => {
@@ -124,7 +183,6 @@ function Segmented<T extends string>({
             key={opt.value}
             style={[
               styles.segment,
-              stretched && styles.segmentFlex,
               active && { backgroundColor: colors.accent },
             ]}
             onPress={() => onChange(opt.value)}
@@ -151,11 +209,16 @@ function Segmented<T extends string>({
   );
 }
 
+/** A picker rendered as a `Row` (label left, selected value + "▾" right) so
+ *  it lines up with every other control in a section instead of being its
+ *  own boxed widget. Tapping it opens a modal list of options. */
 function Dropdown<T extends string>({
+  label,
   value,
   options,
   onChange,
 }: {
+  label: string;
   value: T;
   options: readonly { value: T; label: string }[];
   onChange: (v: T) => void;
@@ -166,21 +229,12 @@ function Dropdown<T extends string>({
 
   return (
     <>
-      <TouchableOpacity
-        style={[
-          styles.dropdown,
-          { borderColor: colors.border, backgroundColor: colors.paper },
-        ]}
+      <Row
+        label={label}
+        value={selectedLabel}
+        variant="picker"
         onPress={() => setOpen(true)}
-        activeOpacity={0.7}
-      >
-        <Text style={[styles.dropdownText, { color: colors.ink }]}>
-          {selectedLabel}
-        </Text>
-        <Text style={[styles.dropdownChevron, { color: colors.inkSoft }]}>
-          ▾
-        </Text>
-      </TouchableOpacity>
+      />
 
       <Modal
         visible={open}
@@ -487,39 +541,23 @@ function BackgroundSyncDevPanel() {
 
   return (
     <>
-      <SectionHeading label="Background sync (debug)" />
+      <FieldLabel label="Background sync (debug)" />
       <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
         Dev-only tools for verifying the notification pipeline end-to-end.
         Hidden in release builds.
       </Text>
-      <TouchableOpacity
+      <Row
+        label={busy === "in-process" ? "Running…" : "Run sync now (in-process)"}
         onPress={runInProcess}
         disabled={busy !== null}
-        activeOpacity={0.7}
-        style={[
-          styles.devButton,
-          { borderColor: colors.border, backgroundColor: colors.paper },
-          busy !== null && { opacity: 0.5 },
-        ]}
-      >
-        <Text style={[styles.devButtonText, { color: colors.ink }]}>
-          {busy === "in-process" ? "Running…" : "Run sync now (in-process)"}
-        </Text>
-      </TouchableOpacity>
-      <TouchableOpacity
+      />
+      <Row
+        label={
+          busy === "os" ? "Triggering…" : "Trigger OS background worker"
+        }
         onPress={triggerOsWorker}
         disabled={busy !== null}
-        activeOpacity={0.7}
-        style={[
-          styles.devButton,
-          { borderColor: colors.border, backgroundColor: colors.paper },
-          busy !== null && { opacity: 0.5 },
-        ]}
-      >
-        <Text style={[styles.devButtonText, { color: colors.ink }]}>
-          {busy === "os" ? "Triggering…" : "Trigger OS background worker"}
-        </Text>
-      </TouchableOpacity>
+      />
     </>
   );
 }
@@ -652,108 +690,138 @@ export default function SettingsScreen({ navigation }: Props) {
     []
   );
 
+  const handleResetStatistics = React.useCallback(() => {
+    const message =
+      "This clears fetch success/failure counts, failure streaks, and average read time stats for every feed. This cannot be undone.";
+
+    const doReset = async () => {
+      try {
+        await resetStatistics();
+      } catch (e) {
+        const errMsg = "Could not reset statistics: " + (e as Error).message;
+        if (Platform.OS === "web") {
+          window.alert(errMsg);
+        } else {
+          Alert.alert("Error", errMsg);
+        }
+      }
+    };
+
+    if (Platform.OS === "web") {
+      if (window.confirm(message)) {
+        doReset();
+      }
+      return;
+    }
+
+    Alert.alert("Reset statistics?", message, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Reset", style: "destructive", onPress: doReset },
+    ]);
+  }, []);
+
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
       <ScrollView contentContainerStyle={styles.content}>
-        <SectionHeading label="Appearance" />
-        <Segmented
-          value={mode}
-          options={[
-            { value: "light", label: "Light" },
-            { value: "dark", label: "Dark" },
-            { value: "system", label: "System" },
-          ]}
-          onChange={(v) => setMode(v as ThemeMode)}
-        />
+        <Section heading="Appearance">
+          <FieldLabel label="Theme" />
+          <Segmented
+            value={mode}
+            options={[
+              { value: "light", label: "Light" },
+              { value: "dark", label: "Dark" },
+              { value: "system", label: "System" },
+            ]}
+            onChange={(v) => setMode(v as ThemeMode)}
+          />
+          <FieldLabel label="Feed layout" />
+          <Segmented
+            value={feedLayout}
+            options={[
+              {
+                value: "compact",
+                label: "Compact",
+                icon: <CompactLayoutIcon active={feedLayout === "compact"} />,
+              },
+              {
+                value: "card",
+                label: "Card",
+                icon: <CardLayoutIcon active={feedLayout === "card"} />,
+              },
+              {
+                value: "single",
+                label: "Single",
+                icon: <SingleLayoutIcon active={feedLayout === "single"} />,
+              },
+            ]}
+            onChange={handleLayoutChange}
+          />
+        </Section>
 
-        <SectionHeading label="Reading" />
-        <ToggleRow
-          label="Mark as read on scroll"
-          value={markAsReadOnScroll}
-          onValueChange={handleMarkAsReadOnScrollChange}
-        />
-        <ToggleRow
-          label="Hide read items by default"
-          value={hideReadByDefault}
-          onValueChange={handleHideReadByDefaultChange}
-        />
-        <ToggleRow
-          label="Bionic Reading"
-          value={bionicReading}
-          onValueChange={handleBionicReadingChange}
-        />
-
-        <SectionHeading label="Default sort" />
-        <Segmented
-          value={defaultSort}
-          options={[
-            { value: "newest", label: "Newest" },
-            { value: "stacked", label: "Stacked" },
-          ]}
-          onChange={handleDefaultSortChange}
-        />
-
-        <SectionHeading label="Group feeds" />
-        <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
-          Insert time-bucket dividers in the feed. Only applies to Newest sort.
-        </Text>
-        <Dropdown
-          value={groupFeeds}
-          options={[
-            { value: "none", label: "None" },
-            { value: "hourly", label: "Hourly" },
-            { value: "daily", label: "Daily" },
-            { value: "weekly", label: "Weekly" },
-            { value: "monthly", label: "Monthly" },
-          ]}
-          onChange={handleGroupFeedsChange}
-        />
-
-        <SectionHeading label="Feed layout" />
-        <Segmented
-          value={feedLayout}
-          options={[
-            {
-              value: "compact",
-              label: "Compact",
-              icon: <CompactLayoutIcon active={feedLayout === "compact"} />,
-            },
-            {
-              value: "card",
-              label: "Card",
-              icon: <CardLayoutIcon active={feedLayout === "card"} />,
-            },
-            {
-              value: "single",
-              label: "Single",
-              icon: <SingleLayoutIcon active={feedLayout === "single"} />,
-            },
-          ]}
-          onChange={handleLayoutChange}
-        />
+        <Section heading="Reading">
+          <ToggleRow
+            label="Mark as read on scroll"
+            value={markAsReadOnScroll}
+            onValueChange={handleMarkAsReadOnScrollChange}
+          />
+          <ToggleRow
+            label="Hide read items by default"
+            value={hideReadByDefault}
+            onValueChange={handleHideReadByDefaultChange}
+          />
+          <ToggleRow
+            label="Bionic Reading"
+            value={bionicReading}
+            onValueChange={handleBionicReadingChange}
+          />
+          <FieldLabel label="Sort order" />
+          <Segmented
+            value={defaultSort}
+            options={[
+              { value: "newest", label: "Newest" },
+              { value: "stacked", label: "Stacked" },
+            ]}
+            onChange={handleDefaultSortChange}
+          />
+          <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
+            Insert time-bucket dividers in the feed. Only applies to Newest
+            sort.
+          </Text>
+          <Dropdown
+            label="Group feeds"
+            value={groupFeeds}
+            options={[
+              { value: "none", label: "None" },
+              { value: "hourly", label: "Hourly" },
+              { value: "daily", label: "Daily" },
+              { value: "weekly", label: "Weekly" },
+              { value: "monthly", label: "Monthly" },
+            ]}
+            onChange={handleGroupFeedsChange}
+          />
+          {isMobile ? (
+            <>
+              <FieldLabel label="Open links" />
+              <Segmented
+                value={linkOpenMode}
+                options={[
+                  { value: "embedded", label: "Embedded" },
+                  { value: "external", label: "External" },
+                ]}
+                onChange={handleLinkOpenModeChange}
+              />
+            </>
+          ) : null}
+        </Section>
 
         {isMobile ? (
-          <>
-            <SectionHeading label="Links" />
-            <Segmented
-              value={linkOpenMode}
-              options={[
-                { value: "embedded", label: "Embedded" },
-                { value: "external", label: "External" },
-              ]}
-              onChange={handleLinkOpenModeChange}
-            />
-          </>
-        ) : null}
-
-        {isMobile ? (
-          <>
-            <SectionHeading label="Background sync" />
+          <Section heading="Background sync">
             <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
-              How often the app refreshes your feeds in the background to check
-              for new items and deliver notifications.
+              How often the app refreshes your feeds in the background to
+              check for new items and deliver notifications.
             </Text>
             <Dropdown
+              label="Sync frequency"
               value={backgroundSyncFrequency}
               options={[
                 { value: "off", label: "Off" },
@@ -767,26 +835,27 @@ export default function SettingsScreen({ navigation }: Props) {
               ]}
               onChange={handleBackgroundSyncFrequencyChange}
             />
-            <View style={{ height: spacing.sm }} />
             <ToggleRow
               label="Sync only on Wi-Fi"
               value={backgroundSyncWifiOnly}
               onValueChange={handleBackgroundSyncWifiOnlyChange}
             />
             <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
-              When on, background syncs are skipped on cellular networks. Manual
-              pull-to-refresh always works.
+              When on, background syncs are skipped on cellular networks.
+              Manual pull-to-refresh always works.
             </Text>
             {__DEV__ ? <BackgroundSyncDevPanel /> : null}
-          </>
+          </Section>
         ) : null}
 
-        <SectionHeading label="Import / export" />
-        <Row
-          label="Import / export"
-          value="OPML"
-          onPress={() => navigation.navigate("ImportExport")}
-        />
+        <Section heading="Data">
+          <Row
+            label="Import / export"
+            value="OPML"
+            onPress={() => navigation.navigate("ImportExport")}
+          />
+          <Row label="Reset statistics" onPress={handleResetStatistics} danger />
+        </Section>
       </ScrollView>
     </View>
   );
@@ -794,20 +863,27 @@ export default function SettingsScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: spacing.lg, gap: spacing.sm, paddingBottom: spacing.xxl },
+  content: { padding: spacing.lg, gap: spacing.xl, paddingBottom: spacing.xxl },
+  section: {
+    gap: spacing.xs,
+  },
+  sectionCard: {
+    borderWidth: 1,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    gap: spacing.sm,
+  },
   sectionHeading: {
     fontSize: fontSize.xs,
     fontFamily: fonts.sans,
     letterSpacing: 1.2,
     textTransform: "uppercase",
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
+    paddingVertical: spacing.xs,
   },
   rowLabel: {
     flex: 1,
@@ -817,41 +893,33 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontFamily: fonts.sans,
   },
+  rowChevron: {
+    marginLeft: spacing.xs,
+  },
+  rowDisabled: {
+    opacity: 0.5,
+  },
+  fieldLabel: {
+    fontSize: fontSize.body,
+    fontFamily: fonts.sans,
+    fontWeight: "600",
+  },
   segmented: {
     flexDirection: "row",
     borderWidth: 1,
     borderRadius: radii.md,
     padding: 3,
-    alignSelf: "flex-start",
-  },
-  segmentedStretched: {
-    alignSelf: "stretch",
   },
   settingHint: {
     fontSize: fontSize.meta,
     fontFamily: fonts.sans,
-    marginBottom: spacing.xs,
-  },
-  devButton: {
-    borderWidth: 1,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginTop: spacing.xs,
-    alignSelf: "flex-start",
-  },
-  devButtonText: {
-    fontSize: fontSize.body,
-    fontFamily: fonts.sans,
   },
   segment: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: 2,
-  },
-  segmentFlex: {
     flex: 1,
     alignItems: "center",
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: radii.sm,
   },
   segmentContent: {
     alignItems: "center",
@@ -863,24 +931,6 @@ const styles = StyleSheet.create({
   },
   segmentText: {
     fontSize: fontSize.body,
-  },
-  dropdown: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderWidth: 1,
-    borderRadius: radii.md,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    alignSelf: "flex-start",
-    minWidth: 140,
-  },
-  dropdownText: {
-    flex: 1,
-    fontSize: fontSize.bodyLg,
-  },
-  dropdownChevron: {
-    fontSize: fontSize.bodyLg,
-    marginLeft: spacing.sm,
   },
   dropdownOverlay: {
     flex: 1,
