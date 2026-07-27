@@ -234,6 +234,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // detect and discard a page that resolves after the scope has changed.
   const loadGenerationRef = useRef(0);
 
+  // True only for this component instance's very first focus. Screens in a
+  // bottom-tab navigator stay mounted for the app's whole lifetime, so the
+  // first focus is the app actually starting up (fresh launch, or relaunch
+  // after the process was killed) rather than a tab switch — mobile treats
+  // it exactly like a manual pull-to-refresh instead of trusting whatever is
+  // still sitting in the local SQLite cache from the last session.
+  const isInitialFocusRef = useRef(true);
+
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
     minimumViewTime: 400,
@@ -428,7 +436,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
         // manually refresh to ever see content. Force a remote refresh in
         // that case, same as a manual refresh would.
         const forceRefreshEmptyCache =
-          committedFirstPage && firstPageCount === 0 && feedsToRefresh.length > 0;
+          committedFirstPage &&
+          firstPageCount === 0 &&
+          feedsToRefresh.length > 0;
 
         // Only clear the skeleton if this call's page actually committed —
         // if a newer loadData call has already superseded this one, letting
@@ -549,10 +559,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
       setGroupFeeds(config.groupFeeds ?? "none");
       setBionicReading(config.bionicReading ?? false);
       markAsReadOnScrollRef.current = config.markAsReadOnScroll ?? false;
-      if (shouldRefreshOnFocus) {
+      const isAppStart = isInitialFocusRef.current;
+      isInitialFocusRef.current = false;
+      const refreshRemote = shouldRefreshOnFocus || isAppStart;
+      if (refreshRemote) {
         setRefreshing(true);
       }
-      loadData(shouldRefreshOnFocus);
+      loadData(refreshRemote);
     }, [loadData, shouldRefreshOnFocus])
   );
 

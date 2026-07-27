@@ -421,8 +421,13 @@ describe("FeedListScreen", () => {
     });
   });
 
-  it("does not refresh on mobile focus and refreshes only on pull-to-refresh", async () => {
-    // Arrange
+  it("refreshes remote on mobile app start (mount), and on pull-to-refresh, but not on a plain focus-regain", async () => {
+    // Arrange - a mount is the app actually starting up (screens in the tab
+    // navigator stay mounted for the process's whole lifetime), so it must
+    // behave identically to a manual pull-to-refresh rather than silently
+    // trusting whatever is left over in the local SQLite cache from the last
+    // session. A later focus-regain with the same scope (e.g. switching tabs
+    // away and back) is neither of those and must stay local-only.
     (getFeeds as jest.Mock).mockResolvedValue([
       {
         id: 1,
@@ -461,23 +466,41 @@ describe("FeedListScreen", () => {
     } as FeedScreenProps["route"];
     let tree: renderer.ReactTestRenderer;
 
-    // Act
+    // Act - initial mount
     await act(async () => {
       tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
+      await Promise.resolve();
     });
 
-    // Assert - focus load on mobile does not trigger remote refresh
-    expect(refreshFeeds).not.toHaveBeenCalled();
+    // Assert - app start (the initial mount/focus) triggers a remote refresh,
+    // matching a manual pull-to-refresh.
+    expect(refreshFeeds).toHaveBeenCalledTimes(1);
+
+    // Act - simulate a plain focus-regain with the same scope (e.g. switching
+    // tabs away and back), not a remount and not pull-to-refresh.
+    const focusEffectCalls = (useFocusEffect as jest.Mock).mock.calls;
+    const focusCallback = focusEffectCalls[
+      focusEffectCalls.length - 1
+    ][0] as () => void;
+    await act(async () => {
+      focusCallback();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert - a plain focus-regain does not trigger another remote refresh.
+    expect(refreshFeeds).toHaveBeenCalledTimes(1);
 
     const list = tree!.root.findByType(FlashList);
     await act(async () => {
       await list.props.onRefresh();
     });
 
-    // Assert - pull to refresh triggers remote refresh
-    expect(refreshFeeds).toHaveBeenCalledTimes(1);
+    // Assert - pull to refresh triggers remote refresh.
+    expect(refreshFeeds).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       tree!.unmount();
@@ -498,14 +521,12 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getItemsPage as jest.Mock)
-      .mockResolvedValueOnce([])
-      .mockResolvedValue(
-        makeItems(1, 200, 1, "Alpha").map((item) => ({
-          ...item,
-          title: "Fetched after cold-start refresh",
-        }))
-      );
+    (getItemsPage as jest.Mock).mockResolvedValueOnce([]).mockResolvedValue(
+      makeItems(1, 200, 1, "Alpha").map((item) => ({
+        ...item,
+        title: "Fetched after cold-start refresh",
+      }))
+    );
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
 
     const navigation = {
@@ -533,9 +554,7 @@ describe("FeedListScreen", () => {
     expect(refreshFeeds).toHaveBeenCalledTimes(1);
     const texts = tree!.root.findAllByType(Text);
     expect(
-      texts.some((t) =>
-        t.props.children === "Fetched after cold-start refresh"
-      )
+      texts.some((t) => t.props.children === "Fetched after cold-start refresh")
     ).toBe(true);
 
     await act(async () => {
@@ -621,33 +640,25 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    const unreadPost = {
+      id: 201,
+      feed_id: 1,
+      feed_title: "Alpha",
+      title: "Unread post",
+      url: "https://alpha.example/unread",
+      content: "body",
+      image_url: null,
+      published_at: Date.now(),
+      read: 0,
+    };
     (getItemsPage as jest.Mock)
-      .mockResolvedValueOnce([
-        {
-          id: 201,
-          feed_id: 1,
-          feed_title: "Alpha",
-          title: "Unread post",
-          url: "https://alpha.example/unread",
-          content: "body",
-          image_url: null,
-          published_at: Date.now(),
-          read: 0,
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: 201,
-          feed_id: 1,
-          feed_title: "Alpha",
-          title: "Unread post",
-          url: "https://alpha.example/unread",
-          content: "body",
-          image_url: null,
-          published_at: Date.now(),
-          read: 1,
-        },
-      ]);
+      // Mount's cached-first commit.
+      .mockResolvedValueOnce([unreadPost])
+      // Mount's own forced remote refresh (app start) — nothing changed yet.
+      .mockResolvedValueOnce([unreadPost])
+      // The user's later, explicit pull-to-refresh — the item was read
+      // elsewhere in the meantime.
+      .mockResolvedValueOnce([{ ...unreadPost, read: 1 }]);
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
     (markItemRead as jest.Mock).mockResolvedValue(undefined);
 
@@ -1882,7 +1893,9 @@ describe("FeedListScreen", () => {
       },
     ];
     (getItemsPage as jest.Mock)
-      // Initial mount query
+      // Initial mount: cached-first query
+      .mockResolvedValueOnce(initialPage)
+      // Initial mount: app-start forced refresh query (unchanged)
       .mockResolvedValueOnce(initialPage)
       // Pull-to-refresh: immediate stale-while-revalidate query (unchanged)
       .mockResolvedValueOnce(initialPage)
@@ -2093,7 +2106,9 @@ describe("FeedListScreen", () => {
       read: 0,
     };
     (getItemsPage as jest.Mock)
-      // Initial mount query: newest-first is A, B, C.
+      // Initial mount: cached-first query, newest-first is A, B, C.
+      .mockResolvedValueOnce([postA, postB, postC])
+      // Initial mount: app-start forced refresh query (unchanged).
       .mockResolvedValueOnce([postA, postB, postC])
       // Silent focus-regain re-query: a new post (D) landed in the feed
       // (e.g. a background sync write), pushing B from index 1 to index 2.
@@ -2221,7 +2236,9 @@ describe("FeedListScreen", () => {
       read: 0,
     };
     (getItemsPage as jest.Mock)
-      // Initial mount query.
+      // Initial mount: cached-first query.
+      .mockResolvedValueOnce([postA, postB])
+      // Initial mount: app-start forced refresh query (unchanged).
       .mockResolvedValueOnce([postA, postB])
       // Silent focus-regain re-query: post B (the active one) is gone.
       .mockResolvedValueOnce([postA, postE]);
@@ -2701,9 +2718,16 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getItemsPage as jest.Mock)
-      .mockResolvedValueOnce(makeItems(PAGE_SIZE, 1))
-      .mockResolvedValueOnce(makeItems(1, PAGE_SIZE + 1));
+    // Keyed by offset rather than call order: the app-start forced refresh
+    // (see [[feedme-verification-environment]]) means page 0 may now be
+    // queried more than once before pagination kicks in, so a positional
+    // mockResolvedValueOnce chain would be call-order-fragile here.
+    (getItemsPage as jest.Mock).mockImplementation(
+      ({ offset }: { offset: number }) =>
+        Promise.resolve(
+          offset === 0 ? makeItems(PAGE_SIZE, 1) : makeItems(1, PAGE_SIZE + 1)
+        )
+    );
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
 
     const navigation = {
@@ -2724,10 +2748,10 @@ describe("FeedListScreen", () => {
       tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
+      await Promise.resolve();
     });
 
     // Assert
-    expect(getItemsPage).toHaveBeenCalledTimes(2);
     expect(getItemsPage).toHaveBeenLastCalledWith(
       expect.objectContaining({
         feedIds: [1],
@@ -2744,12 +2768,13 @@ describe("FeedListScreen", () => {
 
     // The second page was short, so hasMore is now false and a further
     // onEndReached does not fetch a third page.
+    const callCountAfterMount = (getItemsPage as jest.Mock).mock.calls.length;
     const list = tree!.root.findByType(FlashList);
     await act(async () => {
       await list.props.onEndReached();
     });
 
-    expect(getItemsPage).toHaveBeenCalledTimes(2);
+    expect(getItemsPage).toHaveBeenCalledTimes(callCountAfterMount);
 
     await act(async () => {
       tree!.unmount();
@@ -2800,7 +2825,10 @@ describe("FeedListScreen", () => {
       await list.props.onEndReached();
     });
 
-    expect(getItemsPage).toHaveBeenCalledTimes(1);
+    // Two calls from the initial mount (cached-first query, then the
+    // app-start forced refresh's post-refresh query) — the short page means
+    // hasMore stays false throughout, so onEndReached never fetches a third.
+    expect(getItemsPage).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       tree!.unmount();
@@ -2820,9 +2848,15 @@ describe("FeedListScreen", () => {
       },
     ]);
     (refreshFeeds as jest.Mock).mockResolvedValue(0);
-    (getItemsPage as jest.Mock)
-      .mockResolvedValueOnce(makeItems(PAGE_SIZE, 1))
-      .mockResolvedValueOnce(makeItems(5, PAGE_SIZE + 1));
+    // Keyed by offset rather than call order — see the "loads additional
+    // pages" test above for why a positional mockResolvedValueOnce chain is
+    // fragile now that mount always does its own app-start refresh pass.
+    (getItemsPage as jest.Mock).mockImplementation(
+      ({ offset }: { offset: number }) =>
+        Promise.resolve(
+          offset === 0 ? makeItems(PAGE_SIZE, 1) : makeItems(5, PAGE_SIZE + 1)
+        )
+    );
     (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
 
     const navigation = {
@@ -2843,9 +2877,10 @@ describe("FeedListScreen", () => {
       tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
+      await Promise.resolve();
     });
 
-    expect(getItemsPage).toHaveBeenCalledTimes(2);
+    const callCountAfterMount = (getItemsPage as jest.Mock).mock.calls.length;
 
     await act(async () => {
       await tree!.root
@@ -2867,7 +2902,7 @@ describe("FeedListScreen", () => {
 
     // Assert: the search auto-loader effect sees hasMore=false and does not
     // fetch a third page.
-    expect(getItemsPage).toHaveBeenCalledTimes(2);
+    expect(getItemsPage).toHaveBeenCalledTimes(callCountAfterMount);
 
     const visibleText = tree!.root
       .findAllByType(Text)

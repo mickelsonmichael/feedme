@@ -1,0 +1,14 @@
+appId: com.feedme.app
+---
+# Smoke test: app launches and all primary bottom tabs are reachable.
+- launchApp
+- assertVisible: "Feed"
+- tapOn: "Feeds"
+- assertVisible:
+    text: "search by title or url…"
+- tapOn: "Discover"
+- assertVisible: "Discover"
+- tapOn: "Settings"
+- assertVisible: "Appearance"
+- tapOn: "Feed"
+- assertVisible: "Feed"

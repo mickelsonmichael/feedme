@@ -1,0 +1,27 @@
+appId: com.feedme.app
+---
+# Adds a feed by URL, confirms it appears in the Feeds list, then deletes it
+# again so the flow leaves no test data behind on shared/persistent devices.
+- launchApp
+- tapOn: "Feeds"
+- tapOn: "Add feed"
+- tapOn: "https://example.com/feed.xml"
+- inputText: "https://feeds.simplecast.com/54nAGcIl"
+- hideKeyboard
+- tapOn: "My Favourite Blog"
+- inputText: "Maestro E2E Test Feed"
+- hideKeyboard
+- scrollUntilVisible:
+    element: "Add Feed"
+    direction: DOWN
+- tapOn: "Add Feed"
+- scrollUntilVisible:
+    element: "Maestro E2E Test Feed"
+    direction: DOWN
+- assertVisible: "Maestro E2E Test Feed"
+
+# Clean up: remove the feed we just added.
+- tapOn: "Edit Maestro E2E Test Feed"
+- tapOn: "Delete feed"
+- tapOn: "Remove"
+- assertNotVisible: "Maestro E2E Test Feed"

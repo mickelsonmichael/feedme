@@ -1,0 +1,11 @@
+appId: com.feedme.app
+---
+# Confirms the theme segmented control is interactive and always leaves the
+# app on "System" (this device's persistent default) when the flow ends.
+- launchApp
+- tapOn: "Settings"
+- assertVisible: "Appearance"
+- tapOn: "Dark"
+- tapOn: "Light"
+- tapOn: "System"
+- assertVisible: "Appearance"
