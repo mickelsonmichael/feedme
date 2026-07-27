@@ -445,7 +445,7 @@ export default function FeedItemScreen({ route, navigation }: Props) {
                         url: redditAuthorFeedUrl,
                         description: null,
                         use_proxy: 0,
-                        nsfw: 0,
+                        nsfw: item.nsfw ? 1 : 0,
                         show_only_in_tag: 0,
                         show_only_in_custom_feed: 0,
                         collapse_repeated: 0,

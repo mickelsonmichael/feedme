@@ -640,6 +640,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const itemsByIdRef = useRef(itemsById);
   itemsByIdRef.current = itemsById;
 
+  const feedDetailsByIdRef = useRef(feedDetailsById);
+  feedDetailsByIdRef.current = feedDetailsById;
+
   const savedIdsRef = useRef(savedIds);
   savedIdsRef.current = savedIds;
 
@@ -729,12 +732,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
       if (existingFeed) {
         await deleteFeed(existingFeed.id);
       } else {
+        const originFeed = feedDetailsByIdRef.current.get(item.feed_id);
         await addFeed({
           title: `Reddit - u/${authorName}`,
           url: feedUrl,
           description: null,
           use_proxy: 0,
-          nsfw: 0,
+          nsfw: originFeed?.nsfw === 1 ? 1 : 0,
           show_only_in_tag: 0,
           show_only_in_custom_feed: 0,
           collapse_repeated: 0,

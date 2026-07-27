@@ -296,7 +296,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           url: feedUrl,
           description: null,
           use_proxy: 0,
-          nsfw: 0,
+          nsfw: feed.nsfw === 1 ? 1 : 0,
           show_only_in_tag: 0,
           show_only_in_custom_feed: 0,
           collapse_repeated: 0,
@@ -308,7 +308,7 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     } catch {
       Alert.alert("Error", "Could not update subscription.");
     }
-  }, []);
+  }, [feed.nsfw]);
 
   const renderItem = useCallback(
     ({ item }: { item: FeedItem }) => {
