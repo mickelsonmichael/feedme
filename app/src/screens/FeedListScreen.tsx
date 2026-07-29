@@ -161,6 +161,19 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // takeover so a manual refresh always gets the fancy loader, while an
   // auto-refresh with existing content keeps showing that content.
   const [manualRefreshInFlight, setManualRefreshInFlight] = useState(false);
+  // Cold-start background refresh (mobile app launch): the cached posts are
+  // already on screen, and the network refresh runs behind a slim "Fetching
+  // new posts in the background…" banner instead of taking the screen over.
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
+  // Set when a background refresh finished and brought in posts the user isn't
+  // seeing yet. Drives the "New posts available. Tap to reload" button; the
+  // freshly-queried page waits in pendingRefreshedPageRef until the user taps,
+  // so the list is never swapped out from under them.
+  const [newPostsAvailable, setNewPostsAvailable] = useState(false);
+  const pendingRefreshedPageRef = useRef<{
+    items: FeedItemWithFeed[];
+    hasMore: boolean;
+  } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -349,8 +362,17 @@ export default function FeedListScreen({ navigation, route }: Props) {
   }, [items, scrollCurrentViewToTop]);
 
   const loadData = useCallback(
-    async (refreshRemote: boolean) => {
+    async (refreshRemote: boolean, deferNewItems = false) => {
       const generation = ++loadGenerationRef.current;
+      // Any non-deferred load (sort change, scope change, tab switch, manual
+      // refresh) supersedes a pending background result — its stashed page was
+      // queried for a scope/sort that may no longer apply, so drop it and hide
+      // the button rather than let a stale reload lurk.
+      if (!deferNewItems) {
+        pendingRefreshedPageRef.current = null;
+        setNewPostsAvailable(false);
+        setBackgroundRefreshing(false);
+      }
       try {
         const feedData = await getFeeds();
         setFeeds(feedData);
@@ -399,7 +421,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
         // Query the local database for the current scope and commit the
         // results if this loadData call is still the latest one. Returns the
         // number of items committed, or null if this call was superseded.
-        const queryAndCommitPage = async (): Promise<number | null> => {
+        //
+        // When `defer` is true (the post-network commit of a cold-start
+        // background refresh), any genuinely new posts are stashed in
+        // pendingRefreshedPageRef and surfaced via the "New posts available"
+        // button rather than committed into the visible list — the user keeps
+        // reading the cached posts until they choose to reload. Saved/read-later
+        // sets and (if unchanged) the item list still commit immediately.
+        const queryAndCommitPage = async (
+          defer = false
+        ): Promise<number | null> => {
           const [itemData, ids, readLaterIdsLoaded] = await Promise.all([
             getItemsPage({
               feedIds: scopeFeedIds,
@@ -414,10 +445,25 @@ export default function FeedListScreen({ navigation, route }: Props) {
           if (loadGenerationRef.current !== generation) {
             return null;
           }
-          setItems(itemData);
-          setHasMore(itemData.length === PAGE_SIZE);
           setSavedIds(ids);
           setReadLaterIds(readLaterIdsLoaded);
+          if (defer) {
+            const currentIds = new Set(itemsRef.current.map((i) => i.id));
+            const hasNewPosts = itemData.some((i) => !currentIds.has(i.id));
+            if (hasNewPosts) {
+              pendingRefreshedPageRef.current = {
+                items: itemData,
+                hasMore: itemData.length === PAGE_SIZE,
+              };
+              setNewPostsAvailable(true);
+              return itemData.length;
+            }
+            // Nothing new arrived — fall through and commit in place so any
+            // read-state / content edits from the refresh are still picked up
+            // without bothering the user with a reload button.
+          }
+          setItems(itemData);
+          setHasMore(itemData.length === PAGE_SIZE);
           return itemData.length;
         };
 
@@ -440,6 +486,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
           firstPageCount === 0 &&
           feedsToRefresh.length > 0;
 
+        // Defer new posts behind the "New posts available" button only when we
+        // actually rendered cached posts to defer *from*. A first-ever load
+        // with an empty cache has nothing to show, so it keeps the full-screen
+        // loader and commits in place instead.
+        const willDefer =
+          deferNewItems &&
+          committedFirstPage &&
+          !forceRefreshEmptyCache &&
+          (firstPageCount ?? 0) > 0;
+
         // Only clear the skeleton if this call's page actually committed —
         // if a newer loadData call has already superseded this one, letting
         // this stale call clear `loading` would hide the skeleton before the
@@ -455,6 +511,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
         } else if (feedsToRefresh.length > 0) {
           if (forceRefreshEmptyCache) {
             setRefreshing(true);
+          }
+          if (willDefer) {
+            setBackgroundRefreshing(true);
           }
           setRefreshProgress({
             total: feedsToRefresh.length,
@@ -493,7 +552,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             if (loadGenerationRef.current === generation) {
               setFeeds(refreshedFeeds);
             }
-            await queryAndCommitPage();
+            await queryAndCommitPage(willDefer);
           }
         } else {
           setRefreshProgress({
@@ -520,6 +579,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
           setLoading(false);
           setRefreshing(false);
           setRefreshProgress(null);
+          setBackgroundRefreshing(false);
         }
       }
     },
@@ -555,17 +615,25 @@ export default function FeedListScreen({ navigation, route }: Props) {
   useFocusEffect(
     useCallback(() => {
       const config = loadConfig();
-      setFeedLayout(config.feedLayout ?? "compact");
+      const layout = config.feedLayout ?? "compact";
+      setFeedLayout(layout);
       setGroupFeeds(config.groupFeeds ?? "none");
       setBionicReading(config.bionicReading ?? false);
       markAsReadOnScrollRef.current = config.markAsReadOnScroll ?? false;
       const isAppStart = isInitialFocusRef.current;
       isInitialFocusRef.current = false;
       const refreshRemote = shouldRefreshOnFocus || isAppStart;
-      if (refreshRemote) {
+      // Mobile cold start: render the cached posts right away and pull new
+      // ones in behind a background banner, then offer a "New posts available"
+      // button — rather than the full-screen loader takeover a manual refresh
+      // gets. The single-post reader keeps the in-place update (there's no
+      // "list" to defer, and a reload button has no sensible home there).
+      const deferNewItems =
+        isAppStart && !shouldRefreshOnFocus && layout !== "single";
+      if (refreshRemote && !deferNewItems) {
         setRefreshing(true);
       }
-      loadData(refreshRemote);
+      loadData(refreshRemote, deferNewItems);
     }, [loadData, shouldRefreshOnFocus])
   );
 
@@ -579,7 +647,29 @@ export default function FeedListScreen({ navigation, route }: Props) {
     loadData(false);
   }, [sort, loadData]);
 
+  // Commit the posts a background refresh stashed, then jump to the top so the
+  // user lands on the freshest content. Driven by the "New posts available"
+  // button.
+  const handleShowNewPosts = useCallback(() => {
+    const pending = pendingRefreshedPageRef.current;
+    pendingRefreshedPageRef.current = null;
+    setNewPostsAvailable(false);
+    if (pending) {
+      // Defer the scroll-to-top until the new items actually commit (same
+      // reasoning as the pull-to-refresh scroll — see pendingScrollToTopRef).
+      pendingScrollToTopRef.current = true;
+      setItems(pending.items);
+      setHasMore(pending.hasMore);
+    }
+    setIsFeedScrolled(false);
+  }, [setIsFeedScrolled]);
+
   const handleRefreshAll = async () => {
+    // A manual refresh supersedes any pending background result: it will
+    // re-query and commit in place, so drop the stashed page and hide the
+    // "New posts available" button.
+    pendingRefreshedPageRef.current = null;
+    setNewPostsAvailable(false);
     setRetainedUnreadIds(new Set());
     if (feedLayout === "single") {
       selectUnreadAfterRefreshRef.current = true;
@@ -1802,6 +1892,42 @@ export default function FeedListScreen({ navigation, route }: Props) {
         </View>
       ) : null}
 
+      {backgroundRefreshing ? (
+        <View
+          style={[
+            styles.backgroundRefreshRow,
+            {
+              borderBottomColor: colors.inkFaint,
+              backgroundColor: colors.paperWarm,
+            },
+          ]}
+        >
+          <PulsingDots size={6} />
+          <MetaText>Fetching new posts in the background…</MetaText>
+        </View>
+      ) : null}
+
+      {newPostsAvailable ? (
+        <TouchableOpacity
+          onPress={handleShowNewPosts}
+          activeOpacity={0.85}
+          accessibilityLabel="Show new posts"
+          accessibilityRole="button"
+          style={[
+            styles.newPostsButton,
+            {
+              backgroundColor: colors.accent,
+              borderBottomColor: colors.inkFaint,
+            },
+          ]}
+        >
+          <Feather name="arrow-up" size={14} color={colors.paper} />
+          <Text style={[styles.newPostsButtonText, { color: colors.paper }]}>
+            New posts available. Tap to reload
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
       {feeds.length === 0 ? (
         <View style={styles.center}>
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
@@ -2533,6 +2659,28 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "flex-end",
     marginLeft: spacing.md,
+  },
+  backgroundRefreshRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+  },
+  newPostsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderBottomWidth: 1,
+  },
+  newPostsButtonText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.body,
+    fontWeight: "600",
   },
   content: {
     padding: spacing.md,

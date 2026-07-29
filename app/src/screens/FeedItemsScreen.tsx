@@ -280,35 +280,38 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     setRawXmlItem(itemsByIdRef.current.get(id) ?? null);
   }, []);
 
-  const handleFollowAuthor = useCallback(async (id: number) => {
-    const item = itemsByIdRef.current.get(id);
-    if (!item) return;
-    const authorName = extractRedditAuthor(item.content);
-    if (!authorName) return;
-    const feedUrl = buildRedditFeedUrl(`u/${authorName}`);
-    try {
-      const existingFeed = await getFeedByUrl(feedUrl);
-      if (existingFeed) {
-        await deleteFeed(existingFeed.id);
-      } else {
-        await addFeed({
-          title: `Reddit - u/${authorName}`,
-          url: feedUrl,
-          description: null,
-          use_proxy: 0,
-          nsfw: feed.nsfw === 1 ? 1 : 0,
-          show_only_in_tag: 0,
-          show_only_in_custom_feed: 0,
-          collapse_repeated: 0,
-          reddit_include_comments: 0,
-        });
+  const handleFollowAuthor = useCallback(
+    async (id: number) => {
+      const item = itemsByIdRef.current.get(id);
+      if (!item) return;
+      const authorName = extractRedditAuthor(item.content);
+      if (!authorName) return;
+      const feedUrl = buildRedditFeedUrl(`u/${authorName}`);
+      try {
+        const existingFeed = await getFeedByUrl(feedUrl);
+        if (existingFeed) {
+          await deleteFeed(existingFeed.id);
+        } else {
+          await addFeed({
+            title: `Reddit - u/${authorName}`,
+            url: feedUrl,
+            description: null,
+            use_proxy: 0,
+            nsfw: feed.nsfw === 1 ? 1 : 0,
+            show_only_in_tag: 0,
+            show_only_in_custom_feed: 0,
+            collapse_repeated: 0,
+            reddit_include_comments: 0,
+          });
+        }
+        const updatedFeeds = await getFeeds();
+        setAllFeeds(updatedFeeds);
+      } catch {
+        Alert.alert("Error", "Could not update subscription.");
       }
-      const updatedFeeds = await getFeeds();
-      setAllFeeds(updatedFeeds);
-    } catch {
-      Alert.alert("Error", "Could not update subscription.");
-    }
-  }, [feed.nsfw]);
+    },
+    [feed.nsfw]
+  );
 
   const renderItem = useCallback(
     ({ item }: { item: FeedItem }) => {
@@ -358,7 +361,11 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     ]
   );
 
-  if (loading) {
+  // Initial load and a manual refresh (pull-to-refresh or the "Refresh"
+  // button/link) both get the full skeleton treatment, matching the main
+  // Feed tab's behavior — there is no passive background refresh here to
+  // distinguish from, every refresh on this screen is user-initiated.
+  if (loading || refreshing) {
     return <FeedLoadingScreen />;
   }
 
@@ -371,12 +378,8 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           {feed.url.replace(/^https?:\/\//, "")} · {items.length} items
         </MetaText>
         <View style={styles.spacer} />
-        <MetaText>{refreshing ? "refreshing…" : "pull to refresh"}</MetaText>
-        <TouchableOpacity
-          onPress={handleRefresh}
-          disabled={refreshing}
-          hitSlop={8}
-        >
+        <MetaText>pull to refresh</MetaText>
+        <TouchableOpacity onPress={handleRefresh} hitSlop={8}>
           <MetaText style={{ color: colors.accent }}>Refresh</MetaText>
         </TouchableOpacity>
       </View>
