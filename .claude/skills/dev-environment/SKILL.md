@@ -1,0 +1,78 @@
+---
+name: dev-environment
+description: "Use when running commands, starting dev servers, building the app, or debugging network/runtime issues in the feedme project. Covers project structure, terminal working directories, Expo dev server, and Cloudflare Worker startup."
+---
+
+# FeedMe Dev Environment
+
+## Project Structure
+
+This is a monorepo with two independent projects. Every CLI command must be run from its own subdirectory:
+
+| Project | Directory | Stack |
+|---------|-----------|-------|
+| Mobile/Web app | `app/` | React Native, Expo, TypeScript |
+| Backend | `worker/` | Cloudflare Workers, TypeScript |
+
+**Never run `app/` commands from the repo root or `worker/`, and vice versa.** Both have their own `package.json` and `node_modules`.
+
+## Before Starting Any Dev Server
+
+You should check that the expo or worker servers are already working before starting a new one.
+If an instance is already running, use it — do not start a duplicate. Only start a new server if none is found.
+
+You can check the worker is running simply by pinging `127.0.0.1:8787` using `curl` (`curl -v 127.0.0.1:8787`)
+If no URL parameter is provided, you should get a `400` response with `Missing url parameter`, which is normal and means the
+servier is up and running.
+
+Similarly, you can check that the expo web server is running using `curl 127.0.0.1:8081`.
+Likewise, you can check for the expo Metro server using `curl 127.0.0.1:8081/status` and you should
+get a response `200` response with the body `package-status:running`.
+
+## Starting both servers simultaneously
+
+Run from the root directory:
+
+```
+npm run start
+```
+
+This will start both the app and worker processes in a single command and is a useful
+alternative instead of running two commands in two separate terminal instances.
+
+## Starting the Expo Dev Server
+
+Run from the `app/` directory:
+
+```pwsh
+cd app
+npm run start
+```
+
+- Expo uses **Fast Refresh** — JS/TS changes are pushed to the device/emulator instantly without a rebuild.
+- **Do not run `expo run:android` or Gradle commands** to apply code changes when the dev server is already running. Those commands do a full native build and are only needed when native code changes (e.g., new native modules, first-time install).
+- If the app is already installed on the emulator, `expo start` is all that is needed.
+
+## Starting the Worker Dev Server
+
+Run from the `worker/` directory:
+
+```pwsh
+cd worker
+npx wrangler dev
+```
+
+The worker runs on `http://localhost:8787` by default and proxies feed requests for the app.
+
+## Android Emulator / ADB
+
+The Android SDK should be available. If it is not, you should recommend the user set the `ANDROID_HOME` environment variable in `.vscode/mcp.json` or
+wherever necessary to ensure the variable is included in your terminal sessions and environment.
+
+Check for a running emulator before launching a new one using the MCP Server tools.
+
+## Interacting with the emulator
+
+For interacting with the emulator, you should prefer to use the `mobile-mcp` MCP tools to interact directly.
+
+Only use `adb` for functionality that is not exposed by the `mobile-mcp` tools, such as inspecting logs with `adb logcat` or running shell commands with `adb shell`. But prefer using `mobile-mcp`.

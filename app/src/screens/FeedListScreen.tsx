@@ -6,6 +6,7 @@ import React, {
   useRef,
 } from "react";
 import {
+  AppState,
   View,
   Text,
   TouchableOpacity,
@@ -58,18 +59,14 @@ import {
   TabParamList,
 } from "../types";
 import { toggleExpandedId } from "../expandItemIds";
-import { MetaText } from "../components/ui";
-import {
-  FeedLoadingScreen,
-  PulsingDots,
-  RefreshProgressBar,
-} from "../components/LoadingState";
+import { FeedLoadingScreen, PulsingDots } from "../components/LoadingState";
 import { Toast } from "../components/Toast";
 import { CompactMenu } from "../components/CompactMenu";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { useHeaderContent } from "../context/HeaderContentContext";
 import { useFeedScroll } from "../context/FeedScrollContext";
+import { useBackgroundSync } from "../context/BackgroundSyncContext";
 import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
 import {
@@ -108,6 +105,20 @@ const CARD_LAYOUT_WIDTH = 760;
 const PAGE_SIZE = 50;
 const SINGLE_SWIPE_ENTER_DURATION_MS = 240;
 
+// How long the very first local read gets before we're willing to put a
+// loading screen up. An app restart with cached posts must land on those posts
+// plus the background banner — the full loader on the way there reads as "the
+// app is loading" all over again, which is precisely what the banner replaces.
+//
+// Sized against a measured cold start (emulator, dev bundle): the first read
+// costs roughly a second, because getDatabase() runs the whole schema
+// init/migration pass before getFeeds() and the first page query can even
+// begin. This wants to cover that comfortably rather than clip it. A fresh
+// install has no cache to find, runs past the window, and still gets the
+// loader — followed by a far longer network fetch, so the extra wait to reach
+// it is not the part that matters.
+const INITIAL_LOAD_GRACE_MS = 1_200;
+
 export default function FeedListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const { setHeaderContent, clearHeaderContent } = useHeaderContent();
@@ -123,6 +134,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [feeds, setFeeds] = useState<Feed[]>([]);
   const [items, setItems] = useState<FeedItemWithFeed[]>([]);
   const [loading, setLoading] = useState(true);
+  // Whether the initial local read has been slow enough to justify a loading
+  // screen — see INITIAL_LOAD_GRACE_MS. `loading` is one-way (it is only ever
+  // cleared), so a single mount-time timer covers the whole app session.
+  const [initialLoadGraceElapsed, setInitialLoadGraceElapsed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState<FilterMode>(() =>
     loadConfig().hideReadByDefault ? "unread" : "all"
@@ -153,18 +168,22 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [retainedUnreadIds, setRetainedUnreadIds] = useState<Set<number>>(
     new Set()
   );
-  const [refreshProgress, setRefreshProgress] =
-    useState<FeedRefreshProgress | null>(null);
-  // True only while a manual refresh (pull-to-refresh or the "Refresh"
-  // button) is in flight — distinct from `refreshing`, which is also set by
-  // the web auto-refresh-on-focus path. Drives the full-screen loading
-  // takeover so a manual refresh always gets the fancy loader, while an
-  // auto-refresh with existing content keeps showing that content.
-  const [manualRefreshInFlight, setManualRefreshInFlight] = useState(false);
-  // Cold-start background refresh (mobile app launch): the cached posts are
-  // already on screen, and the network refresh runs behind a slim "Fetching
-  // new posts in the background…" banner instead of taking the screen over.
-  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
+  // Deferred background refresh (mobile app launch, returning to the app from
+  // the background, and pull-to-refresh): the cached posts are already on
+  // screen, and the network refresh runs behind a slim "Fetching new posts in
+  // the background…" banner instead of taking the screen over.
+  //
+  // Both of these live in a provider above the tab navigator, which renders the
+  // banner itself (BackgroundSyncBannerHost). A sync outlives this screen's
+  // visibility — leaving for Feeds/Discover/Settings must not make it look like
+  // the sync stopped — so the state can't be local to the screen. This screen
+  // is still the only writer.
+  const {
+    syncing: backgroundRefreshing,
+    setSyncing: setBackgroundRefreshing,
+    progress: refreshProgress,
+    setProgress: setRefreshProgress,
+  } = useBackgroundSync();
   // Set when a background refresh finished and brought in posts the user isn't
   // seeing yet. Drives the "New posts available. Tap to reload" button; the
   // freshly-queried page waits in pendingRefreshedPageRef until the user taps,
@@ -217,13 +236,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
    *  from the swiped-from edge, or springs back to 0 for a rejected swipe. */
   const singleSwipeTranslateX = useRef(new Animated.Value(0)).current;
   const pendingScrollToTopRef = useRef(false);
-  // Set by pull-to-refresh: request a scroll-to-top when the *refreshed*
-  // items commit (loadData's second, post-network commit) rather than when
-  // the immediate cached-items commit lands.
-  const scrollAfterRefreshRef = useRef(false);
-  // Same deal for single layout's "jump to first unread": it must react to
-  // the refreshed items, not the interim cached commit.
-  const selectUnreadAfterRefreshRef = useRef(false);
+  // Set when committing a stashed page from the "New posts available" banner:
+  // single layout must jump to the first unread of the newly-landed items
+  // rather than stay anchored to the post being read.
   const singleSelectUnreadOnNextItemsRef = useRef(false);
   const singleLastAutoMarkedIdRef = useRef<number | null>(null);
   const markAsReadOnScrollRef = useRef(
@@ -254,6 +269,20 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // it exactly like a manual pull-to-refresh instead of trusting whatever is
   // still sitting in the local SQLite cache from the last session.
   const isInitialFocusRef = useRef(true);
+
+  // Read from the AppState listener below, which is registered once and must
+  // not be torn down and re-registered on every focus/state change.
+  const appStateRef = useRef(AppState.currentState);
+  const isFocusedRef = useRef(isFocused);
+  isFocusedRef.current = isFocused;
+
+  useEffect(() => {
+    const timer = setTimeout(
+      () => setInitialLoadGraceElapsed(true),
+      INITIAL_LOAD_GRACE_MS
+    );
+    return () => clearTimeout(timer);
+  }, []);
 
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
@@ -361,9 +390,30 @@ export default function FeedListScreen({ navigation, route }: Props) {
     }
   }, [items, scrollCurrentViewToTop]);
 
+  // True while a deferred (banner-backed) refresh is running. Set in loadData
+  // so every deferred path is covered: cold start, app resume, pull-to-refresh.
+  const backgroundSyncInFlightRef = useRef(false);
+
   const loadData = useCallback(
-    async (refreshRemote: boolean, deferNewItems = false) => {
+    async (
+      refreshRemote: boolean,
+      deferNewItems = false,
+      // Bypass per-feed adaptive scheduling. Set only for a refresh the user
+      // explicitly asked for: without it, pulling to refresh shortly after a
+      // sync skips every feed still in backoff and returns instantly, so
+      // nothing fetches and no banner is ever seen — the refresh silently does
+      // nothing. Matches FeedItemsScreen's explicit-refresh behaviour. Host
+      // 429 rate limits are checked separately in refreshFeeds and are NOT
+      // bypassed by this.
+      forceRemote = false
+    ) => {
       const generation = ++loadGenerationRef.current;
+      // Tracked for every deferred refresh, not just the app-resume one, so
+      // that re-focusing the Feed tab mid-sync can tell a sync is still running
+      // and leave it alone.
+      if (deferNewItems) {
+        backgroundSyncInFlightRef.current = true;
+      }
       // Any non-deferred load (sort change, scope change, tab switch, manual
       // refresh) supersedes a pending background result — its stashed page was
       // queried for a scope/sort that may no longer apply, so drop it and hide
@@ -422,12 +472,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
         // results if this loadData call is still the latest one. Returns the
         // number of items committed, or null if this call was superseded.
         //
-        // When `defer` is true (the post-network commit of a cold-start
-        // background refresh), any genuinely new posts are stashed in
-        // pendingRefreshedPageRef and surfaced via the "New posts available"
-        // button rather than committed into the visible list — the user keeps
-        // reading the cached posts until they choose to reload. Saved/read-later
-        // sets and (if unchanged) the item list still commit immediately.
+        // When `defer` is true (any commit belonging to a background refresh
+        // that has posts on screen to defer from), genuinely new posts are
+        // stashed in pendingRefreshedPageRef and surfaced via the "New posts
+        // available" button rather than committed into the visible list — the
+        // user keeps reading the cached posts until they choose to reload.
+        // Saved/read-later sets and (if unchanged) the item list still commit
+        // immediately.
         const queryAndCommitPage = async (
           defer = false
         ): Promise<number | null> => {
@@ -471,7 +522,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
         // first, so the user sees content immediately instead of staring at a
         // spinner while dozens of network fetches complete. The remote
         // refresh below then updates the list in place when it finishes.
-        const firstPageCount = await queryAndCommitPage();
+        //
+        // On a deferred refresh where posts are *already* on screen (returning
+        // to a backgrounded app), this first commit has to respect the
+        // hold-back too: the local DB may already contain newer posts — from
+        // the background sync task, or from a previous deferred refresh the
+        // user hasn't accepted yet — and committing them here would push them
+        // under the reader, which is exactly what the banner exists to prevent.
+        const deferFirstQuery = deferNewItems && itemsRef.current.length > 0;
+        const firstPageCount = await queryAndCommitPage(deferFirstQuery);
         const committedFirstPage = firstPageCount !== null;
 
         // Cold-start edge case: the local cache had nothing for this scope
@@ -512,7 +571,17 @@ export default function FeedListScreen({ navigation, route }: Props) {
           if (forceRefreshEmptyCache) {
             setRefreshing(true);
           }
-          if (willDefer) {
+          // Any refresh running with posts already on screen announces itself
+          // in the banner — cold start, app resume, web focus, and an explicit
+          // pull-to-refresh alike. Tying this to `willDefer` meant a manual
+          // refresh in the single-post reader showed nothing at all beyond the
+          // pull spinner, which is inconsistent for no good reason. Only a
+          // refresh with nothing to show falls through to the full loader.
+          if (
+            committedFirstPage &&
+            !forceRefreshEmptyCache &&
+            (firstPageCount ?? 0) > 0
+          ) {
             setBackgroundRefreshing(true);
           }
           setRefreshProgress({
@@ -525,7 +594,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
           });
           const errors = await refreshFeeds(feedsToRefresh, {
             onProgress: setRefreshProgress,
-            force: false,
+            force: forceRemote,
             concurrency: Platform.OS === "web" ? 6 : 3,
           });
           // Keep this lightweight \u2014 just the count \u2014 since the per-feed
@@ -539,14 +608,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
           }
 
           if (loadGenerationRef.current === generation) {
-            if (scrollAfterRefreshRef.current) {
-              scrollAfterRefreshRef.current = false;
-              pendingScrollToTopRef.current = true;
-            }
-            if (selectUnreadAfterRefreshRef.current) {
-              selectUnreadAfterRefreshRef.current = false;
-              singleSelectUnreadOnNextItemsRef.current = true;
-            }
             // Feed rows may have new titles / error states after the refresh.
             const refreshedFeeds = await getFeeds();
             if (loadGenerationRef.current === generation) {
@@ -573,9 +634,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
         // doing so can clear `refreshing`/`loading` for the newer, still
         // in-flight call before its items have committed, leaving the screen
         // on the empty state until that call eventually finishes.
+        if (deferNewItems) {
+          backgroundSyncInFlightRef.current = false;
+        }
         if (loadGenerationRef.current === generation) {
-          scrollAfterRefreshRef.current = false;
-          selectUnreadAfterRefreshRef.current = false;
           setLoading(false);
           setRefreshing(false);
           setRefreshProgress(null);
@@ -625,11 +687,20 @@ export default function FeedListScreen({ navigation, route }: Props) {
       const refreshRemote = shouldRefreshOnFocus || isAppStart;
       // Mobile cold start: render the cached posts right away and pull new
       // ones in behind a background banner, then offer a "New posts available"
-      // button — rather than the full-screen loader takeover a manual refresh
-      // gets. The single-post reader keeps the in-place update (there's no
-      // "list" to defer, and a reload button has no sensible home there).
-      const deferNewItems =
-        isAppStart && !shouldRefreshOnFocus && layout !== "single";
+      // button. This applies to every layout, single-post reader included —
+      // that's the layout where an unannounced mid-read list swap is most
+      // disruptive, and the button's "reset" is exactly what a reader wants
+      // once the sync lands.
+      const deferNewItems = isAppStart && !shouldRefreshOnFocus;
+      // Coming back to the Feed tab while a background sync is still running:
+      // leave it alone. This re-read is non-deferred, so it would clear the
+      // banner and bump the load generation, making the running sync's results
+      // get discarded on arrival — the user would watch the banner vanish and
+      // never get the "New posts available" button. The sync commits its own
+      // fresh page when it lands, so there is nothing to re-read here anyway.
+      if (backgroundSyncInFlightRef.current && !deferNewItems) {
+        return;
+      }
       if (refreshRemote && !deferNewItems) {
         setRefreshing(true);
       }
@@ -647,14 +718,23 @@ export default function FeedListScreen({ navigation, route }: Props) {
     loadData(false);
   }, [sort, loadData]);
 
-  // Commit the posts a background refresh stashed, then jump to the top so the
-  // user lands on the freshest content. Driven by the "New posts available"
-  // button.
+  // Commit the posts a background refresh stashed, then reset the feed to the
+  // freshest content. Driven by the "New posts available" button, and
+  // deliberately mirrors where a completed manual refresh leaves the user:
+  // scrolled to the top in the list layouts, parked on the first unread post
+  // in the single-post reader.
   const handleShowNewPosts = useCallback(() => {
     const pending = pendingRefreshedPageRef.current;
     pendingRefreshedPageRef.current = null;
     setNewPostsAvailable(false);
     if (pending) {
+      if (feedLayout === "single") {
+        // Opt out of the keep-the-reader-in-place identity resync for this one
+        // commit: the tap *is* the request to move. The flag also drives the
+        // jump-to-first-unread effect once the new items land.
+        singleSelectUnreadOnNextItemsRef.current = true;
+        singleLastAutoMarkedIdRef.current = null;
+      }
       // Defer the scroll-to-top until the new items actually commit (same
       // reasoning as the pull-to-refresh scroll — see pendingScrollToTopRef).
       pendingScrollToTopRef.current = true;
@@ -662,30 +742,54 @@ export default function FeedListScreen({ navigation, route }: Props) {
       setHasMore(pending.hasMore);
     }
     setIsFeedScrolled(false);
-  }, [setIsFeedScrolled]);
+  }, [feedLayout, setIsFeedScrolled]);
+
+  // Returning to the app after it was backgrounded is, from the user's point
+  // of view, the same event as launching it — but the tab navigator keeps this
+  // screen mounted, so useFocusEffect never re-fires and nothing would sync at
+  // all. Run the same deferred background refresh here: banner while it works,
+  // "New posts available" when it lands, posts readable throughout.
+  // Web is excluded — it already revalidates via shouldRefreshOnFocus.
+  useEffect(() => {
+    if (shouldRefreshOnFocus) return;
+
+    const subscription = AppState.addEventListener("change", (nextState) => {
+      if (
+        nextState !== "active" ||
+        appStateRef.current === "active" ||
+        backgroundSyncInFlightRef.current
+      ) {
+        appStateRef.current = nextState;
+        return;
+      }
+      appStateRef.current = nextState;
+      if (!isFocusedRef.current) return;
+
+      // refreshFeeds still honours per-feed adaptive scheduling (force:false),
+      // so a quick app-switch round trip costs nothing on the wire.
+      // loadData owns backgroundSyncInFlightRef for the whole deferred run.
+      loadData(true, true);
+    });
+
+    return () => subscription.remove();
+  }, [loadData, shouldRefreshOnFocus]);
 
   const handleRefreshAll = async () => {
-    // A manual refresh supersedes any pending background result: it will
-    // re-query and commit in place, so drop the stashed page and hide the
-    // "New posts available" button.
+    // A manual refresh supersedes any pending background result — its stashed
+    // page was queried before this fetch, so drop it and re-stash below.
     pendingRefreshedPageRef.current = null;
     setNewPostsAvailable(false);
     setRetainedUnreadIds(new Set());
-    if (feedLayout === "single") {
-      selectUnreadAfterRefreshRef.current = true;
-      singleLastAutoMarkedIdRef.current = null;
-      setSingleActiveIndex(0);
-    }
-    setRefreshing(true);
-    setManualRefreshInFlight(true);
-    // Ask loadData to scroll to top once the refreshed (post-network) items
-    // commit — not when the immediate cached-items commit happens.
-    scrollAfterRefreshRef.current = true;
-    await loadData(true);
-    setManualRefreshInFlight(false);
-    // animated:false matches the tab-press scroll-to-top behavior; FlashList's
-    // animated scroll can stall with variable-height rows.
-    setIsFeedScrolled(false);
+    // Deliberately *not* done here: setRefreshing(true), the scroll-to-top
+    // request, and the single-reader index reset. Holding RefreshControl's
+    // spinner up for the whole sync pins the reader in a "loading" state for
+    // as long as it takes every feed to answer — with 44 feeds that is tens of
+    // seconds of a spinner and a feed that jumps out from under you the moment
+    // it ends. A pull is a request to *fetch*, not to be interrupted: the
+    // spinner retracts immediately, the banner reports progress, prev/next and
+    // swiping stay live, and the feed only moves when the user taps "New posts
+    // available". Forced so feeds still in backoff are actually fetched.
+    await loadData(true, true, true);
   };
 
   const feedDetailsById = useMemo(
@@ -1778,16 +1882,25 @@ export default function FeedListScreen({ navigation, route }: Props) {
     ]
   );
 
-  // Initial load (before the first cached page lands), a manual refresh
-  // (pull-to-refresh or the "Refresh" button), and first-ever auto-refresh of
-  // an empty library all get the full skeleton treatment. A passive
-  // auto-refresh (web focus) with existing content does NOT — that keeps
-  // showing the current items while it revalidates in the background.
-  if (
-    loading ||
-    manualRefreshInFlight ||
-    (refreshing && items.length === 0 && feeds.length > 0)
-  ) {
+  // The full skeleton takeover is reserved for the case where there is
+  // genuinely nothing to show: the initial load before the first cached page
+  // lands, and a refresh of an empty library. Once posts are on screen, no
+  // refresh — manual, cold-start, or app-resume — replaces them with a
+  // loader; it reports progress in a banner above the content instead so the
+  // user can keep reading and swiping. See the banners below.
+  if (loading || (refreshing && items.length === 0 && feeds.length > 0)) {
+    // Hold quietly while the cached page is still being read: an app restart
+    // with content to show must land on that content plus the background
+    // banner, never on a loading screen. Plain paper, so the handoff from the
+    // splash is seamless rather than a loader flashing by en route.
+    if (loading && !initialLoadGraceElapsed) {
+      return (
+        <View
+          style={[styles.container, { backgroundColor: colors.paper }]}
+          testID="initial-load-hold"
+        />
+      );
+    }
     return <FeedLoadingScreen progress={refreshProgress} />;
   }
 
@@ -1876,38 +1989,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
         </View>
       ) : null}
 
-      {refreshing && refreshProgress && refreshProgress.total > 0 ? (
-        <View
-          style={[
-            styles.refreshProgressRow,
-            { borderBottomColor: colors.inkFaint },
-          ]}
-        >
-          <MetaText>
-            Refreshing {refreshProgress.completed}/{refreshProgress.total}
-          </MetaText>
-          <View style={styles.progressBarFlex}>
-            <RefreshProgressBar progress={refreshProgress} />
-          </View>
-        </View>
-      ) : null}
+      {/* The sync banner itself is rendered by the tab navigator, not here, so
+          it survives switching tabs. It still carries the per-feed counts, so
+          it replaces the separate "Refreshing n/n" row that used to sit here.
 
-      {backgroundRefreshing ? (
-        <View
-          style={[
-            styles.backgroundRefreshRow,
-            {
-              borderBottomColor: colors.inkFaint,
-              backgroundColor: colors.paperWarm,
-            },
-          ]}
-        >
-          <PulsingDots size={6} />
-          <MetaText>Fetching new posts in the background…</MetaText>
-        </View>
-      ) : null}
-
-      {newPostsAvailable ? (
+          One banner at a time: the sync banner is *replaced* by the reset
+          banner when the sync finishes, rather than stacking with it if new
+          posts were already waiting when the sync started. The reset banner
+          stays screen-local because tapping it acts on this feed. */}
+      {newPostsAvailable && !backgroundRefreshing ? (
         <TouchableOpacity
           onPress={handleShowNewPosts}
           activeOpacity={0.85}
@@ -2647,26 +2737,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: fontSize.body,
     padding: 0,
-  },
-  refreshProgressRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.xs,
-    borderBottomWidth: 1,
-  },
-  progressBarFlex: {
-    flex: 1,
-    alignItems: "flex-end",
-    marginLeft: spacing.md,
-  },
-  backgroundRefreshRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
   },
   newPostsButton: {
     flexDirection: "row",

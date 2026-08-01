@@ -34,7 +34,10 @@ import { refreshFeeds } from "../feedRefresher";
 import { Feed, FeedItem, RootStackParamList } from "../types";
 import { toggleExpandedId } from "../expandItemIds";
 import { MetaText } from "../components/ui";
-import { FeedLoadingScreen } from "../components/LoadingState";
+import {
+  BackgroundSyncBanner,
+  FeedLoadingScreen,
+} from "../components/LoadingState";
 import { Feather } from "@expo/vector-icons";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -50,6 +53,8 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const [items, setItems] = useState<FeedItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Revalidation running behind already-visible posts — see runRefresh below.
+  const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [rawXmlItem, setRawXmlItem] = useState<FeedItem | null>(null);
@@ -91,27 +96,40 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     }
   }, [feed.id]);
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    pendingScrollToTopRef.current = true;
-    try {
-      // Explicit single-feed refresh: bypass adaptive scheduling so the
-      // user actually gets a fresh fetch even if the feed is in backoff.
-      let feedError: string | null = null;
-      const errors = await refreshFeeds([feed], {
-        force: true,
-        onFeedFailure: (_, error) => {
-          feedError = error.message;
-        },
-      });
-      if (errors > 0) {
-        Alert.alert("Refresh Error", feedError ?? "Failed to refresh feed.");
+  const runRefresh = useCallback(
+    async (background: boolean) => {
+      if (background) {
+        setBackgroundRefreshing(true);
+      } else {
+        setRefreshing(true);
+        pendingScrollToTopRef.current = true;
       }
-      await loadItems();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [feed, loadItems]);
+      try {
+        // Explicit single-feed refresh: bypass adaptive scheduling so the
+        // user actually gets a fresh fetch even if the feed is in backoff.
+        let feedError: string | null = null;
+        const errors = await refreshFeeds([feed], {
+          force: true,
+          onFeedFailure: (_, error) => {
+            feedError = error.message;
+          },
+        });
+        if (errors > 0) {
+          Alert.alert("Refresh Error", feedError ?? "Failed to refresh feed.");
+        }
+        await loadItems();
+      } finally {
+        if (background) {
+          setBackgroundRefreshing(false);
+        } else {
+          setRefreshing(false);
+        }
+      }
+    },
+    [feed, loadItems]
+  );
+
+  const handleRefresh = useCallback(() => runRefresh(false), [runRefresh]);
 
   const hasLoadedOnceRef = React.useRef(false);
   useFocusEffect(
@@ -119,13 +137,18 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       // Only auto-refresh on first focus; subsequent focuses (e.g. returning
       // from the detail screen) reload from the local DB to keep navigation
       // snappy and avoid burning the radio.
+      //
+      // That first refresh is stale-while-revalidate: the locally cached posts
+      // render immediately and the network fetch runs behind a banner, so
+      // opening a feed never parks the user on a loading screen while content
+      // they already have sits in the database.
       if (!hasLoadedOnceRef.current) {
         hasLoadedOnceRef.current = true;
-        handleRefresh();
+        loadItems().then(() => runRefresh(true));
       } else {
         loadItems();
       }
-    }, [handleRefresh, loadItems])
+    }, [loadItems, runRefresh])
   );
 
   // Scroll to top after pull-to-refresh once new items are committed.
@@ -361,16 +384,17 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     ]
   );
 
-  // Initial load and a manual refresh (pull-to-refresh or the "Refresh"
-  // button/link) both get the full skeleton treatment, matching the main
-  // Feed tab's behavior — there is no passive background refresh here to
-  // distinguish from, every refresh on this screen is user-initiated.
-  if (loading || refreshing) {
+  // The skeleton is only for having nothing to show: the very first local read,
+  // or a refresh of a feed with no cached posts. Once posts are on screen a
+  // refresh never replaces them — it runs behind the banner below, matching the
+  // main Feed tab.
+  if (loading || (refreshing && items.length === 0)) {
     return <FeedLoadingScreen />;
   }
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
+      {backgroundRefreshing ? <BackgroundSyncBanner /> : null}
       <View
         style={[styles.headerStrip, { borderBottomColor: colors.inkFaint }]}
       >

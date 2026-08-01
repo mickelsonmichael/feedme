@@ -59,6 +59,8 @@ import {
   FeedScrollProvider,
   useFeedScroll,
 } from "./src/context/FeedScrollContext";
+import { BackgroundSyncProvider } from "./src/context/BackgroundSyncContext";
+import { BackgroundSyncBannerHost } from "./src/components/BackgroundSyncBannerHost";
 import {
   getFeeds,
   getTags,
@@ -541,6 +543,7 @@ function Tabs() {
           return (
             <View style={styles.tabsRoot}>
               <AppHeader />
+              <BackgroundSyncBannerHost />
               <View style={styles.webLayout}>
                 <WebSideNav
                   state={state}
@@ -557,6 +560,10 @@ function Tabs() {
         return (
           <View style={styles.tabsRoot}>
             <AppHeader />
+            {/* Above {children} so the banner spans every tab, not just Feed:
+                a sync started on the Feed tab stays visible after switching to
+                Feeds/Discover/Settings and keeps running in the background. */}
+            <BackgroundSyncBannerHost />
             {children}
           </View>
         );
@@ -784,9 +791,11 @@ export default function App() {
         <ThemeProvider>
           <HeaderContentProvider>
             <FeedScrollProvider>
-              <ErrorBoundary>
-                <AppContent />
-              </ErrorBoundary>
+              <BackgroundSyncProvider>
+                <ErrorBoundary>
+                  <AppContent />
+                </ErrorBoundary>
+              </BackgroundSyncProvider>
             </FeedScrollProvider>
           </HeaderContentProvider>
         </ThemeProvider>

@@ -2,12 +2,14 @@ import React from "react";
 import {
   Alert,
   Animated,
+  AppState,
   Platform,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
 } from "react-native";
+import type { AppStateStatus } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import { Image } from "expo-image";
 import { FlashList } from "@shopify/flash-list";
@@ -20,6 +22,8 @@ import FeedListScreen from "../screens/FeedListScreen";
 import { RootStackParamList, TabParamList } from "../types";
 import { loadConfig, saveConfig } from "../storage";
 import { HeaderContentProvider } from "../context/HeaderContentContext";
+import { BackgroundSyncProvider } from "../context/BackgroundSyncContext";
+import { BackgroundSyncBannerHost } from "../components/BackgroundSyncBannerHost";
 import {
   getFeeds,
   getItemsPage,
@@ -151,10 +155,16 @@ type FeedScreenProps = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
+// Mirrors App.tsx's composition: the sync banner is rendered by the navigator
+// above the screen (so it survives tab switches), not by the screen itself, and
+// both read the same provider.
 function renderFeedListScreen(props: FeedScreenProps) {
   return renderer.create(
     <HeaderContentProvider>
-      <FeedListScreen {...props} />
+      <BackgroundSyncProvider>
+        <BackgroundSyncBannerHost />
+        <FeedListScreen {...props} />
+      </BackgroundSyncProvider>
     </HeaderContentProvider>
   );
 }
@@ -1865,8 +1875,11 @@ describe("FeedListScreen", () => {
     });
   });
 
-  it("refreshes single layout to the first unread post", async () => {
-    // Arrange
+  it("keeps single layout on the current post during a pull-to-refresh, then jumps to the first unread when the banner is tapped", async () => {
+    // Arrange - a pull used to yank the reader to the first unread the instant
+    // the sync finished, while pinning it under RefreshControl's spinner for
+    // the whole fetch. The sync is now entirely background: the post being
+    // read stays put and navigable, and the feed only moves on an explicit tap.
     (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
     (getFeeds as jest.Mock).mockResolvedValue([
       {
@@ -1955,8 +1968,30 @@ describe("FeedListScreen", () => {
       await Promise.resolve();
     });
 
-    // Assert
-    expect(refreshFeeds).toHaveBeenCalled();
+    // Assert - the fetch ran (forced, so backed-off feeds are not skipped) but
+    // the reader has not been moved and nothing was committed underneath it.
+    expect(refreshFeeds).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ force: true })
+    );
+    const duringRefresh = tree!.root
+      .findAllByType(Text)
+      .map((node: renderer.ReactTestInstance) => node.props.children);
+    expect(duringRefresh).toContain("Initially selected");
+    expect(duringRefresh).not.toContain("Unread after refresh");
+    expect(duringRefresh).toContain("New posts available. Tap to reload");
+
+    // Act - the user accepts the new posts.
+    await act(async () => {
+      await tree!.root
+        .findByProps({ accessibilityLabel: "Show new posts" })
+        .props.onPress();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert - now it lands on the first unread of the refreshed page.
     expect(
       tree!.root
         .findAllByType(Text)
@@ -2624,11 +2659,17 @@ describe("FeedListScreen", () => {
       params: { selectedTagId: 1 },
     } as FeedScreenProps["route"];
     await act(async () => {
+      // Must keep the same tree shape as renderFeedListScreen: dropping a
+      // provider here changes FeedListScreen's position and remounts it,
+      // which would reset the very state this test is checking survives.
       tree!.update(
         <HeaderContentProvider>
-          <FeedListScreen
-            {...({ navigation, route: returnRoute } as FeedScreenProps)}
-          />
+          <BackgroundSyncProvider>
+            <BackgroundSyncBannerHost />
+            <FeedListScreen
+              {...({ navigation, route: returnRoute } as FeedScreenProps)}
+            />
+          </BackgroundSyncProvider>
         </HeaderContentProvider>
       );
       await Promise.resolve();
@@ -2911,6 +2952,593 @@ describe("FeedListScreen", () => {
 
     await act(async () => {
       tree!.unmount();
+    });
+  });
+
+  describe("background sync banners", () => {
+    const feed = {
+      id: 1,
+      title: "Alpha",
+      url: "https://alpha.example/rss.xml",
+      description: null,
+      last_fetched: Date.now(),
+      error: null,
+    };
+
+    /** Drains the microtask queue enough times for loadData's chain of awaits
+     *  (feeds -> cached page -> refresh -> feeds -> refreshed page) to settle. */
+    const flush = async () => {
+      for (let i = 0; i < 16; i += 1) {
+        await Promise.resolve();
+      }
+    };
+
+    const makeNavigation = () =>
+      ({
+        navigate: jest.fn(),
+        addListener: jest.fn(() => jest.fn()),
+        isFocused: jest.fn(() => true),
+      }) as unknown as FeedScreenProps["navigation"];
+
+    const textContents = (tree: renderer.ReactTestRenderer) =>
+      tree.root
+        .findAllByType(Text)
+        .map((node: renderer.ReactTestInstance) => node.props.children);
+
+    const hasBanner = (tree: renderer.ReactTestRenderer) =>
+      tree.root.findAllByProps({ testID: "background-sync-banner" }).length > 0;
+
+    it("keeps cached posts readable behind a sync banner on cold start, then offers a tap-to-reset banner", async () => {
+      // Arrange - the cache holds one post; the network refresh brings a newer
+      // one. The user must keep reading the cached post throughout, and the
+      // new one must not appear until they ask for it.
+      const cached = [
+        {
+          id: 1101,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Already cached",
+          url: "https://alpha.example/cached",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ];
+      const refreshed = [
+        {
+          ...cached[0],
+          id: 1102,
+          title: "Arrived during sync",
+          url: "https://alpha.example/new",
+          published_at: 2_000,
+        },
+        ...cached,
+      ];
+
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock)
+        .mockResolvedValueOnce(cached)
+        .mockResolvedValue(refreshed);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+      let releaseRefresh: (errors: number) => void = () => {};
+      (refreshFeeds as jest.Mock).mockImplementation(
+        () =>
+          new Promise<number>((resolve) => {
+            releaseRefresh = resolve;
+          })
+      );
+
+      const route = {
+        key: "Feed-bg-sync",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      // Act - mount (app start) and let the cached page commit while the
+      // network refresh is still in flight.
+      await act(async () => {
+        tree = renderFeedListScreen({
+          navigation: makeNavigation(),
+          route,
+        } as FeedScreenProps);
+        await flush();
+      });
+
+      // Assert - cached post is on screen, sync is announced, not taken over.
+      expect(hasBanner(tree!)).toBe(true);
+      expect(textContents(tree!)).toContain("Already cached");
+      expect(
+        tree!.root.findAllByProps({ testID: "feed-loading-screen" })
+      ).toHaveLength(0);
+
+      // Act - the network refresh lands.
+      await act(async () => {
+        releaseRefresh(0);
+        await flush();
+      });
+
+      // Assert - the sync banner is replaced by the tap-to-reset banner, and
+      // the new post is still held back.
+      expect(hasBanner(tree!)).toBe(false);
+      const afterSync = textContents(tree!);
+      expect(afterSync).toContain("New posts available. Tap to reload");
+      expect(afterSync).toContain("Already cached");
+      expect(afterSync).not.toContain("Arrived during sync");
+
+      // Act - the user taps it.
+      await act(async () => {
+        await tree!.root
+          .findByProps({ accessibilityLabel: "Show new posts" })
+          .props.onPress();
+        await flush();
+      });
+
+      // Assert - the feed resets onto the freshly synced posts.
+      const afterReset = textContents(tree!);
+      expect(afterReset).toContain("Arrived during sync");
+      expect(afterReset).not.toContain("New posts available. Tap to reload");
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    });
+
+    it("keeps the banner and the sync alive across a tab switch away and back", async () => {
+      // Arrange - the banner is rendered by the navigator (BackgroundSyncBannerHost)
+      // rather than by the screen, so leaving the Feed tab for Feeds/Discover/
+      // Settings must not make an in-flight sync look like it stopped. The
+      // focus-regain on the way back must also leave the running sync alone:
+      // it is a non-deferred load, so without a guard it would clear the banner
+      // and bump the load generation, silently discarding the sync's result.
+      const cached = [
+        {
+          id: 1301,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Cached while away",
+          url: "https://alpha.example/cached",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ];
+      const refreshed = [
+        {
+          ...cached[0],
+          id: 1302,
+          title: "Synced while away",
+          url: "https://alpha.example/new",
+          published_at: 2_000,
+        },
+        ...cached,
+      ];
+
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock)
+        .mockResolvedValueOnce(cached)
+        .mockResolvedValue(refreshed);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+      let releaseRefresh: (errors: number) => void = () => {};
+      (refreshFeeds as jest.Mock).mockImplementation(
+        () =>
+          new Promise<number>((resolve) => {
+            releaseRefresh = resolve;
+          })
+      );
+
+      const route = {
+        key: "Feed-bg-sync-tabswitch",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      // Act - cold start; the cached page commits, the sync stays in flight.
+      await act(async () => {
+        tree = renderFeedListScreen({
+          navigation: makeNavigation(),
+          route,
+        } as FeedScreenProps);
+        await flush();
+      });
+      expect(hasBanner(tree!)).toBe(true);
+
+      const refreshCallsDuringSync = (refreshFeeds as jest.Mock).mock.calls
+        .length;
+
+      // Act - the user switches to another tab and comes back mid-sync. The
+      // screen stays mounted, so this surfaces as the focus effect re-firing.
+      const focusEffectCalls = (useFocusEffect as jest.Mock).mock.calls;
+      const focusCallback = focusEffectCalls[
+        focusEffectCalls.length - 1
+      ][0] as () => void;
+      await act(async () => {
+        focusCallback();
+        await flush();
+      });
+
+      // Assert - the banner is still up and no competing load was kicked off.
+      expect(hasBanner(tree!)).toBe(true);
+      expect((refreshFeeds as jest.Mock).mock.calls.length).toBe(
+        refreshCallsDuringSync
+      );
+
+      // Act - the sync finally lands, after the round trip.
+      await act(async () => {
+        releaseRefresh(0);
+        await flush();
+      });
+
+      // Assert - its result was not discarded by the focus-regain: the user
+      // still gets the tap-to-reset banner, with the new post held back.
+      expect(hasBanner(tree!)).toBe(false);
+      const afterSync = textContents(tree!);
+      expect(afterSync).toContain("New posts available. Tap to reload");
+      expect(afterSync).toContain("Cached while away");
+      expect(afterSync).not.toContain("Synced while away");
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    });
+
+    it("runs the same deferred sync in single layout and resets to the newest post when tapped", async () => {
+      // Arrange - the single-post reader is where an unannounced mid-read list
+      // swap hurts most, so it gets the banner flow too rather than having new
+      // items pushed under the reader.
+      (loadConfig as jest.Mock).mockReturnValue({
+        feedLayout: "single",
+        defaultSort: "newest",
+      });
+      const cached = [
+        {
+          id: 1201,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Being read now",
+          url: "https://alpha.example/reading",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ];
+      const refreshed = [
+        {
+          ...cached[0],
+          id: 1202,
+          title: "Newest synced post",
+          url: "https://alpha.example/newest",
+          published_at: 2_000,
+          read: 0,
+        },
+        { ...cached[0], read: 1 },
+      ];
+
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock)
+        .mockResolvedValueOnce(cached)
+        .mockResolvedValue(refreshed);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (markItemRead as jest.Mock).mockResolvedValue(undefined);
+
+      let releaseRefresh: (errors: number) => void = () => {};
+      (refreshFeeds as jest.Mock).mockImplementation(
+        () =>
+          new Promise<number>((resolve) => {
+            releaseRefresh = resolve;
+          })
+      );
+
+      const route = {
+        key: "Feed-bg-sync-single",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      // Act
+      await act(async () => {
+        tree = renderFeedListScreen({
+          navigation: makeNavigation(),
+          route,
+        } as FeedScreenProps);
+        await flush();
+      });
+
+      // Assert - the post stays put and swipeable while the sync runs.
+      expect(hasBanner(tree!)).toBe(true);
+      expect(textContents(tree!)).toContain("Being read now");
+
+      await act(async () => {
+        releaseRefresh(0);
+        await flush();
+      });
+
+      // Assert - the reader is not moved off the post they were on.
+      const afterSync = textContents(tree!);
+      expect(afterSync).toContain("New posts available. Tap to reload");
+      expect(afterSync).toContain("Being read now");
+      expect(afterSync).not.toContain("Newest synced post");
+
+      await act(async () => {
+        await tree!.root
+          .findByProps({ accessibilityLabel: "Show new posts" })
+          .props.onPress();
+        await flush();
+      });
+
+      // Assert - tapping resets the reader onto the newest synced post.
+      expect(textContents(tree!)).toContain("Newest synced post");
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    });
+
+    it("shows the sync banner for a manual pull-to-refresh in the single-post reader", async () => {
+      // Arrange - the banner used to be tied to the deferred (cold-start) path
+      // only, so pulling to refresh in single layout surfaced nothing beyond
+      // the pull spinner. Any refresh running over live content announces
+      // itself.
+      (loadConfig as jest.Mock).mockReturnValue({
+        feedLayout: "single",
+        defaultSort: "newest",
+      });
+      const posts = [
+        {
+          id: 1501,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Reader post",
+          url: "https://alpha.example/reader",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ];
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock).mockResolvedValue(posts);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (markItemRead as jest.Mock).mockResolvedValue(undefined);
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+
+      const route = {
+        key: "Feed-single-manual-refresh",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      await act(async () => {
+        tree = renderFeedListScreen({
+          navigation: makeNavigation(),
+          route,
+        } as FeedScreenProps);
+        await flush();
+      });
+
+      // Cold-start sync has settled; the banner should be gone.
+      expect(hasBanner(tree!)).toBe(false);
+
+      // Act - hold the refresh open so the in-flight state is observable.
+      let releaseRefresh: (errors: number) => void = () => {};
+      (refreshFeeds as jest.Mock).mockImplementation(
+        () =>
+          new Promise<number>((resolve) => {
+            releaseRefresh = resolve;
+          })
+      );
+      const scrollView = tree!.root.findAllByType(ScrollView)[0];
+      await act(async () => {
+        scrollView.props.refreshControl.props.onRefresh();
+        await flush();
+      });
+
+      // Assert - banner up, post still readable underneath.
+      expect(hasBanner(tree!)).toBe(true);
+      expect(textContents(tree!)).toContain("Reader post");
+      // An explicit pull must bypass adaptive scheduling, or feeds still in
+      // backoff from the cold-start sync are all skipped and it fetches
+      // nothing.
+      expect(refreshFeeds).toHaveBeenLastCalledWith(
+        expect.anything(),
+        expect.objectContaining({ force: true })
+      );
+
+      await act(async () => {
+        releaseRefresh(0);
+        await flush();
+      });
+      expect(hasBanner(tree!)).toBe(false);
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    });
+
+    it("does not flash the loading screen while the cached page is still being read", async () => {
+      // Arrange - on a restart the first local read costs real time (schema
+      // init + the page query). Rendering the full loader across that window
+      // makes a restart look like the app is loading from scratch, which is
+      // the takeover the background banner exists to replace. It must hold
+      // quietly instead, and only escalate if the read genuinely drags.
+      jest.useFakeTimers();
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+
+      let releaseItems: (rows: unknown[]) => void = () => {};
+      (getItemsPage as jest.Mock).mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            releaseItems = resolve;
+          })
+      );
+
+      const route = {
+        key: "Feed-restart-hold",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      // Act - mount with the page read still outstanding.
+      await act(async () => {
+        tree = renderFeedListScreen({
+          navigation: makeNavigation(),
+          route,
+        } as FeedScreenProps);
+        await flush();
+      });
+
+      // Assert - quiet hold, no loading screen.
+      expect(
+        tree!.root.findAllByProps({ testID: "feed-loading-screen" })
+      ).toHaveLength(0);
+      expect(
+        tree!.root.findAllByProps({ testID: "initial-load-hold" }).length
+      ).toBeGreaterThan(0);
+
+      // Act - the read outlives the grace window.
+      await act(async () => {
+        jest.advanceTimersByTime(1_500);
+        await flush();
+      });
+
+      // Assert - now the loader is warranted (this is the empty/slow case).
+      expect(
+        tree!.root.findAllByProps({ testID: "feed-loading-screen" }).length
+      ).toBeGreaterThan(0);
+
+      // Act - the cached page finally lands.
+      await act(async () => {
+        releaseItems([
+          {
+            id: 1401,
+            feed_id: 1,
+            feed_title: "Alpha",
+            title: "Cached after all",
+            url: "https://alpha.example/cached",
+            content: "body",
+            image_url: null,
+            published_at: 1_000,
+            read: 0,
+          },
+        ]);
+        await flush();
+      });
+
+      // Assert - content replaces the loader.
+      expect(textContents(tree!)).toContain("Cached after all");
+
+      await act(async () => {
+        tree!.unmount();
+        jest.runOnlyPendingTimers();
+      });
+    });
+
+    it("syncs behind the banner when the app returns from the background", async () => {
+      // Arrange - the tab navigator keeps this screen mounted, so returning to
+      // the app fires no focus effect. Without an AppState listener a resumed
+      // app would show whatever was cached at launch and never sync.
+      const cached = [
+        {
+          id: 1301,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "From before backgrounding",
+          url: "https://alpha.example/before",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ];
+      const refreshed = [
+        {
+          ...cached[0],
+          id: 1302,
+          title: "Synced on resume",
+          url: "https://alpha.example/resume",
+          published_at: 2_000,
+        },
+        ...cached,
+      ];
+
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock)
+        .mockResolvedValueOnce(cached)
+        .mockResolvedValue(refreshed);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (markItemRead as jest.Mock).mockResolvedValue(undefined);
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+
+      const appStateHandlers: Array<(state: AppStateStatus) => void> = [];
+      const addEventListenerSpy = jest
+        .spyOn(AppState, "addEventListener")
+        .mockImplementation((_event, handler) => {
+          appStateHandlers.push(handler as (state: AppStateStatus) => void);
+          return { remove: jest.fn() } as never;
+        });
+
+      const route = {
+        key: "Feed-bg-sync-resume",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      try {
+        // Act - launch, then let the cold-start sync settle.
+        await act(async () => {
+          tree = renderFeedListScreen({
+            navigation: makeNavigation(),
+            route,
+          } as FeedScreenProps);
+          await flush();
+        });
+        await act(async () => {
+          await tree!.root
+            .findByProps({ accessibilityLabel: "Show new posts" })
+            .props.onPress();
+          await flush();
+        });
+        const refreshCallsAfterStart = (refreshFeeds as jest.Mock).mock.calls
+          .length;
+
+        // Act - background the app, then return to it.
+        await act(async () => {
+          appStateHandlers.forEach((handler) => handler("background"));
+          await flush();
+        });
+        await act(async () => {
+          appStateHandlers.forEach((handler) => handler("active"));
+          await flush();
+        });
+
+        // Assert - resuming syncs again, without a loading takeover.
+        expect((refreshFeeds as jest.Mock).mock.calls.length).toBeGreaterThan(
+          refreshCallsAfterStart
+        );
+        expect(
+          tree!.root.findAllByProps({ testID: "feed-loading-screen" })
+        ).toHaveLength(0);
+        expect(textContents(tree!)).toContain("Synced on resume");
+
+        await act(async () => {
+          tree!.unmount();
+        });
+      } finally {
+        addEventListenerSpy.mockRestore();
+      }
     });
   });
 });

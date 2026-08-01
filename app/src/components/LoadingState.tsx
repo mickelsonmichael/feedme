@@ -214,6 +214,45 @@ export function FunFeedLoader({
   );
 }
 
+/** Slim banner for a refresh that runs *behind* already-visible content: the
+ *  posts on screen stay readable and swipeable while new ones are fetched, so
+ *  a sync never takes the screen away from the user. */
+export function BackgroundSyncBanner({
+  label = "Fetching new posts in the background…",
+  progress,
+}: {
+  label?: string;
+  progress?: FeedRefreshProgress | null;
+}) {
+  const { colors } = useTheme();
+  const total = progress?.total ?? 0;
+  return (
+    <View
+      style={[
+        styles.syncBanner,
+        {
+          borderBottomColor: colors.inkFaint,
+          backgroundColor: colors.paperWarm,
+        },
+      ]}
+      testID="background-sync-banner"
+    >
+      <PulsingDots size={6} />
+      <Text style={[styles.syncBannerText, { color: colors.inkSoft }]}>
+        {label}
+      </Text>
+      {/* Counts rather than a bar: the banner sits in a tight single-line
+          strip above live content, and RefreshProgressBar's track is a fixed
+          200px that would overflow it on narrow screens. */}
+      {total > 0 ? (
+        <Text style={[styles.syncBannerCount, { color: colors.inkSoft }]}>
+          {progress?.completed ?? 0}/{total}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 /** A slim, animated determinate progress bar driven by refresh progress. */
 export function RefreshProgressBar({
   progress,
@@ -389,6 +428,24 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     gap: spacing.xs,
     height: 16,
+  },
+  syncBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+  },
+  syncBannerText: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+    flexShrink: 1,
+  },
+  syncBannerCount: {
+    fontFamily: fonts.sans,
+    fontSize: fontSize.meta,
+    marginLeft: "auto",
   },
   progressTrack: {
     width: 200,
