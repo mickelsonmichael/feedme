@@ -119,6 +119,16 @@ const SINGLE_SWIPE_ENTER_DURATION_MS = 240;
 // it is not the part that matters.
 const INITIAL_LOAD_GRACE_MS = 1_200;
 
+// Minimum idle time — no refresh and no user activity — before returning to
+// the app (AppState -> active) is allowed to trigger another refresh.
+// Backgrounding for a moment — switching apps briefly, or opening a link in
+// the external browser while mid-read — used to kick off a full refresh
+// every time the app came back, even seconds later, which could reshuffle
+// the feed out from under a post the user just opened. Per-feed adaptive
+// scheduling in refreshFeeds still governs whether any given feed is
+// actually contacted once a refresh does run.
+const RESUME_REFRESH_IDLE_MS = 15 * 60 * 1_000;
+
 export default function FeedListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const { setHeaderContent, clearHeaderContent } = useHeaderContent();
@@ -276,6 +286,24 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const isFocusedRef = useRef(isFocused);
   isFocusedRef.current = isFocused;
 
+  // Timestamp of the last time the app was known to be "in use" — either a
+  // refresh (cold start, resume sync, manual pull-to-refresh) or the user
+  // doing something with the feed (opening a post/link, paging in single
+  // layout, scrolling). Gates RESUME_REFRESH_IDLE_MS below: a resume-sync
+  // only makes sense after real inactivity, not after a moment spent reading.
+  // Without folding activity in here too, opening a post's external link —
+  // which backgrounds and immediately re-foregrounds the app — would look
+  // exactly like "the user was away" and yank the feed out from under them
+  // mid-read.
+  const lastActiveAtRef = useRef(0);
+
+  // Records that the user is actively using the app right now. Threaded
+  // through the handlers below rather than tracked automatically so it only
+  // fires on deliberate interaction, not passive re-renders.
+  const markActivity = useCallback(() => {
+    lastActiveAtRef.current = Date.now();
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(
       () => setInitialLoadGraceElapsed(true),
@@ -366,8 +394,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
     (event: { nativeEvent: { contentOffset: { y: number } } }) => {
       const y = event.nativeEvent.contentOffset.y;
       setIsFeedScrolled(y > SCROLL_INDICATOR_THRESHOLD);
+      markActivity();
     },
-    [setIsFeedScrolled]
+    [markActivity, setIsFeedScrolled]
   );
 
   // Reset the scrolled indicator when the screen loses focus so other tabs
@@ -704,6 +733,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
       if (refreshRemote && !deferNewItems) {
         setRefreshing(true);
       }
+      if (refreshRemote) {
+        lastActiveAtRef.current = Date.now();
+      }
       loadData(refreshRemote, deferNewItems);
     }, [loadData, shouldRefreshOnFocus])
   );
@@ -765,6 +797,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
       appStateRef.current = nextState;
       if (!isFocusedRef.current) return;
 
+      // Idle gate: skip a resume sync unless the app has genuinely been left
+      // alone — no refresh and no user activity — for a while. See
+      // RESUME_REFRESH_IDLE_MS.
+      if (Date.now() - lastActiveAtRef.current < RESUME_REFRESH_IDLE_MS) {
+        return;
+      }
+      lastActiveAtRef.current = Date.now();
+
       // refreshFeeds still honours per-feed adaptive scheduling (force:false),
       // so a quick app-switch round trip costs nothing on the wire.
       // loadData owns backgroundSyncInFlightRef for the whole deferred run.
@@ -780,6 +820,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
     pendingRefreshedPageRef.current = null;
     setNewPostsAvailable(false);
     setRetainedUnreadIds(new Set());
+    // A manual refresh just did the job an automatic resume sync would have —
+    // postpone the next one so it doesn't immediately re-fire behind it.
+    markActivity();
     // Deliberately *not* done here: setRefreshing(true), the scroll-to-top
     // request, and the single-reader index reset. Holding RefreshControl's
     // spinner up for the whole sync pins the reader in a "loading" state for
@@ -864,11 +907,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
         setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
       }
 
+      markActivity();
       navigation.navigate("FeedItemView", {
         item: buildFeedItemViewItem(item),
       });
     },
-    [buildFeedItemViewItem, filter, navigation]
+    [buildFeedItemViewItem, filter, markActivity, navigation]
   );
 
   const toggleSave = useCallback(async (id: number) => {
@@ -1059,9 +1103,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const handleOpenContentLink = useCallback(
     (url: string) => {
+      markActivity();
       openUrlWithPreference({ url, navigation });
     },
-    [navigation]
+    [markActivity, navigation]
   );
 
   const handleOpenOriginalLink = useCallback(
@@ -1071,6 +1116,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         return;
       }
 
+      markActivity();
       openUrlWithPreference({ url: item.url, navigation });
 
       if (!item.read) {
@@ -1096,7 +1142,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         }
       }
     },
-    [filter, navigation]
+    [filter, markActivity, navigation]
   );
 
   const handleSingleViewXml = useCallback(
@@ -1618,12 +1664,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
       return;
     }
 
+    markActivity();
     setSingleActiveIndex(singleSafeIndex - 1);
     singleScrollRef.current?.scrollTo({ y: 0, animated: false });
     setIsFeedScrolled(false);
-  }, [setIsFeedScrolled, singleSafeIndex]);
+  }, [markActivity, setIsFeedScrolled, singleSafeIndex]);
 
   const handleSingleNext = useCallback(() => {
+    markActivity();
     // End the view-time session for the current post before moving on.
     const rowId = singleViewTimeRowIdRef.current;
     if (rowId !== null) {
@@ -1653,6 +1701,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
     handleLoadMore,
     hasMore,
     loadingMore,
+    markActivity,
     setIsFeedScrolled,
     singleSafeIndex,
     visibleItems.length,

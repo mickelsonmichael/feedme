@@ -3488,6 +3488,15 @@ describe("FeedListScreen", () => {
           appStateHandlers.push(handler as (state: AppStateStatus) => void);
           return { remove: jest.fn() } as never;
         });
+      // The resume sync is gated behind an idle window (see
+      // RESUME_REFRESH_IDLE_MS) — advance the clock past it before resuming so
+      // this test exercises a resume that is actually due, not one the idle
+      // gate would swallow.
+      const realDateNow = Date.now;
+      let mockNow = realDateNow();
+      const dateNowSpy = jest
+        .spyOn(Date, "now")
+        .mockImplementation(() => mockNow);
 
       const route = {
         key: "Feed-bg-sync-resume",
@@ -3514,11 +3523,12 @@ describe("FeedListScreen", () => {
         const refreshCallsAfterStart = (refreshFeeds as jest.Mock).mock.calls
           .length;
 
-        // Act - background the app, then return to it.
+        // Act - background the app, wait past the debounce window, then return.
         await act(async () => {
           appStateHandlers.forEach((handler) => handler("background"));
           await flush();
         });
+        mockNow += 16 * 60 * 1_000;
         await act(async () => {
           appStateHandlers.forEach((handler) => handler("active"));
           await flush();
@@ -3538,6 +3548,185 @@ describe("FeedListScreen", () => {
         });
       } finally {
         addEventListenerSpy.mockRestore();
+        dateNowSpy.mockRestore();
+      }
+    });
+
+    it("does not sync again when the app briefly loses and regains foreground", async () => {
+      // Arrange - leaving the app for a moment (switching apps, or opening a
+      // link in the external browser) and coming straight back used to fire
+      // an entire new refresh every time. Nothing can plausibly be new that
+      // quickly, so a resume within RESUME_REFRESH_IDLE_MS of the last
+      // automatic refresh should be a no-op.
+      const cached = [
+        {
+          id: 1301,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "From before backgrounding",
+          url: "https://alpha.example/before",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ];
+
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock).mockResolvedValue(cached);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+
+      const appStateHandlers: Array<(state: AppStateStatus) => void> = [];
+      const addEventListenerSpy = jest
+        .spyOn(AppState, "addEventListener")
+        .mockImplementation((_event, handler) => {
+          appStateHandlers.push(handler as (state: AppStateStatus) => void);
+          return { remove: jest.fn() } as never;
+        });
+
+      const route = {
+        key: "Feed-bg-sync-debounced",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      try {
+        // Act - launch, then let the cold-start sync settle.
+        await act(async () => {
+          tree = renderFeedListScreen({
+            navigation: makeNavigation(),
+            route,
+          } as FeedScreenProps);
+          await flush();
+        });
+        const refreshCallsAfterStart = (refreshFeeds as jest.Mock).mock.calls
+          .length;
+
+        // Act - background the app for only a moment, then return to it.
+        await act(async () => {
+          appStateHandlers.forEach((handler) => handler("background"));
+          await flush();
+        });
+        await act(async () => {
+          appStateHandlers.forEach((handler) => handler("active"));
+          await flush();
+        });
+
+        // Assert - no additional sync was triggered.
+        expect((refreshFeeds as jest.Mock).mock.calls.length).toBe(
+          refreshCallsAfterStart
+        );
+
+        await act(async () => {
+          tree!.unmount();
+        });
+      } finally {
+        addEventListenerSpy.mockRestore();
+      }
+    });
+
+    it("does not sync on resume if the user was reading a post moments before backgrounding", async () => {
+      // Arrange - the idle gate is keyed off activity, not just the last
+      // refresh (see RESUME_REFRESH_IDLE_MS / lastActiveAtRef). Opening a
+      // post's external link backgrounds and immediately re-foregrounds the
+      // app; without folding activity into the gate, that would look exactly
+      // like "the user was away" even though the last sync was long ago, and
+      // yank the feed out from under whatever they were just reading.
+      const cached = [
+        {
+          id: 1301,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Read while away",
+          url: "https://alpha.example/read-while-away",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ];
+
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock).mockResolvedValue(cached);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+
+      const appStateHandlers: Array<(state: AppStateStatus) => void> = [];
+      const addEventListenerSpy = jest
+        .spyOn(AppState, "addEventListener")
+        .mockImplementation((_event, handler) => {
+          appStateHandlers.push(handler as (state: AppStateStatus) => void);
+          return { remove: jest.fn() } as never;
+        });
+      const mockNavigate = jest.fn();
+      const navigation = {
+        navigate: mockNavigate,
+        addListener: jest.fn(() => jest.fn()),
+        isFocused: jest.fn(() => true),
+      } as unknown as FeedScreenProps["navigation"];
+      const realDateNow = Date.now;
+      let currentTime = realDateNow();
+      const mockNow = jest
+        .spyOn(Date, "now")
+        .mockImplementation(() => currentTime);
+
+      const route = {
+        key: "Feed-bg-sync-activity-extends-idle",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      try {
+        // Act - launch, then let the cold-start sync settle.
+        await act(async () => {
+          tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+          await flush();
+        });
+        const refreshCallsAfterStart = (refreshFeeds as jest.Mock).mock.calls
+          .length;
+
+        // Act - well past the idle window, the user opens a post (activity).
+        currentTime += 20 * 60 * 1_000;
+        await act(async () => {
+          tree!.root
+            .findByProps({
+              accessibilityLabel: "Open post: Read while away",
+            })
+            .props.onPress();
+          await flush();
+        });
+        expect(mockNavigate).toHaveBeenCalledWith(
+          "FeedItemView",
+          expect.anything()
+        );
+
+        // Act - moments later, background the app (e.g. to open the post's
+        // link externally) and return right away.
+        currentTime += 5_000;
+        await act(async () => {
+          appStateHandlers.forEach((handler) => handler("background"));
+          await flush();
+        });
+        await act(async () => {
+          appStateHandlers.forEach((handler) => handler("active"));
+          await flush();
+        });
+
+        // Assert - no additional sync was triggered, because the recent
+        // activity (opening the post) reset the idle clock.
+        expect((refreshFeeds as jest.Mock).mock.calls.length).toBe(
+          refreshCallsAfterStart
+        );
+
+        await act(async () => {
+          tree!.unmount();
+        });
+      } finally {
+        addEventListenerSpy.mockRestore();
+        mockNow.mockRestore();
       }
     });
   });
