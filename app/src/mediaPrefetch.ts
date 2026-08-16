@@ -11,6 +11,7 @@ import {
 } from "./youtubeUtils";
 import { proxiedImageUrl } from "./proxyFetch";
 import { primeImageSizeCache } from "./components/ExpandedFeedImage";
+import { getFeedIconUrl } from "./feedIcon";
 
 // How many posts ahead of the active single-view index get their media
 // warmed. Post text/HTML is already local (read from SQLite up front), so
@@ -21,6 +22,7 @@ export type PrefetchableItem = {
   url?: string | null;
   content?: string | null;
   imageUrl?: string | null;
+  feedUrl?: string | null;
   useProxy?: boolean;
 };
 
@@ -39,6 +41,13 @@ export function prefetchItemMedia(item: PrefetchableItem): void {
 
   if (thumbnailUrl) {
     Image.prefetch(thumbnailUrl, "memory-disk").catch(() => {});
+  }
+
+  // Warmed unconditionally (ahead of the type-specific branches below) since
+  // the feed icon renders regardless of what kind of media the post has.
+  const iconUrl = item.feedUrl ? getFeedIconUrl(item.feedUrl) : null;
+  if (iconUrl) {
+    Image.prefetch(iconUrl, "memory-disk").catch(() => {});
   }
 
   const gifEmbedUrl =

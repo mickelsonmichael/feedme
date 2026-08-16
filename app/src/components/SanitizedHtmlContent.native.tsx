@@ -11,7 +11,7 @@ type Props = {
 const DEFAULT_TEXT_PROPS = { selectable: true };
 const IGNORED_DOM_TAGS: string[] = ["iframe"];
 
-export function SanitizedHtmlContent({ html }: Props) {
+function SanitizedHtmlContentImpl({ html }: Props) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const contentWidth = Math.max(width - spacing.lg * 2, 0);
@@ -65,6 +65,11 @@ export function SanitizedHtmlContent({ html }: Props) {
     </View>
   );
 }
+
+// Memoised: re-parsing and re-laying-out an article's HTML is the single
+// most expensive thing the reader does, and `html` changes far less often
+// than the screen above it re-renders.
+export const SanitizedHtmlContent = React.memo(SanitizedHtmlContentImpl);
 
 const styles = StyleSheet.create({
   wrap: {

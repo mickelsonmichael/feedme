@@ -7,7 +7,7 @@ type Props = {
   html: string;
 };
 
-export function SanitizedHtmlContent({ html }: Props) {
+function SanitizedHtmlContentImpl({ html }: Props) {
   const { colors } = useTheme();
   const instanceClass = React.useId().replace(/[^a-zA-Z0-9_-]/g, "_");
   const scopeClass = `feedme-html-${instanceClass}`;
@@ -47,6 +47,11 @@ export function SanitizedHtmlContent({ html }: Props) {
     </View>
   );
 }
+
+// Memoised: re-parsing and re-laying-out an article's HTML is the single
+// most expensive thing the reader does, and `html` changes far less often
+// than the screen above it re-renders.
+export const SanitizedHtmlContent = React.memo(SanitizedHtmlContentImpl);
 
 const styles = StyleSheet.create({
   wrap: {

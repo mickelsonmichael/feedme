@@ -15,11 +15,19 @@ type Props = {
  * favicon loads so switching feeds doesn't leave a blank gap. Renders
  * nothing if no URL is derivable or the image fails to load.
  */
-export function FeedIcon({ feedUrl, size = 16 }: Props) {
+function FeedIconImpl({ feedUrl, size = 16 }: Props) {
   const { colors } = useTheme();
   const iconUri = React.useMemo(
     () => (feedUrl ? getFeedIconUrl(feedUrl) : null),
     [feedUrl]
+  );
+  // Held stable across renders. expo-image treats a new `source` object as a
+  // new image and replays `transition`, so passing an object literal here
+  // makes the favicon visibly re-fade on every render of the post around it
+  // — even though the bitmap never left the cache.
+  const source = React.useMemo(
+    () => (iconUri ? { uri: iconUri } : null),
+    [iconUri]
   );
   const [failed, setFailed] = React.useState(false);
   const [loaded, setLoaded] = React.useState(false);
@@ -29,7 +37,7 @@ export function FeedIcon({ feedUrl, size = 16 }: Props) {
     setLoaded(false);
   }, [iconUri]);
 
-  if (!iconUri || failed) {
+  if (!iconUri || !source || failed) {
     return null;
   }
 
@@ -44,7 +52,8 @@ export function FeedIcon({ feedUrl, size = 16 }: Props) {
         />
       ) : null}
       <Image
-        source={{ uri: iconUri }}
+        key={iconUri}
+        source={source}
         style={[
           styles.icon,
           { width: size, height: size, borderRadius: size / 4 },
@@ -57,6 +66,12 @@ export function FeedIcon({ feedUrl, size = 16 }: Props) {
     </View>
   );
 }
+
+// Memoised on top of the stable source above: `feedUrl` is a plain string, so
+// the icon is skipped entirely when the post around it re-renders (a swipe
+// flipping isActive/isLive, a mark-as-read write landing) rather than
+// re-running its load-and-fade.
+export const FeedIcon = React.memo(FeedIconImpl);
 
 const styles = StyleSheet.create({
   container: {

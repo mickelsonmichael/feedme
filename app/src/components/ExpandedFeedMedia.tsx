@@ -58,6 +58,7 @@ type Props = {
   deferGalleryLoad?: boolean;
   deferGifLoad?: boolean;
   useProxy?: boolean;
+  isLive?: boolean;
 };
 
 /**
@@ -65,7 +66,7 @@ type Props = {
  * For YouTube entries, this embeds the playable video.
  * For all other entries, it falls back to the expanded image.
  */
-export function ExpandedFeedMedia({
+function ExpandedFeedMediaImpl({
   itemUrl,
   imageUrl,
   content,
@@ -76,6 +77,7 @@ export function ExpandedFeedMedia({
   deferGalleryLoad = true,
   deferGifLoad = false,
   useProxy = false,
+  isLive = true,
 }: Props) {
   const { colors } = useTheme();
   const { width: viewportWidth } = useWindowDimensions();
@@ -379,6 +381,66 @@ export function ExpandedFeedMedia({
           mediaPlaybackRequiresUserAction={false}
           testID={testID ? `${testID}-webview` : undefined}
         />
+      </View>
+    );
+  }
+
+  if (youtubeVideoId && !isLive) {
+    // The reader hasn't settled here yet (a pre-mounted swipe neighbour, or
+    // this post is still sliding into place) — show a static poster rather
+    // than mounting a live, potentially autoplaying WebView for a video the
+    // user has not actually navigated to.
+    const previewUri = imageUrl ? proxiedImageUrl(imageUrl, useProxy) : null;
+    const showPlaceholderPill = !blur;
+    return (
+      <View style={styles.previewWrap} testID={testID}>
+        {previewUri ? (
+          <View
+            style={[
+              styles.previewBlurClip,
+              nsfw && blur ? NSFW_BLUR_FILTER_STYLE : null,
+            ]}
+          >
+            <Image
+              source={{ uri: previewUri }}
+              style={styles.previewImage}
+              contentFit="cover"
+              cachePolicy="memory-disk"
+              blurRadius={nsfw && blur ? NSFW_BLUR_RADIUS : 0}
+              autoplay={false}
+              transition={120}
+              testID={testID ? `${testID}-preview` : undefined}
+            />
+          </View>
+        ) : null}
+        <View
+          style={[
+            previewUri ? styles.placeholderOverlay : styles.galleryPlaceholder,
+            previewUri || !showPlaceholderPill
+              ? null
+              : {
+                  borderColor: colors.border,
+                  backgroundColor: colors.paperWarm,
+                },
+          ]}
+          accessibilityLabel="YouTube video"
+        >
+          {showPlaceholderPill ? (
+            <View
+              style={[
+                styles.placeholderPill,
+                { backgroundColor: `${colors.ink}d9` },
+              ]}
+            >
+              <Feather name="play" size={18} color={colors.paper} />
+              <Text
+                style={[styles.placeholderPillTitle, { color: colors.paper }]}
+              >
+                YouTube video
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
     );
   }
@@ -881,6 +943,10 @@ export function ExpandedFeedMedia({
 
   return null;
 }
+
+// Memoised: a swipe neighbour's media must not be torn down and rebuilt
+// every time the screen above re-renders. See SingleViewPager.
+export const ExpandedFeedMedia = React.memo(ExpandedFeedMediaImpl);
 
 function escapeHtmlAttribute(value: string): string {
   return value

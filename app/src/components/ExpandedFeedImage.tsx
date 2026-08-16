@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image as RNImage,
@@ -66,7 +66,7 @@ type Props = {
   useProxy?: boolean;
 };
 
-export function ExpandedFeedImage({
+function ExpandedFeedImageImpl({
   imageUrl,
   alignment = "flex-start",
   testID,
@@ -74,6 +74,11 @@ export function ExpandedFeedImage({
   useProxy = false,
 }: Props) {
   const resolvedImageUrl = proxiedImageUrl(imageUrl, useProxy);
+  // Held stable across renders. expo-image treats a new `source` object as a
+  // new image and replays `transition`, so an object literal here makes the
+  // post image visibly re-fade whenever anything around it re-renders — which
+  // reads as the image reloading on every swipe, despite it being cached.
+  const source = useMemo(() => ({ uri: resolvedImageUrl }), [resolvedImageUrl]);
   const { colors } = useTheme();
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [contentWidth, setContentWidth] = useState<number | null>(null);
@@ -162,7 +167,8 @@ export function ExpandedFeedImage({
             style={[styles.imageBlurWrap, blur ? NSFW_BLUR_FILTER_STYLE : null]}
           >
             <Image
-              source={{ uri: resolvedImageUrl }}
+              key={resolvedImageUrl}
+              source={source}
               blurRadius={blur ? NSFW_BLUR_RADIUS : 0}
               style={[
                 styles.image,
@@ -195,6 +201,11 @@ export function ExpandedFeedImage({
     </View>
   );
 }
+
+// Memoised: every prop is a primitive, so the image is skipped entirely when
+// the post around it re-renders (a swipe flipping isActive/isLive, a
+// mark-as-read write landing) instead of re-running its load-and-fade.
+export const ExpandedFeedImage = React.memo(ExpandedFeedImageImpl);
 
 const styles = StyleSheet.create({
   wrapper: {

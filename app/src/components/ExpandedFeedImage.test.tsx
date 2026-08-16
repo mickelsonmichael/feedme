@@ -2,7 +2,10 @@ import React from "react";
 import { Image as RNImage, StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import renderer, { act } from "react-test-renderer";
-import { ExpandedFeedImage } from "../components/ExpandedFeedImage";
+import {
+  ExpandedFeedImage,
+  primeImageSizeCache,
+} from "../components/ExpandedFeedImage";
 
 jest.mock("../context/ThemeContext", () => ({
   useTheme: () => ({
@@ -22,6 +25,13 @@ jest.mock("../context/ThemeContext", () => ({
 
 jest.mock("@expo/vector-icons", () => ({
   Feather: "Feather",
+}));
+
+// ExpandedFeedImage always renders FullscreenImageModal, which reads
+// useSafeAreaInsets — without a provider (or this) every render in the file
+// throws "No safe area value available".
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
 describe("ExpandedFeedImage", () => {
@@ -419,5 +429,83 @@ describe("ExpandedFeedImage", () => {
     expect(
       tree!.root.findByProps({ testID: "fullscreen-image-modal" }).props.visible
     ).toBe(false);
+  });
+
+  it("keeps the same image source across a re-render, so it does not re-fade", async () => {
+    // Arrange — metadata already cached, as it is for a post the reader has
+    // had mounted since before the swipe.
+    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+      success?.(1200, 600);
+    });
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedImage imageUrl="https://example.com/hero.jpg" />
+      );
+    });
+    const sourceBefore = tree!.root.findByType(Image).props.source;
+
+    // Act — the post around it re-renders (a swipe flipping isActive/isLive,
+    // or a mark-as-read write landing), handing over identical props.
+    await act(async () => {
+      tree!.update(
+        <ExpandedFeedImage imageUrl="https://example.com/hero.jpg" />
+      );
+    });
+
+    // Assert — same source object. expo-image treats a new `source` as a new
+    // image and replays `transition`, which is what made the image visibly
+    // reload every time a swipe completed.
+    expect(tree!.root.findByType(Image).props.source).toBe(sourceBefore);
+  });
+
+  it("discards the previous native image instance when swapping to an already-cached URL", async () => {
+    // Arrange
+    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+      success?.(1600, 800);
+    });
+
+    const urlA = "https://example.com/stale-a.jpg";
+    const urlB = "https://example.com/stale-b.jpg";
+
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedImage imageUrl={urlA} testID="expanded-image" />
+      );
+    });
+    const wrapper = tree!.root.findByProps({
+      testID: "expanded-image-wrapper",
+    });
+    await act(async () => {
+      wrapper.props.onLayout({
+        nativeEvent: { layout: { width: 400, height: 0, x: 0, y: 0 } },
+      });
+    });
+
+    // Mirrors mediaPrefetch warming the *next* post's hero image ahead of a
+    // swipe — the exact condition that lets the isLoadingMetadata gate be
+    // skipped on the URL swap below.
+    await act(async () => {
+      primeImageSizeCache(urlB);
+    });
+
+    const firstInstance = tree!.root.findByType(Image).instance;
+
+    // Act
+    await act(async () => {
+      tree!.update(
+        <ExpandedFeedImage imageUrl={urlB} testID="expanded-image" />
+      );
+    });
+
+    // Assert — the loading placeholder never reappears (cache hit)...
+    expect(
+      tree!.root.findAllByProps({ testID: "expanded-image-placeholder" })
+    ).toHaveLength(0);
+    // ...yet the native image was still remounted rather than reusing the
+    // old node with the previous bitmap.
+    const secondInstance = tree!.root.findByType(Image).instance;
+    expect(secondInstance).not.toBe(firstInstance);
   });
 });

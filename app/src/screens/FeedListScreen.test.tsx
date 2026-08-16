@@ -191,6 +191,17 @@ function makeItems(
   }));
 }
 
+// Which post the reader is actually *on*. The pager deliberately keeps
+// neighbouring posts mounted either side of the active one, so "is this text
+// in the tree?" no longer answers that question — several posts are always
+// present by design.
+function activePostTitle(tree: renderer.ReactTestRenderer): string | undefined {
+  const active = tree.root
+    .findAllByProps({ isActive: true })
+    .find((node: renderer.ReactTestInstance) => node.props.item?.title);
+  return active?.props.item?.title as string | undefined;
+}
+
 describe("FeedListScreen", () => {
   beforeEach(() => {
     (loadConfig as jest.Mock).mockReturnValue({});
@@ -1177,6 +1188,92 @@ describe("FeedListScreen", () => {
     });
   });
 
+  it("does not revert to a previous post when its delayed mark-as-read write lands after the user has moved on", async () => {
+    // Arrange — the "mark as read" write for each post resolves only when
+    // this test explicitly releases it, simulating a background DB write
+    // that lands after further navigation (see database.ts's write-lock
+    // queue, which can back writes up under rapid navigation).
+    const pendingMarkReads: Array<{ id: number; resolve: () => void }> = [];
+    (markItemRead as jest.Mock).mockImplementation(
+      (id: number) =>
+        new Promise<void>((resolve) => {
+          pendingMarkReads.push({ id, resolve });
+        })
+    );
+    const resolveMarkRead = (id: number) => {
+      const pending = pendingMarkReads.find((p) => p.id === id);
+      pending?.resolve();
+    };
+
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue(makeItems(3, 701));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-single-layout-delayed-mark-read",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    // Act — land on the first post, then advance twice before its
+    // mark-as-read write ever resolves.
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(markItemRead).toHaveBeenCalledWith(701);
+
+    const nextButtons = () =>
+      tree!.root.findAllByProps({ accessibilityLabel: "Next post" });
+
+    await act(async () => {
+      await nextButtons()[0].props.onPress();
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await nextButtons()[0].props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(activePostTitle(tree!)).toBe("Post 703");
+
+    // Act — the first post's delayed write finally lands, well after the
+    // user moved on twice.
+    await act(async () => {
+      resolveMarkRead(701);
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert — still on the third post; the stale write must not yank the
+    // reader back to the first. (Post 701 is still *mounted* — it's two
+    // slots back, inside the pager's window — but it is not the active
+    // post, which is the thing that must not change.)
+    expect(activePostTitle(tree!)).toBe("Post 703");
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
   it("shows the feed's icon next to the feed name in single layout", async () => {
     // Arrange
     (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
@@ -1487,7 +1584,10 @@ describe("FeedListScreen", () => {
 
     const gestureDetector = tree!.root.findByType(GestureDetector);
     const gesture = gestureDetector.props.gesture as {
-      handlers: { onUpdate: (event: unknown) => void };
+      handlers: {
+        onBegin: () => void;
+        onUpdate: (event: unknown) => void;
+      };
     };
     const getTranslateX = () => {
       const style = gestureDetector.findByType(Animated.View).props
@@ -1498,18 +1598,23 @@ describe("FeedListScreen", () => {
       return withTransform!.transform![0].translateX.__getValue();
     };
 
-    // Assert — starts centered, then tracks the drag distance exactly
-    expect(getTranslateX()).toBe(0);
+    // Assert — every post has a permanent absolute position (post i at
+    // i * viewportWidth), so the track rests at -index * viewportWidth: zero
+    // on the first post. The drag then tracks the finger exactly on top of
+    // that resting offset.
+    const restX = 0;
+    expect(getTranslateX()).toBe(restX);
 
     await act(async () => {
+      gesture.handlers.onBegin();
       gesture.handlers.onUpdate({ translationX: -45, translationY: 0 });
     });
-    expect(getTranslateX()).toBe(-45);
+    expect(getTranslateX()).toBe(restX - 45);
 
     await act(async () => {
       gesture.handlers.onUpdate({ translationX: -12, translationY: 0 });
     });
-    expect(getTranslateX()).toBe(-12);
+    expect(getTranslateX()).toBe(restX - 12);
 
     await act(async () => {
       tree!.unmount();
@@ -2220,7 +2325,7 @@ describe("FeedListScreen", () => {
     });
   });
 
-  it("falls back to a nearby valid index when the active post disappears in a silent reload", async () => {
+  it("keeps the reader on the post they are reading when a silent reload drops it from the query", async () => {
     // Arrange
     (loadConfig as jest.Mock).mockReturnValue({
       feedLayout: "single",
@@ -2307,15 +2412,10 @@ describe("FeedListScreen", () => {
       await Promise.resolve();
     });
 
-    expect(
-      tree!.root
-        .findAllByType(Text)
-        .some(
-          (node: renderer.ReactTestInstance) => node.props.children === "Post B"
-        )
-    ).toBe(true);
+    expect(activePostTitle(tree!)).toBe("Post B");
 
-    // Act: silent refocus where the active post is no longer present.
+    // Act: silent refocus where the active post is no longer in the query
+    // results.
     const focusEffectCalls = (useFocusEffect as jest.Mock).mock.calls;
     const focusCallback = focusEffectCalls[
       focusEffectCalls.length - 1
@@ -2327,23 +2427,15 @@ describe("FeedListScreen", () => {
       await Promise.resolve();
     });
 
-    // Assert: no crash, and it lands on a still-valid post rather than a
-    // blank screen — the clamp effect's existing fallback behavior.
-    expect(
-      tree!.root
-        .findAllByType(Text)
-        .some(
-          (node: renderer.ReactTestInstance) => node.props.children === "Post B"
-        )
-    ).toBe(false);
-    expect(
-      tree!.root
-        .findAllByType(Text)
-        .some(
-          (node: renderer.ReactTestInstance) =>
-            node.props.children === "Post A" || node.props.children === "Post E"
-        )
-    ).toBe(true);
+    // Assert: the reader does not move. This is a deliberate behaviour
+    // change — this test previously asserted the opposite, that the reader
+    // would land on "a still-valid post". That fallback *was* the bug: a
+    // background refresh silently teleported the reader to whatever now sat
+    // at index 0, mid-read, with no user action. The reading sequence is
+    // frozen while the user is in it, so a post vanishing from a requery no
+    // longer moves them; genuinely new posts arrive via the existing "New
+    // posts available" button instead.
+    expect(activePostTitle(tree!)).toBe("Post B");
 
     await act(async () => {
       tree!.unmount();
@@ -2816,6 +2908,75 @@ describe("FeedListScreen", () => {
     });
 
     expect(getItemsPage).toHaveBeenCalledTimes(callCountAfterMount);
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("re-queries every page it already has on a background refresh, not just the first", async () => {
+    // Arrange — a full first page plus a short second page, so the screen
+    // ends up holding more items than a single page's worth.
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockImplementation(
+      ({ offset }: { offset: number }) =>
+        Promise.resolve(
+          offset === 0 ? makeItems(PAGE_SIZE, 1) : makeItems(5, PAGE_SIZE + 1)
+        )
+    );
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-refresh-keeps-pages",
+      name: "Feed",
+      params: { selectedFeedId: 1, selectedFeedTitle: "Alpha" },
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Act — a background refresh re-queries page 0 and commits the result
+    // over the top of the whole list.
+    const focusEffectCalls = (useFocusEffect as jest.Mock).mock.calls;
+    const focusCallback = focusEffectCalls[
+      focusEffectCalls.length - 1
+    ][0] as () => void;
+    await act(async () => {
+      focusCallback();
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert — that commit asks for everything already loaded. Asking for
+    // only PAGE_SIZE would silently discard every item past the first page,
+    // which in the single-post reader deletes the post being read and drops
+    // the reader back to the top of the list.
+    const pageZeroLimits = (getItemsPage as jest.Mock).mock.calls
+      .map(([args]: [{ offset: number; limit: number }]) => args)
+      .filter((args: { offset: number }) => args.offset === 0)
+      .map((args: { limit: number }) => args.limit);
+    expect(pageZeroLimits[pageZeroLimits.length - 1]).toBe(PAGE_SIZE + 5);
 
     await act(async () => {
       tree!.unmount();

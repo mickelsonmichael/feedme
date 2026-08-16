@@ -18,8 +18,6 @@ import {
   useWindowDimensions,
   Platform,
   ViewToken,
-  Animated,
-  Easing,
   ActivityIndicator,
 } from "react-native";
 import { FlashList, FlashListRef } from "@shopify/flash-list";
@@ -41,8 +39,6 @@ import {
   addToReadLater,
   removeFromReadLater,
   getReadLaterItemIds,
-  startItemViewTime,
-  endItemViewTime,
   getItemRawXml,
   addFeed,
   deleteFeed,
@@ -85,11 +81,16 @@ import { FeedPostCard } from "../components/FeedPostCard";
 import { loadConfig, saveConfig } from "../storage";
 import { openUrlWithPreference } from "../linkOpening";
 import { resolveCustomFeedIcon } from "../customFeedIcons";
-import { FeedItemContent, formatDate } from "../components/FeedItemContent";
-import { FeedIcon } from "../components/FeedIcon";
+import {
+  SingleViewPost,
+  SingleViewPostHandle,
+} from "../components/SingleViewPost";
+import {
+  SingleViewPager,
+  SingleViewPagerHandle,
+  SINGLE_VIEW_WINDOW,
+} from "../components/SingleViewPager";
 import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { resolveSingleSwipeDirection } from "../singleSwipeDirection";
 import {
   prefetchItemMedia,
   SINGLE_VIEW_PREFETCH_AHEAD,
@@ -103,7 +104,6 @@ type Props = CompositeScreenProps<
 const CARD_IMAGE_WIDTH = 100;
 const CARD_LAYOUT_WIDTH = 760;
 const PAGE_SIZE = 50;
-const SINGLE_SWIPE_ENTER_DURATION_MS = 240;
 
 // How long the very first local read gets before we're willing to put a
 // loading screen up. An app restart with cached posts must land on those posts
@@ -206,32 +206,29 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [singleActiveIndex, setSingleActiveIndex] = useState(0);
+  // Id (not index!) of the post currently active in single layout — null
+  // until the render-time lock-in below picks the first available post. An
+  // id is the source of truth precisely because it never goes stale the way
+  // an index into a reordering/appending array can; see singleSafeIndex,
+  // derived fresh from this on every render, below the visibleItems memo.
+  const [singleActiveItemId, setSingleActiveItemId] = useState<number | null>(
+    null
+  );
+  // Bumped to rebuild the reader's frozen reading sequence from scratch —
+  // only ever for an explicit user action (accepting the "New posts
+  // available" page). Scope/filter/sort/search changes rebuild it too, via
+  // singleScopeKey; see the singleItems memo.
+  const [singleReloadEpoch, setSingleReloadEpoch] = useState(0);
+  // Index the reader was last known to be at, so a lookup that somehow fails
+  // holds position instead of snapping to the top of the list.
+  const singleLastKnownIndexRef = useRef(0);
   // True while the user has swiped past the last locally-loaded post and is
   // waiting on handleLoadMore's DB page fetch to resolve before we can
   // advance. Drives a spinner on the Next control instead of a silent no-op.
   const [singleAwaitingNextPost, setSingleAwaitingNextPost] = useState(false);
-  // Snapshot of visibleItems / the "scope" (everything that legitimately
-  // resets singleActiveIndex to 0 — see the effect below) as of the last
-  // render where the single-layout resync logic ran. Lets a *silent*
-  // visibleItems reload (same scope, new array reference — e.g. a
-  // focus-regain re-query picking up a background-sync write) be
-  // distinguished from a *deliberate* scope/filter/sort/search/layout
-  // change, so the active post can be re-anchored by id only in the former
-  // case. See the resync block below the visibleItems memo.
-  const [singlePrevVisibleItems, setSinglePrevVisibleItems] = useState<
-    FeedItemWithFeed[]
-  >([]);
-  const [singlePrevScopeKey, setSinglePrevScopeKey] = useState<string | null>(
-    null
-  );
   const [showSingleMoreMenu, setShowSingleMoreMenu] = useState(false);
   const [singleToolbarHeight, setSingleToolbarHeight] = useState(0);
   const [showSingleFilters, setShowSingleFilters] = useState(false);
-  const [singleNsfwRevealed, setSingleNsfwRevealed] = useState(false);
-  /** Row ID of the active item_view_times record in single layout.
-   *  Persisted as a ref (not state) to avoid triggering re-renders. */
-  const singleViewTimeRowIdRef = useRef<number | null>(null);
   const selectedFeedId = route.params?.selectedFeedId;
   const selectedTagId = route.params?.selectedTagId;
   const selectedCustomFeedId = route.params?.selectedCustomFeedId;
@@ -240,11 +237,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const scrollToTopParam = route.params?.scrollToTop;
 
   const flatListRef = useRef<FlashListRef<CollapsedFeedListRow>>(null);
-  const singleScrollRef = useRef<ScrollView | null>(null);
-  /** Horizontal offset for the single-layout swipe animation: follows the
-   *  finger while dragging, then either slides the newly-revealed post in
-   *  from the swiped-from edge, or springs back to 0 for a rejected swipe. */
-  const singleSwipeTranslateX = useRef(new Animated.Value(0)).current;
+  // Imperative handle of the web reader's single post — used to scroll it
+  // back to top for tab-re-tap / pull-to-refresh. On mobile the equivalent
+  // goes through singlePagerRef, which owns the active slot.
+  const activeSingleViewPostRef = useRef<SingleViewPostHandle | null>(null);
+  // The mobile reader's pager (gesture, animation and windowing all live in
+  // SingleViewPager). Web renders a single post directly instead.
+  const singlePagerRef = useRef<SingleViewPagerHandle | null>(null);
   const pendingScrollToTopRef = useRef(false);
   // Set when committing a stashed page from the "New posts available" banner:
   // single layout must jump to the first unread of the newly-landed items
@@ -353,7 +352,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const scrollCurrentViewToTop = useCallback(() => {
     if (feedLayout === "single") {
-      singleScrollRef.current?.scrollTo({ y: 0, animated: false });
+      singlePagerRef.current?.scrollToTop();
+      activeSingleViewPostRef.current?.scrollToTop();
       return;
     }
 
@@ -511,12 +511,19 @@ export default function FeedListScreen({ navigation, route }: Props) {
         const queryAndCommitPage = async (
           defer = false
         ): Promise<number | null> => {
+          // Re-query as many items as are already committed, not just the
+          // first page. This commit *replaces* the list wholesale, so asking
+          // for PAGE_SIZE while the user has paged further in silently throws
+          // away everything past item 50 — which, in the single-post reader,
+          // deletes the very post being read out from under them and drops
+          // the reader back to the top of the list.
+          const pageLimit = Math.max(PAGE_SIZE, itemsRef.current.length);
           const [itemData, ids, readLaterIdsLoaded] = await Promise.all([
             getItemsPage({
               feedIds: scopeFeedIds,
               excludeFeedIds,
               offset: 0,
-              limit: PAGE_SIZE,
+              limit: pageLimit,
               order: sortRef.current,
             }),
             getSavedItemIds(),
@@ -533,7 +540,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             if (hasNewPosts) {
               pendingRefreshedPageRef.current = {
                 items: itemData,
-                hasMore: itemData.length === PAGE_SIZE,
+                hasMore: itemData.length === pageLimit,
               };
               setNewPostsAvailable(true);
               return itemData.length;
@@ -543,7 +550,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             // without bothering the user with a reload button.
           }
           setItems(itemData);
-          setHasMore(itemData.length === PAGE_SIZE);
+          setHasMore(itemData.length === pageLimit);
           return itemData.length;
         };
 
@@ -761,9 +768,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
     setNewPostsAvailable(false);
     if (pending) {
       if (feedLayout === "single") {
-        // Opt out of the keep-the-reader-in-place identity resync for this one
-        // commit: the tap *is* the request to move. The flag also drives the
-        // jump-to-first-unread effect once the new items land.
+        // The tap *is* the request to move, so this is the one commit that
+        // gets to rebuild the reader's frozen sequence from the new page.
+        // The flag drives the jump-to-first-unread effect once it lands.
+        setSingleReloadEpoch((epoch) => epoch + 1);
         singleSelectUnreadOnNextItemsRef.current = true;
         singleLastAutoMarkedIdRef.current = null;
       }
@@ -849,21 +857,42 @@ export default function FeedListScreen({ navigation, route }: Props) {
     return users;
   }, [feeds]);
 
-  const buildFeedItemViewItem = useCallback(
-    (item: FeedItemWithFeed): RootStackParamList["FeedItemView"]["item"] => ({
-      itemId: item.id,
-      title: item.title,
-      url: item.url,
-      content: item.content,
-      imageUrl: item.image_url,
-      publishedAt: item.published_at,
-      feedTitle: item.feed_title,
-      feedUrl: feedDetailsById.get(item.feed_id)?.url ?? null,
-      read: item.read,
-      useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
-      nsfw: feedDetailsById.get(item.feed_id)?.nsfw === 1 || customFeedNsfw,
-    }),
+  // Cached by item identity, which is what makes the reader's memoised post
+  // subtrees actually hold: a fresh object here would change every mounted
+  // slot's `item` prop on every render of this screen, and this screen
+  // re-renders constantly (refresh progress alone ticks once per feed). The
+  // cache is rebuilt whenever the feed metadata it folds in changes, so
+  // there's nothing stale to invalidate.
+  const feedItemViewItemCache = useMemo(
+    () =>
+      new WeakMap<
+        FeedItemWithFeed,
+        RootStackParamList["FeedItemView"]["item"]
+      >(),
     [customFeedNsfw, feedDetailsById]
+  );
+  const buildFeedItemViewItem = useCallback(
+    (item: FeedItemWithFeed): RootStackParamList["FeedItemView"]["item"] => {
+      const cached = feedItemViewItemCache.get(item);
+      if (cached) return cached;
+
+      const built = {
+        itemId: item.id,
+        title: item.title,
+        url: item.url,
+        content: item.content,
+        imageUrl: item.image_url,
+        publishedAt: item.published_at,
+        feedTitle: item.feed_title,
+        feedUrl: feedDetailsById.get(item.feed_id)?.url ?? null,
+        read: item.read,
+        useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
+        nsfw: feedDetailsById.get(item.feed_id)?.nsfw === 1 || customFeedNsfw,
+      };
+      feedItemViewItemCache.set(item, built);
+      return built;
+    },
+    [customFeedNsfw, feedDetailsById, feedItemViewItemCache]
   );
 
   // Ref mirrors of frequently-changing state, kept fresh on every render so
@@ -1162,20 +1191,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
     [navigation]
   );
 
-  const formatDate = (ts: number | null): string => {
-    if (!ts) return "";
-    const diff = Date.now() - ts;
-    const hours = Math.floor(diff / 3_600_000);
-    if (hours < 1) return "just now";
-    if (hours < 24) return `${hours}h`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d`;
-    return new Date(ts).toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-    });
-  };
-
   useEffect(() => {
     if (
       (selectedFeedId !== undefined ||
@@ -1212,7 +1227,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       return;
     }
 
-    setSingleActiveIndex(0);
+    setSingleActiveItemId(null);
   }, [
     feedLayout,
     filter,
@@ -1354,79 +1369,113 @@ export default function FeedListScreen({ navigation, route }: Props) {
     );
   }, [sortedItems, filter, savedIds, retainedUnreadIds]);
 
-  // Keep the active post anchored to its identity — not its raw position —
-  // across a silent visibleItems reload (focus-regain re-query, background
-  // sync landing new items, etc). Without this, singleActiveIndex is pure
-  // index arithmetic: if the list gets reordered underneath it (e.g. a new
-  // item shifts every other item's rank in "stacked" sort), the index keeps
-  // pointing at the same slot but a different post ends up there, and
-  // Previous/Next silently walk from the wrong post.
+  // ---------------------------------------------------------------------
+  // Single-post reader: the frozen reading sequence.
   //
-  // This runs as a synchronous state adjustment during render (React's
-  // documented "adjusting state when a prop changes" pattern) rather than a
-  // useEffect, so that if the index needs correcting, it happens before this
-  // render's JSX (built from the stale index) ever commits/paints — an
-  // effect-based fix would flash the wrong post for one frame first.
-  if (feedLayout === "single") {
-    const singleScopeKey = [
-      feedLayout,
-      filter,
-      normalizedSearch,
-      selectedCustomFeedId,
-      selectedFeedId,
-      selectedTagId,
-      sort,
-    ].join(" ");
+  // `visibleItems` is rebuilt constantly — every background refresh replaces
+  // the whole array, the stacked sort re-derives its order from a fresh
+  // Date.now(), and the unread filter drops posts the moment they're
+  // auto-marked read. That churn is fine for a scrolling list, where the
+  // user's anchor is a scroll offset over content they can see moving. It is
+  // *not* fine for the reader, where a single post fills the screen and any
+  // reordering underneath it is invisible until it teleports the user
+  // somewhere else entirely.
+  //
+  // So while the user is reading, the sequence they're walking is frozen:
+  // entries hold their position for as long as the scope lasts, their
+  // content is refreshed by id when a newer copy shows up, and genuinely new
+  // posts are appended at the end rather than inserted around the reader.
+  // Nothing is ever removed or reordered. Actual reloads are explicit — a
+  // scope/filter/sort/search change, or the "New posts available" button —
+  // and go through singleReloadEpoch below.
+  const singleScopeKey = `${filter}|${normalizedSearch}|${sort}|${selectedFeedId}|${selectedTagId}|${selectedCustomFeedId}|${singleReloadEpoch}`;
+  const singleSequenceRef = useRef<{
+    key: string;
+    items: FeedItemWithFeed[];
+  }>({ key: "", items: [] });
 
-    if (singleScopeKey !== singlePrevScopeKey) {
-      // Deliberate scope/filter/sort/search/layout change — the reset-to-0
-      // effect below owns this transition. Just record the new baseline.
-      setSinglePrevScopeKey(singleScopeKey);
-      setSinglePrevVisibleItems(visibleItems);
-    } else if (
-      visibleItems !== singlePrevVisibleItems &&
-      !singleSelectUnreadOnNextItemsRef.current
-    ) {
-      setSinglePrevVisibleItems(visibleItems);
-
-      const prevIndex =
-        singlePrevVisibleItems.length === 0
-          ? 0
-          : Math.min(singleActiveIndex, singlePrevVisibleItems.length - 1);
-      const prevActiveItem = singlePrevVisibleItems[prevIndex] ?? null;
-
-      if (prevActiveItem) {
-        const resyncedIndex = visibleItems.findIndex(
-          (item) => item.id === prevActiveItem.id
-        );
-        if (resyncedIndex !== -1 && resyncedIndex !== singleActiveIndex) {
-          setSingleActiveIndex(resyncedIndex);
-        }
-        // If not found (deleted/filtered out), leave singleActiveIndex as-is
-        // — the clamp effect below handles an out-of-bounds fallback.
-      }
-    } else if (visibleItems !== singlePrevVisibleItems) {
-      setSinglePrevVisibleItems(visibleItems);
+  const singleItems = useMemo(() => {
+    if (feedLayout !== "single") {
+      return visibleItems;
     }
+
+    const cached = singleSequenceRef.current;
+    const previous = cached.key === singleScopeKey ? cached.items : [];
+    const freshById = new Map(visibleItems.map((item) => [item.id, item]));
+    const held = new Set<number>();
+
+    const merged = previous.map((item) => {
+      held.add(item.id);
+      // Prefer the newer copy (read flag, edited title) but keep the slot.
+      return freshById.get(item.id) ?? item;
+    });
+    for (const item of visibleItems) {
+      if (!held.has(item.id)) merged.push(item);
+    }
+
+    singleSequenceRef.current = { key: singleScopeKey, items: merged };
+    return merged;
+  }, [feedLayout, singleScopeKey, visibleItems]);
+
+  // The active post is tracked by identity (singleActiveItemId), not
+  // position, so it survives the sequence being appended to underneath it.
+  //
+  // The one thing an id can't do on its own is pick a *starting* post — so
+  // lock one in the first moment data is available. This is React's
+  // documented "adjusting state during render" pattern, not a useEffect, so
+  // the very first paint already has a real anchor instead of flashing
+  // index-0-of-whatever-that-means-right-now for a frame first.
+  if (
+    feedLayout === "single" &&
+    singleActiveItemId === null &&
+    singleItems.length > 0
+  ) {
+    setSingleActiveItemId(singleItems[0].id);
   }
 
+  // If the active id genuinely can't be found, hold the position the reader
+  // was already at rather than snapping to index 0. The frozen sequence
+  // above should make this unreachable; it used to be a silent
+  // `Math.max(0, -1)`, which is exactly why the reader teleporting to the
+  // top of the list went undiagnosed for so long.
+  const singleFoundIndex = singleItems.findIndex(
+    (item) => item.id === singleActiveItemId
+  );
   const singleSafeIndex =
-    visibleItems.length === 0
-      ? 0
-      : Math.min(singleActiveIndex, visibleItems.length - 1);
-  const currentSingleItem = visibleItems[singleSafeIndex] ?? null;
+    singleFoundIndex >= 0
+      ? singleFoundIndex
+      : Math.min(
+          singleLastKnownIndexRef.current,
+          Math.max(0, singleItems.length - 1)
+        );
+  singleLastKnownIndexRef.current = singleSafeIndex;
+  const currentSingleItem = singleItems[singleSafeIndex] ?? null;
+  // Mirrored for the pager's callbacks, which must read the *current* value
+  // without being rebuilt (and re-handed to GestureDetector) on every move.
+  const singleSafeIndexRef = useRef(singleSafeIndex);
+  singleSafeIndexRef.current = singleSafeIndex;
+  const singleItemsRef = useRef(singleItems);
+  singleItemsRef.current = singleItems;
   const currentSingleViewItem = useMemo(
     () => (currentSingleItem ? buildFeedItemViewItem(currentSingleItem) : null),
     [buildFeedItemViewItem, currentSingleItem]
   );
+  // Held stable so it doesn't re-render the active post on every parent pass.
+  const singleRefreshControl = useMemo(
+    () => (
+      <RefreshControl
+        refreshing={refreshing}
+        onRefresh={handleRefreshAll}
+        colors={[colors.accent]}
+        tintColor={colors.accent}
+      />
+    ),
+    [colors.accent, handleRefreshAll, refreshing]
+  );
   const singlePreviousDisabled = singleSafeIndex === 0;
   const singleNextDisabled =
-    (singleSafeIndex >= visibleItems.length - 1 && !hasMore) ||
+    (singleSafeIndex >= singleItems.length - 1 && !hasMore) ||
     singleAwaitingNextPost;
-  const isSingleItemNsfw = currentSingleItem
-    ? feedDetailsById.get(currentSingleItem.feed_id)?.nsfw === 1 ||
-      customFeedNsfw
-    : false;
   const singleItemRedditAuthor = currentSingleItem
     ? extractRedditAuthor(currentSingleItem.content)
     : null;
@@ -1434,31 +1483,17 @@ export default function FeedListScreen({ navigation, route }: Props) {
     ? followedRedditUsers.has(singleItemRedditAuthor.toLowerCase())
     : false;
 
-  // Reset the NSFW reveal state whenever the active post changes.
-  useEffect(() => {
-    setSingleNsfwRevealed(false);
-  }, [currentSingleItem?.id]);
-
-  useEffect(() => {
-    if (feedLayout !== "single" || visibleItems.length === 0) {
-      return;
-    }
-
-    const maxIndex = visibleItems.length - 1;
-    if (singleActiveIndex > maxIndex) {
-      setSingleActiveIndex(maxIndex);
-    }
-  }, [feedLayout, singleActiveIndex, visibleItems.length]);
-
   useEffect(() => {
     if (feedLayout !== "single" || !singleSelectUnreadOnNextItemsRef.current) {
       return;
     }
 
     singleSelectUnreadOnNextItemsRef.current = false;
-    const unreadIndex = visibleItems.findIndex((item) => item.read !== 1);
-    setSingleActiveIndex(unreadIndex >= 0 ? unreadIndex : 0);
-  }, [feedLayout, visibleItems]);
+    const unreadIndex = singleItems.findIndex((item) => item.read !== 1);
+    setSingleActiveItemId(
+      singleItems[unreadIndex >= 0 ? unreadIndex : 0]?.id ?? null
+    );
+  }, [feedLayout, singleItems]);
 
   useEffect(() => {
     if (
@@ -1502,12 +1537,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
       feedLayout !== "single" ||
       !hasMore ||
       loadingMore ||
-      visibleItems.length === 0
+      singleItems.length === 0
     ) {
       return;
     }
 
-    if (singleSafeIndex >= visibleItems.length - 5) {
+    if (singleSafeIndex >= singleItems.length - 5) {
       handleLoadMore();
     }
   }, [
@@ -1516,7 +1551,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
     hasMore,
     loadingMore,
     singleSafeIndex,
-    visibleItems.length,
+    singleItems.length,
   ]);
 
   // Once handleLoadMore's DB page fetch resolves, advance into the newly
@@ -1527,9 +1562,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
     }
 
     setSingleAwaitingNextPost(false);
-    if (singleSafeIndex < visibleItems.length - 1) {
-      setSingleActiveIndex(singleSafeIndex + 1);
-      singleScrollRef.current?.scrollTo({ y: 0, animated: false });
+    if (singleSafeIndex < singleItems.length - 1) {
+      setSingleActiveItemId(singleItems[singleSafeIndex + 1]?.id ?? null);
       setIsFeedScrolled(false);
     }
   }, [
@@ -1538,101 +1572,33 @@ export default function FeedListScreen({ navigation, route }: Props) {
     setIsFeedScrolled,
     singleAwaitingNextPost,
     singleSafeIndex,
-    visibleItems.length,
+    singleItems.length,
   ]);
 
   // Post text/HTML is already local (read from SQLite up front), so the only
   // thing that can still stall a swipe is media (images, Reddit
-  // galleries/videos). Warm the next few posts' media ahead of time so it has
-  // already resolved by the time the user actually swipes there.
+  // galleries/videos). Posts inside the pager's window are already mounted
+  // and fetching for themselves, so warm the ones just *beyond* it — those
+  // are what the next swipe promotes into the window.
   useEffect(() => {
     if (feedLayout !== "single") {
       return;
     }
 
-    for (let offset = 1; offset <= SINGLE_VIEW_PREFETCH_AHEAD; offset += 1) {
-      const item = visibleItems[singleSafeIndex + offset];
+    for (
+      let offset = SINGLE_VIEW_WINDOW + 1;
+      offset <= SINGLE_VIEW_WINDOW + SINGLE_VIEW_PREFETCH_AHEAD;
+      offset += 1
+    ) {
+      const item = singleItems[singleSafeIndex + offset];
       if (!item) break;
       prefetchItemMedia(buildFeedItemViewItem(item));
     }
-  }, [buildFeedItemViewItem, feedLayout, singleSafeIndex, visibleItems]);
+  }, [buildFeedItemViewItem, feedLayout, singleSafeIndex, singleItems]);
 
-  // Track how long the user views each post in single layout. Start a timer
-  // when the active item changes; the timer is ended in handleSingleNext.
-  // We use a ref to store the record ID so the effect doesn't need to be
-  // listed as a dependency of handleSingleNext.
-  // For NSFW posts the timer is deferred until the content is revealed — see
-  // the companion effect below.
-  useEffect(() => {
-    if (feedLayout !== "single" || !currentSingleItem) return;
-
-    // NSFW items: timer starts on reveal, not on navigation. Always reset the
-    // ref here so a stale ID from the previous item is never carried over.
-    singleViewTimeRowIdRef.current = null;
-    if (isSingleItemNsfw) return;
-
-    const itemId = currentSingleItem.id;
-    const feedId = currentSingleItem.feed_id;
-    let rowId: number | null = null;
-    let cancelled = false;
-
-    startItemViewTime(itemId, feedId)
-      .then((id) => {
-        if (!cancelled) {
-          singleViewTimeRowIdRef.current = id;
-          rowId = id;
-        } else {
-          // Component unmounted or item changed before the insert resolved —
-          // endItemViewTime is a no-op for records with a NULL end, so we
-          // leave the row to be cleaned up on next startup.
-        }
-      })
-      .catch(() => {
-        // Non-critical — silently ignore view time failures.
-      });
-
-    return () => {
-      cancelled = true;
-      // Do NOT end the timer on cleanup — only end it when the user
-      // explicitly presses Next. If they go back or switch modes the row
-      // stays open and will be discarded on next startup.
-      singleViewTimeRowIdRef.current = null;
-      void rowId; // keep linter happy
-    };
-  }, [currentSingleItem, feedLayout, isSingleItemNsfw]);
-
-  // For NSFW posts: start the view timer the first time the user reveals the
-  // content. The guard on singleViewTimeRowIdRef prevents double-starting if
-  // the user toggles visibility off and on again.
-  useEffect(() => {
-    if (
-      feedLayout !== "single" ||
-      !currentSingleItem ||
-      !isSingleItemNsfw ||
-      !singleNsfwRevealed ||
-      singleViewTimeRowIdRef.current !== null
-    )
-      return;
-
-    const itemId = currentSingleItem.id;
-    const feedId = currentSingleItem.feed_id;
-    let cancelled = false;
-
-    startItemViewTime(itemId, feedId)
-      .then((id) => {
-        if (!cancelled) {
-          singleViewTimeRowIdRef.current = id;
-        }
-      })
-      .catch(() => {
-        // Non-critical — silently ignore view time failures.
-      });
-
-    return () => {
-      cancelled = true;
-      // Do NOT null the ref here — the item-change effect above owns that.
-    };
-  }, [currentSingleItem, feedLayout, isSingleItemNsfw, singleNsfwRevealed]);
+  // View-time tracking (start on activation/NSFW-reveal, end on explicit
+  // "Next") now lives in SingleViewPost itself, keyed to each windowed
+  // slot's own `isActive` — see activeSingleViewPostRef.
 
   // Inject time-bucket group dividers when grouping is active and sort is newest.
   const displayItems = useMemo<CollapsedFeedListRow[]>(() => {
@@ -1659,121 +1625,39 @@ export default function FeedListScreen({ navigation, route }: Props) {
     );
   }, [visibleItems, sort, groupFeeds, feeds, uncollapsedIds, revealedRunIds]);
 
-  const handleSinglePrevious = useCallback(() => {
-    if (singleSafeIndex === 0) {
-      return;
-    }
-
-    markActivity();
-    setSingleActiveIndex(singleSafeIndex - 1);
-    singleScrollRef.current?.scrollTo({ y: 0, animated: false });
-    setIsFeedScrolled(false);
-  }, [markActivity, setIsFeedScrolled, singleSafeIndex]);
-
-  const handleSingleNext = useCallback(() => {
-    markActivity();
-    // End the view-time session for the current post before moving on.
-    const rowId = singleViewTimeRowIdRef.current;
-    if (rowId !== null) {
-      singleViewTimeRowIdRef.current = null;
-      endItemViewTime(rowId).catch(() => {
-        // Non-critical — silently ignore view time failures.
-      });
-    }
-
-    if (singleSafeIndex < visibleItems.length - 1) {
-      setSingleActiveIndex(singleSafeIndex + 1);
-      singleScrollRef.current?.scrollTo({ y: 0, animated: false });
+  // Navigation is now entirely the pager's business — it owns the gesture,
+  // the animation and the window. All this screen decides is what a move
+  // *means*: which post becomes active, and what to do at the far edge.
+  const handleSingleAdvance = useCallback(
+    (direction: 1 | -1) => {
+      markActivity();
+      const newIndex = singleSafeIndexRef.current + direction;
+      setSingleActiveItemId(singleItemsRef.current[newIndex]?.id ?? null);
       setIsFeedScrolled(false);
-      return;
-    }
-
-    if (hasMore) {
-      // Nothing loaded to advance into yet — wait for handleLoadMore's DB
-      // page fetch (already in flight if triggered by the near-end
-      // prefetch effect) and auto-advance once it resolves.
-      setSingleAwaitingNextPost(true);
-      if (!loadingMore) {
-        handleLoadMore();
-      }
-    }
-  }, [
-    handleLoadMore,
-    hasMore,
-    loadingMore,
-    markActivity,
-    setIsFeedScrolled,
-    singleSafeIndex,
-    visibleItems.length,
-  ]);
-
-  const snapSingleSwipeBack = useCallback(() => {
-    Animated.spring(singleSwipeTranslateX, {
-      toValue: 0,
-      useNativeDriver: true,
-    }).start();
-  }, [singleSwipeTranslateX]);
-
-  const runSingleSwipeEnterAnimation = useCallback(
-    (fromEdge: number) => {
-      singleSwipeTranslateX.setValue(fromEdge);
-      Animated.timing(singleSwipeTranslateX, {
-        toValue: 0,
-        duration: SINGLE_SWIPE_ENTER_DURATION_MS,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: true,
-      }).start();
     },
-    [singleSwipeTranslateX]
+    [markActivity, setIsFeedScrolled]
   );
 
-  const singleSwipeGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .activeOffsetX([-20, 20])
-        .failOffsetY([-10, 10])
-        .onBegin(() => {
-          singleSwipeTranslateX.stopAnimation();
-        })
-        .onUpdate((e) => {
-          singleSwipeTranslateX.setValue(e.translationX);
-        })
-        .onEnd((e) => {
-          const direction = resolveSingleSwipeDirection(
-            e.translationX,
-            e.translationY,
-            e.velocityX
-          );
-          if (direction === "next") {
-            const willAdvance = singleSafeIndex < visibleItems.length - 1;
-            handleSingleNext();
-            if (willAdvance) {
-              runSingleSwipeEnterAnimation(viewportWidth);
-            } else {
-              snapSingleSwipeBack();
-            }
-          } else if (direction === "previous") {
-            const willGoBack = singleSafeIndex > 0;
-            handleSinglePrevious();
-            if (willGoBack) {
-              runSingleSwipeEnterAnimation(-viewportWidth);
-            } else {
-              snapSingleSwipeBack();
-            }
-          } else {
-            snapSingleSwipeBack();
-          }
-        }),
-    [
-      handleSingleNext,
-      handleSinglePrevious,
-      runSingleSwipeEnterAnimation,
-      singleSafeIndex,
-      singleSwipeTranslateX,
-      snapSingleSwipeBack,
-      viewportWidth,
-      visibleItems.length,
-    ]
+  // Swiped forward past the last locally-loaded post: wait for
+  // handleLoadMore's DB page fetch (already in flight if the near-end
+  // prefetch effect above triggered it) and auto-advance once it resolves.
+  const handleSingleEdgeForward = useCallback(() => {
+    markActivity();
+    if (!hasMoreRef.current) return;
+    setSingleAwaitingNextPost(true);
+    if (!loadingMoreRef.current) {
+      handleLoadMore();
+    }
+  }, [handleLoadMore, markActivity]);
+
+  const handleSinglePrevious = useCallback(
+    () => singlePagerRef.current?.advance(-1),
+    []
+  );
+
+  const handleSingleNext = useCallback(
+    () => singlePagerRef.current?.advance(1),
+    []
   );
 
   const renderItem = useCallback(
@@ -2539,136 +2423,35 @@ export default function FeedListScreen({ navigation, route }: Props) {
           ) : null}
 
           {/* Scrollable content */}
-          {(() => {
-            const singleScrollView = (
-              <ScrollView
-                ref={singleScrollRef}
-                contentContainerStyle={[
-                  styles.content,
-                  isDesktopWeb ? styles.desktopContent : null,
-                ]}
-                refreshControl={
-                  <RefreshControl
-                    refreshing={refreshing}
-                    onRefresh={handleRefreshAll}
-                    colors={[colors.accent]}
-                    tintColor={colors.accent}
-                  />
-                }
-                onScroll={handleScroll}
-                scrollEventThrottle={64}
-                showsVerticalScrollIndicator={false}
-              >
-                <View
-                  style={[
-                    styles.singleInner,
-                    isDesktopWeb ? styles.singleDesktopInner : null,
-                  ]}
-                >
-                  <View style={styles.singlePostHeader}>
-                    <View style={styles.singlePostMetaRow}>
-                      <FeedIcon
-                        feedUrl={
-                          feedDetailsById.get(currentSingleItem.feed_id)?.url
-                        }
-                      />
-                      <Text
-                        style={[
-                          styles.singlePostMeta,
-                          { color: colors.inkSoft },
-                        ]}
-                      >
-                        {currentSingleItem.feed_title} -{" "}
-                        {formatDate(currentSingleItem.published_at)}
-                      </Text>
-                    </View>
-                    <Text
-                      style={[styles.singlePostTitle, { color: colors.ink }]}
-                    >
-                      {currentSingleItem.title}
-                    </Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.singlePostSeparator,
-                      { backgroundColor: colors.border },
-                    ]}
-                  />
-                  {isSingleItemNsfw ? (
-                    <TouchableOpacity
-                      onPress={() => setSingleNsfwRevealed((v) => !v)}
-                      style={[styles.singleNsfwRevealButton]}
-                      activeOpacity={0.7}
-                      accessibilityLabel={
-                        singleNsfwRevealed
-                          ? "Hide NSFW content"
-                          : "Reveal NSFW content"
-                      }
-                      accessibilityRole="button"
-                    >
-                      <Text
-                        style={[
-                          styles.singleNsfwRevealText,
-                          { color: colors.inkSoft },
-                        ]}
-                      >
-                        {singleNsfwRevealed ? "Hide NSFW" : "Reveal NSFW"}
-                      </Text>
-                      <Feather
-                        name={
-                          singleNsfwRevealed ? "chevron-up" : "chevron-down"
-                        }
-                        size={16}
-                        color={colors.inkSoft}
-                      />
-                    </TouchableOpacity>
-                  ) : null}
-
-                  {isSingleItemNsfw && !singleNsfwRevealed ? (
-                    <View style={styles.singleNsfwPlaceholder}>
-                      <Feather
-                        name="eye-off"
-                        size={48}
-                        color={colors.inkFaint}
-                      />
-                      <Text
-                        style={[
-                          styles.singleNsfwPlaceholderText,
-                          { color: colors.inkFaint },
-                        ]}
-                      >
-                        NSFW content hidden
-                      </Text>
-                    </View>
-                  ) : (
-                    <FeedItemContent
-                      item={currentSingleViewItem}
-                      bionicReading={bionicReading}
-                      onOpenContentLink={handleOpenContentLink}
-                      includeRedditCommentsInLinks
-                    />
-                  )}
-                </View>
-              </ScrollView>
-            );
-
-            return isWeb ? (
-              singleScrollView
-            ) : (
-              <GestureDetector gesture={singleSwipeGesture}>
-                <Animated.View
-                  style={[
-                    styles.fill,
-                    {
-                      transform: [{ translateX: singleSwipeTranslateX }],
-                    },
-                  ]}
-                >
-                  {singleScrollView}
-                </Animated.View>
-              </GestureDetector>
-            );
-          })()}
+          {isWeb ? (
+            <SingleViewPost
+              key={currentSingleItem.id}
+              ref={activeSingleViewPostRef}
+              item={currentSingleViewItem}
+              feedId={currentSingleItem.feed_id}
+              isActive
+              isLive
+              bionicReading={bionicReading}
+              isDesktopWeb={isDesktopWeb}
+              onOpenContentLink={handleOpenContentLink}
+              onScroll={handleScroll}
+              refreshControl={singleRefreshControl}
+            />
+          ) : (
+            <SingleViewPager
+              ref={singlePagerRef}
+              items={singleItems}
+              activeIndex={singleSafeIndex}
+              viewportWidth={viewportWidth}
+              bionicReading={bionicReading}
+              buildViewItem={buildFeedItemViewItem}
+              onAdvance={handleSingleAdvance}
+              onEdgeForward={handleSingleEdgeForward}
+              onOpenContentLink={handleOpenContentLink}
+              onScroll={handleScroll}
+              refreshControl={singleRefreshControl}
+            />
+          )}
         </View>
       ) : (
         <FlashList
@@ -2801,45 +2584,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     fontWeight: "600",
   },
-  content: {
-    padding: spacing.md,
-    paddingBottom: spacing.xxl,
-  },
-  desktopContent: {
-    alignItems: "center",
-    paddingHorizontal: spacing.xl,
-  },
-  singlePostHeader: {
-    gap: spacing.xs,
-    paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-  },
-  singlePostMetaRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  singlePostMeta: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.meta,
-  },
-  singlePostTitle: {
-    fontFamily: fonts.heading,
-    fontWeight: "500",
-    fontSize: fontSize.h2,
-    lineHeight: 26,
-  },
-  singlePostSeparator: {
-    height: StyleSheet.hairlineWidth,
-    marginHorizontal: spacing.md,
-  },
-  singleInner: {
-    width: "100%",
-    gap: spacing.lg,
-  },
-  singleDesktopInner: {
-    maxWidth: 920,
-  },
   singleToolbar: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -2901,30 +2645,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   singleMoreMenuItemText: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.body,
-  },
-  singleNsfwRevealButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    alignSelf: "center",
-  },
-  singleNsfwRevealText: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.body,
-    fontWeight: "600",
-  },
-  singleNsfwPlaceholder: {
-    alignItems: "center",
-    justifyContent: "center",
-    paddingVertical: spacing.xxl * 2,
-    gap: spacing.md,
-  },
-  singleNsfwPlaceholderText: {
     fontFamily: fonts.sans,
     fontSize: fontSize.body,
   },

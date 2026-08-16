@@ -18,14 +18,18 @@ type Props = {
   isDesktopWeb?: boolean;
   onOpenContentLink?: (url: string) => void;
   includeRedditCommentsInLinks?: boolean;
+  /** The reader has settled on this post. Heavy embeds (players, galleries)
+   *  only mount once that's true — see SingleViewPager. */
+  isLive?: boolean;
 };
 
-export function FeedItemContent({
+function FeedItemContentImpl({
   item,
   bionicReading,
   isDesktopWeb = false,
   onOpenContentLink,
   includeRedditCommentsInLinks = false,
+  isLive = true,
 }: Props) {
   const { colors } = useTheme();
   const { text: contentText, links: contentLinks } = React.useMemo(
@@ -71,8 +75,9 @@ export function FeedItemContent({
           content={item.content}
           useProxy={item.useProxy ?? false}
           nsfw={item.nsfw ?? false}
-          deferGalleryLoad={false}
-          deferGifLoad={item.nsfw ?? false}
+          deferGalleryLoad={!isLive}
+          deferGifLoad={!isLive || (item.nsfw ?? false)}
+          isLive={isLive}
         />
       ) : null}
 
@@ -121,6 +126,8 @@ export function FeedItemContent({
     </View>
   );
 }
+
+export const FeedItemContent = React.memo(FeedItemContentImpl);
 
 export function isRedditCommentsUrl(url: string): boolean {
   try {

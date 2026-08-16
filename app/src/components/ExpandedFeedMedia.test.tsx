@@ -63,6 +63,13 @@ jest.mock("@expo/vector-icons", () => ({
   },
 }));
 
+// The gallery path renders FullscreenImageModal, which reads
+// useSafeAreaInsets — without a provider (or this) those renders throw
+// "No safe area value available".
+jest.mock("react-native-safe-area-context", () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
 jest.mock("./ExpandedFeedImage", () => {
   const React = require("react");
   const { View } = require("react-native");
@@ -618,5 +625,54 @@ describe("ExpandedFeedMedia", () => {
       accessibilityLabel: "Reddit video player",
     });
     expect(player).toBeTruthy();
+  });
+
+  it("shows a static poster instead of an embedded player when isLive is false", () => {
+    // Arrange & Act
+    let tree: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+          imageUrl="https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+          testID="expanded-media"
+          isLive={false}
+        />
+      );
+    });
+
+    // Assert — no live embed mounted, just a poster preview
+    expect(
+      tree!.root.findAllByProps({
+        accessibilityLabel: "Embedded YouTube video",
+      })
+    ).toHaveLength(0);
+    const preview = tree!.root.findByProps({
+      testID: "expanded-media-preview",
+    });
+    expect(preview.props.source.uri).toBe(
+      "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+    );
+  });
+
+  it("renders the embedded player when isLive is true (default)", () => {
+    // Arrange & Act
+    let tree: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(
+        <ExpandedFeedMedia
+          itemUrl="https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+          imageUrl="https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+          testID="expanded-media"
+        />
+      );
+    });
+
+    // Assert
+    expect(
+      tree!.root.findAllByProps({
+        accessibilityLabel: "Embedded YouTube video",
+      }).length
+    ).toBeGreaterThan(0);
   });
 });
