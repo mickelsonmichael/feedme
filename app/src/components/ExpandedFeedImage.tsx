@@ -143,13 +143,32 @@ function ExpandedFeedImageImpl({
       ? null
       : Math.max(1, Math.min(contentWidth, MAX_EXPANDED_IMAGE_EDGE));
 
+  // The box the image will occupy, or null while it is still unknown.
+  const boxSize =
+    constrainedSize ??
+    (didMetadataLookupFail && fallbackBoxSize !== null
+      ? { width: fallbackBoxSize, height: fallbackBoxSize }
+      : null);
+
+  // Keep the placeholder up until the box is known, and mount <Image> only
+  // then. Rendering it at a stand-in size first is not merely a cosmetic
+  // flicker: expo-image hands Glide the view's measured size as the decode
+  // target, and Glide never re-decodes at a larger size when the view later
+  // grows. A single frame at 1x1 therefore permanently pinned the post to a
+  // one-pixel bitmap, which `contentFit="contain"` then stretched into a
+  // square patch of flat colour — the "image is a blank colour or blurry"
+  // report. It needs both `sourceSize` and `contentWidth`, and those arrive
+  // from independent sources (a network/cache lookup, and layout), so
+  // whichever loses the race must not be papered over with a fake size.
+  const showPlaceholder = isLoadingMetadata || boxSize === null;
+
   return (
     <View
       style={styles.wrapper}
       onLayout={handleLayout}
       testID={testID ? `${testID}-wrapper` : undefined}
     >
-      {isLoadingMetadata ? (
+      {showPlaceholder ? (
         <View
           style={[styles.placeholder, { backgroundColor: colors.inkFaint }]}
           testID={testID ? `${testID}-placeholder` : undefined}
@@ -175,13 +194,7 @@ function ExpandedFeedImageImpl({
                 alignment === "center"
                   ? styles.centeredImage
                   : styles.leftAlignedImage,
-                constrainedSize ??
-                  (didMetadataLookupFail && fallbackBoxSize !== null
-                    ? {
-                        width: fallbackBoxSize,
-                        height: fallbackBoxSize,
-                      }
-                    : styles.pendingImage),
+                boxSize,
               ]}
               contentFit="contain"
               cachePolicy="memory-disk"
@@ -224,11 +237,6 @@ const styles = StyleSheet.create({
   },
   centeredImage: {
     alignSelf: "center",
-  },
-  pendingImage: {
-    width: 1,
-    height: 1,
-    opacity: 0,
   },
   placeholder: {
     alignSelf: "stretch",

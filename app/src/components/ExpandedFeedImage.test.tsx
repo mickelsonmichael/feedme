@@ -62,7 +62,6 @@ describe("ExpandedFeedImage", () => {
     const wrapper = tree!.root.findByProps({
       testID: "expanded-image-wrapper",
     });
-    const image = tree!.root.findByType(Image);
 
     await act(async () => {
       wrapper.props.onLayout({
@@ -77,6 +76,9 @@ describe("ExpandedFeedImage", () => {
       });
     });
 
+    // Looked up after layout: the image is deliberately not mounted until its
+    // box is known, so it does not exist before this point.
+    const image = tree!.root.findByType(Image);
     const style = StyleSheet.flatten(image.props.style);
 
     // Assert
@@ -440,8 +442,18 @@ describe("ExpandedFeedImage", () => {
     let tree: renderer.ReactTestRenderer;
     await act(async () => {
       tree = renderer.create(
-        <ExpandedFeedImage imageUrl="https://example.com/hero.jpg" />
+        <ExpandedFeedImage
+          imageUrl="https://example.com/hero.jpg"
+          testID="expanded-image"
+        />
       );
+    });
+    await act(async () => {
+      tree!.root
+        .findByProps({ testID: "expanded-image-wrapper" })
+        .props.onLayout({
+          nativeEvent: { layout: { width: 400, height: 0, x: 0, y: 0 } },
+        });
     });
     const sourceBefore = tree!.root.findByType(Image).props.source;
 
@@ -449,7 +461,10 @@ describe("ExpandedFeedImage", () => {
     // or a mark-as-read write landing), handing over identical props.
     await act(async () => {
       tree!.update(
-        <ExpandedFeedImage imageUrl="https://example.com/hero.jpg" />
+        <ExpandedFeedImage
+          imageUrl="https://example.com/hero.jpg"
+          testID="expanded-image"
+        />
       );
     });
 
@@ -457,6 +472,50 @@ describe("ExpandedFeedImage", () => {
     // image and replays `transition`, which is what made the image visibly
     // reload every time a swipe completed.
     expect(tree!.root.findByType(Image).props.source).toBe(sourceBefore);
+  });
+
+  it("waits for layout before mounting the image, so it is never sized to a stand-in box", async () => {
+    // Arrange — metadata resolves immediately, as it does for any post whose
+    // size mediaPrefetch already warmed. Layout has not run yet, so the width
+    // the image must fit into is still unknown.
+    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+      success?.(2000, 1125);
+    });
+
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <ExpandedFeedImage
+          imageUrl="https://example.com/prefetched.jpg"
+          testID="expanded-image"
+        />
+      );
+    });
+
+    // Assert — no image yet. Mounting one here would hand expo-image a
+    // placeholder-sized view, and Glide decodes to the size of the view it is
+    // given and never re-decodes larger, permanently pinning the post to a
+    // 1x1 bitmap stretched into a flat square.
+    expect(tree!.root.findAllByType(Image)).toHaveLength(0);
+    expect(
+      tree!.root.findByProps({ testID: "expanded-image-placeholder" })
+    ).toBeTruthy();
+
+    // Act — layout lands
+    await act(async () => {
+      tree!.root
+        .findByProps({ testID: "expanded-image-wrapper" })
+        .props.onLayout({
+          nativeEvent: { layout: { width: 296, height: 0, x: 0, y: 0 } },
+        });
+    });
+
+    // Assert — mounted once, at its real box
+    const style = StyleSheet.flatten(tree!.root.findByType(Image).props.style);
+    expect(style.width).toBe(296);
+    expect(style.height).toBe(167);
   });
 
   it("discards the previous native image instance when swapping to an already-cached URL", async () => {
