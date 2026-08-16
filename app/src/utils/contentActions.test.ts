@@ -1,9 +1,9 @@
 import { parseContentAndLinks } from "./contentActions";
 
 describe("parseContentAndLinks", () => {
-  it("returns empty text and links for null input", () => {
+  it("returns empty text, links and paragraphs for null input", () => {
     const result = parseContentAndLinks(null);
-    expect(result).toEqual({ text: "", links: [] });
+    expect(result).toEqual({ text: "", links: [], paragraphs: [] });
   });
 
   it("extracts a [comments] link from a standard image post", () => {
@@ -46,6 +46,62 @@ describe("parseContentAndLinks", () => {
 
     expect(text).toContain("Hello");
     expect(text).toContain("world");
+  });
+
+  it("splits plain text into paragraphs on blank lines", () => {
+    // Arrange — a feed that ships plain text with blank-line paragraph breaks
+    const content = "First para.\n\nSecond para.\n\n\n   \nThird para.";
+
+    // Act
+    const { paragraphs } = parseContentAndLinks(content);
+
+    // Assert
+    expect(paragraphs).toEqual(["First para.", "Second para.", "Third para."]);
+  });
+
+  it("keeps a single newline inside the same paragraph", () => {
+    // Arrange — a soft wrap is not a paragraph break
+    const content = "Line one\nline two";
+
+    // Act
+    const { paragraphs } = parseContentAndLinks(content);
+
+    // Assert
+    expect(paragraphs).toEqual(["Line one line two"]);
+  });
+
+  it("splits on </p> and on runs of two or more <br>", () => {
+    // Arrange
+    const html = "<p>One</p><p>Two<br><br>Three</p>";
+
+    // Act
+    const { paragraphs } = parseContentAndLinks(html);
+
+    // Assert
+    expect(paragraphs).toEqual(["One", "Two", "Three"]);
+  });
+
+  it("leaves text as one paragraph when there are no paragraph breaks", () => {
+    // Arrange
+    const content = "Just one continuous sentence.";
+
+    // Act
+    const { text, paragraphs } = parseContentAndLinks(content);
+
+    // Assert
+    expect(paragraphs).toEqual([text]);
+  });
+
+  it("still collapses the whole body into a single line for text previews", () => {
+    // Arrange — card previews rely on `text` staying one whitespace-collapsed
+    // line, so paragraph support must not leak into it
+    const content = "First para.\n\nSecond para.";
+
+    // Act
+    const { text } = parseContentAndLinks(content);
+
+    // Assert
+    expect(text).toBe("First para. Second para.");
   });
 
   it("ignores anchors that are not [link] or [comments]", () => {

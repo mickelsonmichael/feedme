@@ -86,6 +86,44 @@ export const fontSize = {
 } as const;
 
 /**
+ * Typography rules for long-form article bodies (the reader, and the expanded
+ * content inside a post card).
+ *
+ * Reading-typography guidance puts comfortable body line height in the
+ * 1.5–1.8 range, and asks that the gap between paragraphs be clearly larger
+ * than the gap between lines — otherwise a paragraph break reads as an
+ * ordinary line wrap. WCAG 2.2 SC 1.4.12 (Text Spacing) sets the same two
+ * numbers as a floor: line height >= 1.5x the font size, space after a
+ * paragraph >= 2x the font size.
+ *
+ * These are ratios rather than fixed pixel values so the native reader (14pt)
+ * and the web reader (17px) stay on the same rhythm at different sizes.
+ */
+export const articleTypography = {
+  lineHeightRatio: 1.6,
+  paragraphSpacingRatio: 2,
+  headingLineHeightRatio: 1.3,
+} as const;
+
+/** Body line height for `size`, per {@link articleTypography}. */
+export function articleLineHeight(size: number): number {
+  return Math.round(size * articleTypography.lineHeightRatio);
+}
+
+/** Gap below a paragraph/list/blockquote, per {@link articleTypography}. */
+export function articleParagraphSpacing(size: number): number {
+  return Math.round(size * articleTypography.paragraphSpacingRatio);
+}
+
+/** Tighter line height used for headings, per {@link articleTypography}. */
+export function articleHeadingLineHeight(size: number): number {
+  return Math.round(size * articleTypography.headingLineHeightRatio);
+}
+
+/** Font size of the web reader's article body. */
+export const WEB_ARTICLE_FONT_SIZE = 17;
+
+/**
  * Blur radius for NSFW media obscuring.
  *
  * `expo-image` maps `blurRadius` to CSS `filter: blur()` on web, where 24 px

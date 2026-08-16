@@ -3,11 +3,22 @@ export type ContentActionLink = {
   url: string;
 };
 
+/**
+ * Splits content into paragraphs: a `</p>`, a run of two or more `<br>`s, or a
+ * blank line all end a paragraph. Runs of these collapse into one boundary so
+ * spacer markup doesn't produce empty paragraphs.
+ */
+const PARAGRAPH_BOUNDARY_RE =
+  /(?:\s*<\/p\s*>\s*|(?:\s*<br\s*\/?>\s*){2,}|[ \t]*\r?\n[ \t]*\r?\n\s*)+/gi;
+
 export function parseContentAndLinks(html: string | null): {
+  /** Whole content as one whitespace-collapsed line, for previews. */
   text: string;
   links: ContentActionLink[];
+  /** Same content split into paragraphs, for the full-article view. */
+  paragraphs: string[];
 } {
-  if (!html) return { text: "", links: [] };
+  if (!html) return { text: "", links: [], paragraphs: [] };
 
   const normalizedHtml = decodeHtmlEntities(html);
   const links: ContentActionLink[] = [];
@@ -37,7 +48,18 @@ export function parseContentAndLinks(html: string | null): {
     }
   );
 
-  return { text: stripHtml(withoutActionAnchors), links };
+  return {
+    text: stripHtml(withoutActionAnchors),
+    links,
+    paragraphs: toParagraphs(withoutActionAnchors),
+  };
+}
+
+function toParagraphs(html: string): string[] {
+  return html
+    .split(PARAGRAPH_BOUNDARY_RE)
+    .map(stripHtml)
+    .filter((paragraph) => paragraph.length > 0);
 }
 
 function toActionLabel(value: string): ContentActionLink["label"] | null {

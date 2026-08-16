@@ -11,7 +11,6 @@ import { Image } from "expo-image";
 import { Feather } from "@expo/vector-icons";
 import { useTheme } from "../context/ThemeContext";
 import { parseContentAndLinks } from "../utils/contentActions";
-import { applyBionicToHtml, toBionic } from "../utils/bionicReading";
 import { loadConfig } from "../storage";
 import { proxiedImageUrl } from "../proxyFetch";
 import {
@@ -21,10 +20,12 @@ import {
 import { extractGifEmbedUrl, extractGifEmbedUrlFromContent } from "../gifUtils";
 import { extractRedditAuthor } from "../redditUtils";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
+import { ArticleText } from "./ArticleText";
 import { SanitizedHtmlContent } from "./SanitizedHtmlContent";
 import { MetaText } from "./ui";
 import { fonts, fontSize, NSFW_BLUR_RADIUS, radii, spacing } from "../theme";
-import { hasRenderableHtml, sanitizeHtml } from "../utils/sanitizeHtml";
+import { prepareArticleHtml } from "../utils/articleHtml";
+import { hasRenderableHtml } from "../utils/sanitizeHtml";
 
 const CARD_IMAGE_WIDTH = 100;
 
@@ -97,10 +98,11 @@ function FeedPostCardComponent({
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const isLargeScreen = Platform.OS === "web" && width >= 768;
-  const { text: contentText, links: contentLinks } = useMemo(
-    () => parseContentAndLinks(item.content),
-    [item.content]
-  );
+  const {
+    text: contentText,
+    links: contentLinks,
+    paragraphs: contentParagraphs,
+  } = useMemo(() => parseContentAndLinks(item.content), [item.content]);
   const shouldRenderHtmlContent = useMemo(
     () => hasRenderableHtml(item.content),
     [item.content]
@@ -108,16 +110,7 @@ function FeedPostCardComponent({
   const [bionicReading] = useState(() => loadConfig().bionicReading ?? false);
   const sanitizedHtmlContent = useMemo(() => {
     if (!shouldRenderHtmlContent) return "";
-    // Strip <img> tags — images are displayed via ExpandedFeedMedia above the
-    // content panel, so rendering them again inside the HTML would show the
-    // same image twice (e.g. the Reddit thumbnail before "submitted by").
-    // Also clean up empty <a> and <td> elements left behind after img removal
-    // to prevent layout gaps (e.g. an empty table cell from the image column).
-    const html = sanitizeHtml(item.content ?? "")
-      .replace(/<img\b[^>]*\/?>/gi, "")
-      .replace(/<a\b[^>]*>\s*<\/a>/gi, "")
-      .replace(/<td\b[^>]*>\s*<\/td>/gi, "");
-    return bionicReading ? applyBionicToHtml(html) : html;
+    return prepareArticleHtml(item.content, bionicReading);
   }, [item.content, shouldRenderHtmlContent, bionicReading]);
   const redditCommentsLink = useMemo(
     () =>
@@ -509,20 +502,11 @@ function FeedPostCardComponent({
             shouldRenderHtmlContent ? (
               <SanitizedHtmlContent html={sanitizedHtmlContent} />
             ) : (
-              <Text style={[styles.expandContent, { color: colors.ink }]}>
-                {bionicReading
-                  ? toBionic(contentText || "").map((token, i) =>
-                      token.kind === "space" ? (
-                        token.text
-                      ) : (
-                        <Text key={i}>
-                          <Text style={styles.bionicBold}>{token.bold}</Text>
-                          {token.rest}
-                        </Text>
-                      )
-                    )
-                  : contentText}
-              </Text>
+              <ArticleText
+                paragraphs={contentParagraphs}
+                bionicReading={bionicReading}
+                color={colors.ink}
+              />
             )
           ) : null}
           {visibleContentLinks.length ? (
@@ -893,14 +877,6 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.md,
     borderTopWidth: 1,
-  },
-  expandContent: {
-    fontSize: fontSize.body,
-    lineHeight: 20,
-    fontFamily: fonts.body,
-  },
-  bionicBold: {
-    fontWeight: "700",
   },
   contentLinkRow: {
     flexDirection: "row",

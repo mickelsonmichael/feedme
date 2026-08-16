@@ -6,9 +6,10 @@ import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { parseContentAndLinks } from "../utils/contentActions";
-import { applyBionicToHtml, toBionic } from "../utils/bionicReading";
+import { ArticleText } from "./ArticleText";
 import { SanitizedHtmlContent } from "./SanitizedHtmlContent";
-import { hasRenderableHtml, sanitizeHtml } from "../utils/sanitizeHtml";
+import { prepareArticleHtml } from "../utils/articleHtml";
+import { hasRenderableHtml } from "../utils/sanitizeHtml";
 
 export type FeedItemContentItem = RootStackParamList["FeedItemView"]["item"];
 
@@ -32,7 +33,7 @@ function FeedItemContentImpl({
   isLive = true,
 }: Props) {
   const { colors } = useTheme();
-  const { text: contentText, links: contentLinks } = React.useMemo(
+  const { links: contentLinks, paragraphs: contentParagraphs } = React.useMemo(
     () => parseContentAndLinks(item.content),
     [item.content]
   );
@@ -42,16 +43,7 @@ function FeedItemContentImpl({
   );
   const sanitizedHtmlContent = React.useMemo(() => {
     if (!shouldRenderHtmlContent) return "";
-    // Strip <img> tags — images are displayed via ExpandedFeedMedia above the
-    // content panel, so rendering them again inside the HTML would show the
-    // same image twice (e.g. the Reddit thumbnail before "submitted by").
-    // Also clean up empty <a> and <td> elements left behind after img removal
-    // to prevent layout gaps (e.g. an empty table cell from the image column).
-    const html = sanitizeHtml(item.content ?? "")
-      .replace(/<img\b[^>]*\/?>/gi, "")
-      .replace(/<a\b[^>]*>\s*<\/a>/gi, "")
-      .replace(/<td\b[^>]*>\s*<\/td>/gi, "");
-    return bionicReading ? applyBionicToHtml(html) : html;
+    return prepareArticleHtml(item.content, bionicReading);
   }, [item.content, shouldRenderHtmlContent, bionicReading]);
   const visibleContentLinks = React.useMemo(
     () =>
@@ -84,21 +76,12 @@ function FeedItemContentImpl({
       {shouldRenderHtmlContent ? (
         <SanitizedHtmlContent html={sanitizedHtmlContent} />
       ) : (
-        <Text style={[styles.article, { color: colors.ink }]}>
-          {bionicReading
-            ? toBionic(contentText || "No content available.").map(
-                (token, i) =>
-                  token.kind === "space" ? (
-                    token.text
-                  ) : (
-                    <Text key={i}>
-                      <Text style={styles.bionicBold}>{token.bold}</Text>
-                      {token.rest}
-                    </Text>
-                  )
-              )
-            : contentText || "No content available."}
-        </Text>
+        <ArticleText
+          paragraphs={contentParagraphs}
+          bionicReading={bionicReading}
+          color={colors.ink}
+          fallbackText="No content available."
+        />
       )}
 
       {onOpenContentLink && visibleContentLinks.length ? (
@@ -161,14 +144,6 @@ const styles = StyleSheet.create({
   },
   desktopInner: {
     maxWidth: 920,
-  },
-  article: {
-    fontSize: fontSize.bodyLg,
-    lineHeight: 24,
-    fontFamily: fonts.sans,
-  },
-  bionicBold: {
-    fontWeight: "700",
   },
   contentLinkRow: {
     flexDirection: "row",
