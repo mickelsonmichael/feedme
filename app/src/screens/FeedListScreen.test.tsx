@@ -677,6 +677,10 @@ describe("FeedListScreen", () => {
       .mockResolvedValueOnce([unreadPost])
       // Mount's own forced remote refresh (app start) — nothing changed yet.
       .mockResolvedValueOnce([unreadPost])
+      // Switching the filter to Unread re-pages, because the unread filter is
+      // part of the page query rather than a client-side pass over whatever
+      // happens to be loaded. Still nothing changed.
+      .mockResolvedValueOnce([unreadPost])
       // The user's later, explicit pull-to-refresh — the item was read
       // elsewhere in the meantime.
       .mockResolvedValueOnce([{ ...unreadPost, read: 1 }]);
@@ -3889,6 +3893,235 @@ describe("FeedListScreen", () => {
         addEventListenerSpy.mockRestore();
         mockNow.mockRestore();
       }
+    });
+  });
+
+  // Regression: the unread filter used to be applied purely client-side, over
+  // a page that was queried without regard to read state. A reader who works
+  // through the top of their feed and comes back later therefore lands on a
+  // page of 50 already-read posts, which filters down to nothing — and the
+  // empty state renders a plain ScrollView, so there is no list left to
+  // paginate with and the unread posts underneath stay unreachable.
+  describe("unread filter paging", () => {
+    const FEEDS = [
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ];
+
+    // The newest page is entirely read; the unread posts sit below it.
+    const READ_PAGE = makeItems(PAGE_SIZE, 100).map((item) => ({
+      ...item,
+      read: 1,
+    }));
+    const UNREAD_BELOW = makeItems(3, 900);
+
+    // The resume-sync specs above spy on AppState.addEventListener and the
+    // restore does not put a subscription-returning implementation back, so
+    // the screen's unmount cleanup would throw here purely because of test
+    // ordering. Own the stub rather than depend on where this block sits.
+    let addEventListenerSpy: jest.SpyInstance;
+    beforeEach(() => {
+      addEventListenerSpy = jest
+        .spyOn(AppState, "addEventListener")
+        .mockReturnValue({ remove: jest.fn() } as never);
+    });
+    afterEach(() => {
+      addEventListenerSpy.mockRestore();
+    });
+
+    function mockPagedLibrary() {
+      (getItemsPage as jest.Mock).mockImplementation(
+        ({
+          offset,
+          limit,
+          unreadOnly,
+        }: {
+          offset: number;
+          limit: number;
+          unreadOnly?: boolean;
+        }) => {
+          const rows = unreadOnly
+            ? UNREAD_BELOW
+            : [...READ_PAGE, ...UNREAD_BELOW];
+          return Promise.resolve(rows.slice(offset, offset + limit));
+        }
+      );
+    }
+
+    function mountProps() {
+      const navigation = {
+        navigate: jest.fn(),
+        addListener: jest.fn(() => jest.fn()),
+        isFocused: jest.fn(() => true),
+      } as unknown as FeedScreenProps["navigation"];
+      const route = {
+        key: "Feed-unread-paging",
+        name: "Feed",
+        params: undefined,
+      } as unknown as FeedScreenProps["route"];
+      return { navigation, route } as FeedScreenProps;
+    }
+
+    it("shows previously fetched unread posts on launch when the newest page is entirely read", async () => {
+      // Arrange - "hide read items by default" is on, so the screen starts on
+      // the unread filter, and every post in the newest page has been read.
+      (loadConfig as jest.Mock).mockReturnValue({ hideReadByDefault: true });
+      (getFeeds as jest.Mock).mockResolvedValue(FEEDS);
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      mockPagedLibrary();
+      let tree: renderer.ReactTestRenderer;
+
+      // Act
+      await act(async () => {
+        tree = renderFeedListScreen(mountProps());
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Assert - the cached unread posts render instead of the empty state.
+      const allText = tree!.root
+        .findAllByType(Text)
+        .map((node: renderer.ReactTestInstance) => node.props.children);
+      expect(getItemsPage).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: 0, unreadOnly: true })
+      );
+      expect(allText).toContain("Post 900");
+      expect(allText).not.toContain("All caught up!");
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    });
+
+    it("re-queries the page when the filter is toggled to unread", async () => {
+      // Arrange - start on "all", where the read page is what loads.
+      (loadConfig as jest.Mock).mockReturnValue({});
+      (getFeeds as jest.Mock).mockResolvedValue(FEEDS);
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      mockPagedLibrary();
+      let tree: renderer.ReactTestRenderer;
+
+      await act(async () => {
+        tree = renderFeedListScreen(mountProps());
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+      expect(getItemsPage).toHaveBeenCalledWith(
+        expect.objectContaining({ unreadOnly: false })
+      );
+
+      // Act - switch the filter to Unread.
+      const filterTrigger = tree!.root
+        .findAllByProps({ accessibilityLabel: "Filter posts" })
+        .find(
+          (node: renderer.ReactTestInstance) =>
+            typeof node.props.onPress === "function"
+        );
+      await act(async () => {
+        await filterTrigger!.props.onPress();
+      });
+      const unreadOption = tree!.root
+        .findAllByProps({
+          accessibilityLabel: "Unread",
+          accessibilityRole: "menuitem",
+        })
+        .find(
+          (node: renderer.ReactTestInstance) =>
+            typeof node.props.onPress === "function"
+        );
+      await act(async () => {
+        await unreadOption!.props.onPress();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Assert - the toggle re-pages against the database rather than
+      // filtering the already-loaded (all-read) window down to nothing.
+      const allText = tree!.root
+        .findAllByType(Text)
+        .map((node: renderer.ReactTestInstance) => node.props.children);
+      expect(getItemsPage).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: 0, unreadOnly: true })
+      );
+      expect(allText).toContain("Post 900");
+      expect(allText).not.toContain("All caught up!");
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    });
+
+    it("still reports being caught up when there genuinely are no unread posts", async () => {
+      // Arrange - an unread-only query that comes back empty.
+      (loadConfig as jest.Mock).mockReturnValue({ hideReadByDefault: true });
+      (getFeeds as jest.Mock).mockResolvedValue(FEEDS);
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (getItemsPage as jest.Mock).mockResolvedValue([]);
+      let tree: renderer.ReactTestRenderer;
+
+      // Act
+      await act(async () => {
+        tree = renderFeedListScreen(mountProps());
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Assert
+      const allText = tree!.root
+        .findAllByType(Text)
+        .map((node: renderer.ReactTestInstance) => node.props.children);
+      expect(allText).toContain("All caught up!");
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    });
+
+    it("pages the next unread window from the number of queried rows", async () => {
+      // Arrange - a full unread first page, so the list can page further.
+      (loadConfig as jest.Mock).mockReturnValue({ hideReadByDefault: true });
+      (getFeeds as jest.Mock).mockResolvedValue(FEEDS);
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      const unreadLibrary = makeItems(PAGE_SIZE + 2, 100);
+      (getItemsPage as jest.Mock).mockImplementation(
+        ({ offset, limit }: { offset: number; limit: number }) =>
+          Promise.resolve(unreadLibrary.slice(offset, offset + limit))
+      );
+      let tree: renderer.ReactTestRenderer;
+
+      await act(async () => {
+        tree = renderFeedListScreen(mountProps());
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Act - ask for the next page.
+      const list = tree!.root.findByType(FlashList);
+      await act(async () => {
+        await list.props.onEndReached();
+        await Promise.resolve();
+        await Promise.resolve();
+      });
+
+      // Assert - the follow-up page carries the unread constraint and starts
+      // where the first page's rows ended.
+      expect(getItemsPage).toHaveBeenCalledWith(
+        expect.objectContaining({ offset: PAGE_SIZE, unreadOnly: true })
+      );
+
+      await act(async () => {
+        tree!.unmount();
+      });
     });
   });
 });

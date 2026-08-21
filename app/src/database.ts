@@ -850,7 +850,14 @@ export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
 export async function getItemsPage(
   options: ItemsPageOptions
 ): Promise<FeedItemWithFeed[]> {
-  const { feedIds, excludeFeedIds, offset, limit, order = "newest" } = options;
+  const {
+    feedIds,
+    excludeFeedIds,
+    offset,
+    limit,
+    order = "newest",
+    unreadOnly = false,
+  } = options;
 
   // Empty feedIds means the scope contains zero feeds (e.g. a tag with no
   // tagged feeds, or a custom feed with no members) -> no items, no query.
@@ -871,6 +878,11 @@ export async function getItemsPage(
       `items.feed_id NOT IN (${excludeFeedIds.map(() => "?").join(", ")})`
     );
     params.push(...excludeFeedIds);
+  }
+  // Sits inside the stacked query's subselect, so feed_rank is computed over
+  // unread items only — each feed's newest *unread* post makes rank 0.
+  if (unreadOnly) {
+    conditions.push(`items.read = 0`);
   }
 
   const whereClause =

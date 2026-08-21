@@ -35,66 +35,198 @@ export const LOADING_MESSAGES = [
 
 const MESSAGE_ROTATE_MS = 2_400;
 
-/** Three little dots that bounce in a staggered wave. A friendlier stand-in
- *  for ActivityIndicator in footers and inline loading spots. */
-export function PulsingDots({ size = 7 }: { size?: number }) {
+/** One bite of the jaws, and how many bites make up a full turn of the
+ *  animation clock. Three per cycle puts three dots on the runway at once,
+ *  each swallowed on its own beat. */
+const CHOMP_MS = 420;
+const CHOMPS_PER_CYCLE = 3;
+const CHOMP_CYCLE_MS = CHOMP_MS * CHOMPS_PER_CYCLE;
+
+/** How far the jaws swing open, in degrees, measured from shut. */
+const JAW_MAX_ANGLE = 45;
+
+/** Base geometry in px for the default head; every other size scales from it. */
+const BASE_HEAD = 14;
+const BASE_WIDTH = 32;
+const BASE_RUNWAY = 18;
+const BASE_DOT = 3.5;
+/** Where a dot's travel ends: inside the head, between the rim and the mouth's
+ *  hinge, so a dot is eaten rather than winking out short of the mouth. */
+const BASE_DOT_REST = 10;
+/** How far each half-head reaches *past* the hinge. Butted exactly edge to
+ *  edge, the two halves leave a hairline of background showing along the
+ *  diameter whenever the mouth is shut. Overlapping them hides it, at the cost
+ *  of a slightly blunt vertex where the jaws meet — which reads as a hinge. */
+const BASE_OVERLAP = 0.5;
+
+/** The jaw swing sampled as a raised cosine, so a linear clock still yields an
+ *  eased bite. Built once at module load: interpolation takes plain arrays and
+ *  these never depend on props. */
+const [JAW_INPUT, JAW_TOP_OUTPUT, JAW_BOTTOM_OUTPUT] = (() => {
+  const samples = 10 * CHOMPS_PER_CYCLE + 1;
+  const input: number[] = [];
+  const top: string[] = [];
+  const bottom: string[] = [];
+  for (let index = 0; index < samples; index += 1) {
+    const t = index / (samples - 1);
+    const openness = (1 - Math.cos(2 * Math.PI * CHOMPS_PER_CYCLE * t)) / 2;
+    const angle = Number((JAW_MAX_ANGLE * openness).toFixed(2));
+    input.push(t);
+    top.push(`${-angle}deg`);
+    bottom.push(`${angle}deg`);
+  }
+  return [input, top, bottom] as const;
+})();
+
+/** Each dot's head start, spread evenly so exactly one reaches the mouth per
+ *  bite. */
+const DOT_PHASES = Array.from(
+  { length: CHOMPS_PER_CYCLE },
+  (_, index) => index / CHOMPS_PER_CYCLE
+);
+
+/**
+ * A little head chewing its way through a queue of dots — the loading
+ * indicator for anywhere posts are being fetched.
+ *
+ * Every moving part interpolates off a *single* looping clock. The three-dot
+ * loader this replaces gave each dot its own `Animated.loop`, and independent
+ * loops drift: once one falls behind there is nothing to pull it back, so the
+ * stagger decays into noise the longer a sync runs. One clock makes that
+ * impossible by construction rather than merely unlikely.
+ *
+ * @param size - Head diameter in px. All other geometry scales with it.
+ */
+export function ChompingLoader({ size = BASE_HEAD }: { size?: number }) {
   const { colors } = useTheme();
-  const values = useRef([
-    new Animated.Value(0),
-    new Animated.Value(0),
-    new Animated.Value(0),
-  ]).current;
+  const clock = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    const animations = values.map((value, index) =>
-      Animated.loop(
-        Animated.sequence([
-          Animated.delay(index * 140),
-          Animated.timing(value, {
-            toValue: 1,
-            duration: 320,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: USE_NATIVE_DRIVER,
-          }),
-          Animated.timing(value, {
-            toValue: 0,
-            duration: 320,
-            easing: Easing.in(Easing.quad),
-            useNativeDriver: USE_NATIVE_DRIVER,
-          }),
-          Animated.delay((2 - index) * 140),
-        ])
-      )
+    const animation = Animated.loop(
+      Animated.timing(clock, {
+        toValue: 1,
+        duration: CHOMP_CYCLE_MS,
+        easing: Easing.linear,
+        useNativeDriver: USE_NATIVE_DRIVER,
+      })
     );
-    animations.forEach((animation) => animation.start());
-    return () => animations.forEach((animation) => animation.stop());
-  }, [values]);
+    animation.start();
+    return () => animation.stop();
+  }, [clock]);
+
+  const geometry = useMemo(() => {
+    const unit = size / BASE_HEAD;
+    const halfHeight = size / 2 + BASE_OVERLAP * unit;
+    const dotSize = BASE_DOT * unit;
+    return {
+      width: BASE_WIDTH * unit,
+      halfHeight,
+      radius: size / 2,
+      // Distance from a half's own centre to the head's centre, where both
+      // halves hinge. `transformOrigin` would say this more directly, but it is
+      // not honoured by the native animation driver on every platform (see
+      // RefreshProgressBar below), so the pivot moves the portable way:
+      // translate onto it, rotate, translate back.
+      pivotOffset: size / 2 - halfHeight / 2,
+      dotSize,
+      dotLeft: BASE_DOT_REST * unit,
+      dotTop: (size - dotSize) / 2,
+      runway: BASE_RUNWAY * unit,
+    };
+  }, [size]);
+
+  // Each dot rides the same clock, offset and wrapped — so they share one
+  // timeline instead of racing three of their own.
+  const dotProgress = useMemo(
+    () =>
+      DOT_PHASES.map((phase) => Animated.modulo(Animated.add(clock, phase), 1)),
+    [clock]
+  );
+
+  const jaw = {
+    position: "absolute" as const,
+    left: 0,
+    width: size,
+    height: geometry.halfHeight,
+    backgroundColor: colors.accent,
+  };
 
   return (
-    <View style={styles.dotsRow} testID="pulsing-dots">
-      {values.map((value, index) => (
+    <View
+      style={[styles.chompWrap, { width: geometry.width, height: size }]}
+      testID="chomping-loader"
+    >
+      {/* Dots come first so the jaws paint over them: a dot is covered by the
+          closing mouth rather than fading out on top of it. */}
+      {dotProgress.map((progress, index) => (
         <Animated.View
           key={index}
+          testID="chomping-loader-dot"
           style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: colors.accent,
-            opacity: value.interpolate({
-              inputRange: [0, 1],
-              outputRange: [0.35, 1],
+            position: "absolute",
+            top: geometry.dotTop,
+            left: geometry.dotLeft,
+            width: geometry.dotSize,
+            height: geometry.dotSize,
+            borderRadius: geometry.dotSize / 2,
+            backgroundColor: colors.accentSoft,
+            opacity: progress.interpolate({
+              inputRange: [0, 0.1, 0.97, 1],
+              outputRange: [0, 1, 1, 0],
             }),
             transform: [
               {
-                translateY: value.interpolate({
+                translateX: progress.interpolate({
                   inputRange: [0, 1],
-                  outputRange: [0, -size * 0.9],
+                  outputRange: [geometry.runway, 0],
                 }),
               },
             ],
           }}
         />
       ))}
+      <Animated.View
+        testID="chomping-loader-jaw"
+        style={[
+          jaw,
+          {
+            top: 0,
+            borderTopLeftRadius: geometry.radius,
+            borderTopRightRadius: geometry.radius,
+            transform: [
+              { translateY: geometry.pivotOffset },
+              {
+                rotate: clock.interpolate({
+                  inputRange: JAW_INPUT,
+                  outputRange: JAW_TOP_OUTPUT,
+                }),
+              },
+              { translateY: -geometry.pivotOffset },
+            ],
+          },
+        ]}
+      />
+      <Animated.View
+        testID="chomping-loader-jaw"
+        style={[
+          jaw,
+          {
+            top: size - geometry.halfHeight,
+            borderBottomLeftRadius: geometry.radius,
+            borderBottomRightRadius: geometry.radius,
+            transform: [
+              { translateY: -geometry.pivotOffset },
+              {
+                rotate: clock.interpolate({
+                  inputRange: JAW_INPUT,
+                  outputRange: JAW_BOTTOM_OUTPUT,
+                }),
+              },
+              { translateY: geometry.pivotOffset },
+            ],
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -194,7 +326,7 @@ export function FunFeedLoader({
           <Feather name="rss" size={30} color={colors.accent} />
         </View>
       </Animated.View>
-      <PulsingDots />
+      <ChompingLoader size={20} />
       <Animated.Text
         style={[
           styles.loaderMessage,
@@ -237,7 +369,7 @@ export function BackgroundSyncBanner({
       ]}
       testID="background-sync-banner"
     >
-      <PulsingDots size={6} />
+      <ChompingLoader />
       <Text style={[styles.syncBannerText, { color: colors.inkSoft }]}>
         {label}
       </Text>
@@ -423,11 +555,8 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontSize: fontSize.meta,
   },
-  dotsRow: {
-    flexDirection: "row",
-    alignItems: "flex-end",
-    gap: spacing.xs,
-    height: 16,
+  chompWrap: {
+    position: "relative",
   },
   syncBanner: {
     flexDirection: "row",

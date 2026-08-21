@@ -621,7 +621,14 @@ export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
 export async function getItemsPage(
   options: ItemsPageOptions
 ): Promise<FeedItemWithFeed[]> {
-  const { feedIds, excludeFeedIds, offset, limit, order = "newest" } = options;
+  const {
+    feedIds,
+    excludeFeedIds,
+    offset,
+    limit,
+    order = "newest",
+    unreadOnly = false,
+  } = options;
 
   if (feedIds != null && feedIds.length === 0) {
     return [];
@@ -639,6 +646,9 @@ export async function getItemsPage(
     .filter((i) => titleByFeedId.has(i.feed_id))
     .filter((i) => feedIdSet === null || feedIdSet.has(i.feed_id))
     .filter((i) => excludeSet === null || !excludeSet.has(i.feed_id))
+    // Applied before ranking below, so stacked rank 0 is each feed's newest
+    // *unread* item — mirrors the `items.read = 0` condition in database.ts.
+    .filter((i) => !unreadOnly || !i.read)
     .map((i) => ({ ...i, feed_title: titleByFeedId.get(i.feed_id) ?? "" }))
     .sort(
       (a, b) => (b.published_at ?? 0) - (a.published_at ?? 0) || b.id - a.id

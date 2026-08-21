@@ -117,6 +117,14 @@ export type ItemsPageOptions = {
    *    first page instead of being crowded out by high-volume feeds, so the
    *    client-side stacked sort always has every feed represented. */
   order?: "newest" | "stacked";
+  /** Restrict to unread items. Paging has to know about the unread filter:
+   *  filtering a read-agnostic page client-side means a page whose items the
+   *  user has already read collapses to nothing, and the empty state has no
+   *  list to page further with — so a reader who finished the top of their
+   *  feed lands on "All caught up!" with thousands of unread items sitting
+   *  unloaded underneath. Applied before ranking, so "stacked" ranks each
+   *  feed's *unread* items and every feed still reaches the first page. */
+  unreadOnly?: boolean;
 };
 
 export type SavedPost = {

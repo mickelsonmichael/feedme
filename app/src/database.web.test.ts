@@ -560,6 +560,57 @@ describe("database.web — getItemsPage", () => {
     expect(page1.map((i) => i.title)).toEqual(["Busy1", "Quiet"]);
     expect(page2.map((i) => i.title)).toEqual(["Busy2", "Busy3", "Busy4"]);
   });
+
+  it("unreadOnly: skips read items so a fully-read newest page doesn't consume the window", async () => {
+    // Arrange: the two newest items have been read, which is what a reader
+    // who worked through the top of their feed leaves behind.
+    await upsertItems(feedId, [
+      { title: "Newest", url: "https://x/1", content: null, publishedAt: 400 },
+      { title: "Second", url: "https://x/2", content: null, publishedAt: 300 },
+      { title: "Older", url: "https://x/3", content: null, publishedAt: 200 },
+    ]);
+    const all = await getItemsPage({ offset: 0, limit: 10 });
+    await markItemRead(all.find((i) => i.title === "Newest")!.id);
+    await markItemRead(all.find((i) => i.title === "Second")!.id);
+
+    // Act
+    const unread = await getItemsPage({
+      offset: 0,
+      limit: 2,
+      unreadOnly: true,
+    });
+    const everything = await getItemsPage({ offset: 0, limit: 2 });
+
+    // Assert: the unread post reaches the first page instead of being pushed
+    // out of the window by the read ones.
+    expect(unread.map((i) => i.title)).toEqual(["Older"]);
+    expect(everything.map((i) => i.title)).toEqual(["Newest", "Second"]);
+  });
+
+  it("unreadOnly: ranks stacked pages over unread items only", async () => {
+    // Arrange: the prolific feed's newest item is read, so its newest *unread*
+    // item should take rank 0 rather than the feed losing its first-page slot.
+    await upsertItems(feedId, [
+      { title: "Busy1", url: "https://x/1", content: null, publishedAt: 400 },
+      { title: "Busy2", url: "https://x/2", content: null, publishedAt: 300 },
+    ]);
+    await upsertItems(otherFeedId, [
+      { title: "Quiet", url: "https://y/1", content: null, publishedAt: 50 },
+    ]);
+    const all = await getItemsPage({ offset: 0, limit: 10 });
+    await markItemRead(all.find((i) => i.title === "Busy1")!.id);
+
+    // Act
+    const page1 = await getItemsPage({
+      offset: 0,
+      limit: 2,
+      order: "stacked",
+      unreadOnly: true,
+    });
+
+    // Assert
+    expect(page1.map((i) => i.title)).toEqual(["Busy2", "Quiet"]);
+  });
 });
 
 describe("database.web — saved posts", () => {

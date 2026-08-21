@@ -55,7 +55,7 @@ import {
   TabParamList,
 } from "../types";
 import { toggleExpandedId } from "../expandItemIds";
-import { FeedLoadingScreen, PulsingDots } from "../components/LoadingState";
+import { ChompingLoader, FeedLoadingScreen } from "../components/LoadingState";
 import { Toast } from "../components/Toast";
 import { CompactMenu } from "../components/CompactMenu";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -65,6 +65,7 @@ import { useFeedScroll } from "../context/FeedScrollContext";
 import { useBackgroundSync } from "../context/BackgroundSyncContext";
 import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
+import { mergeRetainedItems } from "../mergeRetainedItems";
 import {
   type GroupFeedsMode,
   type FeedListRow,
@@ -202,6 +203,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const pendingRefreshedPageRef = useRef<{
     items: FeedItemWithFeed[];
     hasMore: boolean;
+    pagedCount: number;
   } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -260,6 +262,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // which re-queries page 0 locally whenever the mode changes.
   const sortRef = useRef(sort);
 
+  // Current filter mode, for the same reason as sortRef — and paging genuinely
+  // depends on it. An unread-only page is queried unread-only (see
+  // ItemsPageOptions.unreadOnly); filtering a read-agnostic page client-side
+  // instead means a page the user has already read collapses to nothing, and
+  // the empty state renders no list, so there is nothing left to page with.
+  // Kept in sync by the filter-change effect below.
+  const filterRef = useRef(filter);
+
   // The feed_id scope (set by loadData) that handleLoadMore re-queries when
   // fetching subsequent pages.
   const scopeRef = useRef<{
@@ -270,6 +280,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // Incremented at the start of every loadData call so handleLoadMore can
   // detect and discard a page that resolves after the scope has changed.
   const loadGenerationRef = useRef(0);
+
+  // How many of the committed items came from the paged query, which is what
+  // the next page's OFFSET has to be counted against. Not the same as
+  // items.length once retained-but-read posts are merged in (see
+  // mergeRetainedItems): counting those would skip unread posts that were
+  // never loaded.
+  const pagedCountRef = useRef(0);
 
   // True only for this component instance's very first focus. Screens in a
   // bottom-tab navigator stay mounted for the app's whole lifetime, so the
@@ -517,14 +534,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
           // away everything past item 50 — which, in the single-post reader,
           // deletes the very post being read out from under them and drops
           // the reader back to the top of the list.
-          const pageLimit = Math.max(PAGE_SIZE, itemsRef.current.length);
-          const [itemData, ids, readLaterIdsLoaded] = await Promise.all([
+          const pageLimit = Math.max(PAGE_SIZE, pagedCountRef.current);
+          const unreadOnly = filterRef.current === "unread";
+          const [page, ids, readLaterIdsLoaded] = await Promise.all([
             getItemsPage({
               feedIds: scopeFeedIds,
               excludeFeedIds,
               offset: 0,
               limit: pageLimit,
               order: sortRef.current,
+              unreadOnly,
             }),
             getSavedItemIds(),
             getReadLaterItemIds(),
@@ -532,6 +551,24 @@ export default function FeedListScreen({ navigation, route }: Props) {
           if (loadGenerationRef.current !== generation) {
             return null;
           }
+          // An unread-only page excludes posts the user read moments ago —
+          // including the ones retainedUnreadIds is deliberately holding on
+          // screen so the row under the user's thumb doesn't evaporate the
+          // instant mark-as-read-on-scroll fires. Carry those back in from the
+          // committed list; visibleItems still decides whether to show them.
+          const itemData =
+            unreadOnly && retainedUnreadIdsRef.current.size > 0
+              ? mergeRetainedItems(
+                  page,
+                  itemsRef.current,
+                  retainedUnreadIdsRef.current
+                )
+              : page;
+          // Paging offsets count query-sourced rows only, so carried-over
+          // retained items can't push the next page's offset past unread
+          // posts that were never loaded.
+          const pagedCount = page.length;
+          const morePages = pagedCount === pageLimit;
           setSavedIds(ids);
           setReadLaterIds(readLaterIdsLoaded);
           if (defer) {
@@ -540,7 +577,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
             if (hasNewPosts) {
               pendingRefreshedPageRef.current = {
                 items: itemData,
-                hasMore: itemData.length === pageLimit,
+                hasMore: morePages,
+                pagedCount,
               };
               setNewPostsAvailable(true);
               return itemData.length;
@@ -549,8 +587,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
             // read-state / content edits from the refresh are still picked up
             // without bothering the user with a reload button.
           }
+          pagedCountRef.current = pagedCount;
           setItems(itemData);
-          setHasMore(itemData.length === pageLimit);
+          setHasMore(morePages);
           return itemData.length;
         };
 
@@ -694,11 +733,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
       const nextPage = await getItemsPage({
         feedIds,
         excludeFeedIds,
-        offset: itemsRef.current.length,
+        offset: pagedCountRef.current,
         limit: PAGE_SIZE,
         order: sortRef.current,
+        unreadOnly: filterRef.current === "unread",
       });
       if (loadGenerationRef.current !== generation) return; // scope changed mid-flight
+      pagedCountRef.current += nextPage.length;
       setItems((prev) => [...prev, ...nextPage]);
       setHasMore(nextPage.length === PAGE_SIZE);
     } catch {
@@ -757,6 +798,18 @@ export default function FeedListScreen({ navigation, route }: Props) {
     loadData(false);
   }, [sort, loadData]);
 
+  // Re-page from the database when the filter changes, for the same reason as
+  // the sort effect above: the unread filter is part of the page query, so the
+  // already-loaded window is the wrong set of rows for the new mode. Toggling
+  // to Unread has to re-query or the list would show only whichever of the
+  // loaded posts happen to be unread — nothing at all, once the user has read
+  // the top of their feed. Local re-query only — no network.
+  useEffect(() => {
+    if (filterRef.current === filter) return;
+    filterRef.current = filter;
+    loadData(false);
+  }, [filter, loadData]);
+
   // Commit the posts a background refresh stashed, then reset the feed to the
   // freshest content. Driven by the "New posts available" button, and
   // deliberately mirrors where a completed manual refresh leaves the user:
@@ -778,6 +831,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       // Defer the scroll-to-top until the new items actually commit (same
       // reasoning as the pull-to-refresh scroll — see pendingScrollToTopRef).
       pendingScrollToTopRef.current = true;
+      pagedCountRef.current = pending.pagedCount;
       setItems(pending.items);
       setHasMore(pending.hasMore);
     }
@@ -911,6 +965,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
   const savedIdsRef = useRef(savedIds);
   savedIdsRef.current = savedIds;
+
+  const retainedUnreadIdsRef = useRef(retainedUnreadIds);
+  retainedUnreadIdsRef.current = retainedUnreadIds;
 
   const readLaterIdsRef = useRef(readLaterIds);
   readLaterIdsRef.current = readLaterIds;
@@ -2503,7 +2560,7 @@ function Separator() {
 function LoadingMoreFooter() {
   return (
     <View style={styles.loadMoreFooter}>
-      <PulsingDots />
+      <ChompingLoader />
     </View>
   );
 }

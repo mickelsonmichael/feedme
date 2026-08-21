@@ -1,10 +1,11 @@
 import React from "react";
+import { Animated, StyleSheet } from "react-native";
 import renderer, { act } from "react-test-renderer";
 import {
+  ChompingLoader,
   FeedLoadingScreen,
   FunFeedLoader,
   LOADING_MESSAGES,
-  PulsingDots,
   SkeletonFeedList,
 } from "./LoadingState";
 
@@ -21,6 +22,7 @@ jest.mock("../context/ThemeContext", () => ({
       inkSoft: "#6a6487",
       inkFaint: "#b8b2cc",
       accent: "#3d358f",
+      accentSoft: "#7e78c4",
       border: "#ccc8db",
     },
   }),
@@ -143,17 +145,76 @@ describe("SkeletonFeedList", () => {
   });
 });
 
-describe("PulsingDots", () => {
-  it("renders three dots", () => {
+describe("ChompingLoader", () => {
+  it("renders one dot per bite, plus both jaws", () => {
     // Arrange / Act
     let tree!: renderer.ReactTestRenderer;
     act(() => {
-      tree = renderer.create(<PulsingDots />);
+      tree = renderer.create(<ChompingLoader />);
     });
 
-    // Assert — the wrapper row exists and contains three animated children
-    const row = tree.root.findByProps({ testID: "pulsing-dots" });
-    expect(React.Children.count(row.props.children)).toBe(3);
+    // Assert — three dots on the runway, one for each bite in the cycle, and
+    // an upper and lower jaw to eat them.
+    expect(countHostNodes(tree, "chomping-loader-dot")).toBe(3);
+    expect(countHostNodes(tree, "chomping-loader-jaw")).toBe(2);
     act(() => tree.unmount());
+  });
+
+  it("scales its geometry with the requested size", () => {
+    // Arrange — twice the default head diameter.
+    let tree!: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(<ChompingLoader size={28} />);
+    });
+
+    // Act
+    const wrap = tree.root.find(
+      (node) =>
+        typeof node.type === "string" && node.props.testID === "chomping-loader"
+    );
+    const style = StyleSheet.flatten(wrap.props.style);
+
+    // Assert — the 32x14 base box scales as a whole, so the loader keeps its
+    // proportions at any size rather than stretching.
+    expect(style.height).toBe(28);
+    expect(style.width).toBe(64);
+    act(() => tree.unmount());
+  });
+
+  it("drives every moving part from a single animation loop", () => {
+    // Arrange — the loader this replaced ran one loop per dot, and independent
+    // loops drift apart with nothing to resynchronise them. Guarding the loop
+    // count is what keeps that regression from creeping back in.
+    const loop = jest.spyOn(Animated, "loop");
+    let tree!: renderer.ReactTestRenderer;
+
+    // Act
+    act(() => {
+      tree = renderer.create(<ChompingLoader />);
+    });
+
+    // Assert
+    expect(loop).toHaveBeenCalledTimes(1);
+    act(() => tree.unmount());
+    loop.mockRestore();
+  });
+
+  it("stops animating once unmounted", () => {
+    // Arrange
+    const stop = jest.fn();
+    const loop = jest
+      .spyOn(Animated, "loop")
+      .mockReturnValue({ start: jest.fn(), stop, reset: jest.fn() } as never);
+    let tree!: renderer.ReactTestRenderer;
+    act(() => {
+      tree = renderer.create(<ChompingLoader />);
+    });
+
+    // Act
+    act(() => tree.unmount());
+
+    // Assert — a loop left running after unmount would tick forever.
+    expect(stop).toHaveBeenCalled();
+    loop.mockRestore();
   });
 });
