@@ -1,14 +1,10 @@
 # App Instructions
 
-This app is an RSS feeder app that can run either (A) as an Android mobile app or (B) as a web page.
+This app is an RSS feeder app that targets Android. It is written using React Native and TypeScript, and every feature uses a local SQLite database for long-term data.
 
-To support this, the app is written using React Native and TypeScript.
-Every feature added to the app should support both these environments and use a local SQLite database for long-term data.
-The web app can choose to use Local Storage where appropriate.
+The app also has a web build, but **the web version is deprecated**: it is no longer used and is no longer verified. Android is the only environment a change has to be valid for, and touch-screen UX is the only UX that has to work.
 
-Because the app supports both mobile and web, **all changes need to be valid for both environments**.
-This may mean you need to make two implementations to solve the same problem, and you will need to support both touch-screen and mouse-based
-UX for every change.
+Existing web-specific code (including its Local Storage usage) stays as-is — don't rip it out as a drive-by change. But don't write a second web implementation for new work, don't add web-only behaviour, and don't spend time confirming a change on web.
 
 ## Basic Functionality
 

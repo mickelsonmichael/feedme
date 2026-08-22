@@ -11,7 +11,7 @@ This is a monorepo with two independent projects. Every CLI command must be run 
 
 | Project | Directory | Stack |
 |---------|-----------|-------|
-| Mobile/Web app | `app/` | React Native, Expo, TypeScript |
+| Mobile app | `app/` | React Native, Expo, TypeScript (Android; the web build is deprecated and is not verified) |
 | Backend | `worker/` | Cloudflare Workers, TypeScript |
 
 **Never run `app/` commands from the repo root or `worker/`, and vice versa.** Both have their own `package.json` and `node_modules`.
@@ -25,7 +25,7 @@ You can check the worker is running simply by pinging `127.0.0.1:8787` using `cu
 If no URL parameter is provided, you should get a `400` response with `Missing url parameter`, which is normal and means the
 servier is up and running.
 
-Similarly, you can check that the expo web server is running using `curl 127.0.0.1:8081`.
+Similarly, you can check that the expo dev server is running using `curl 127.0.0.1:8081`.
 Likewise, you can check for the expo Metro server using `curl 127.0.0.1:8081/status` and you should
 get a response `200` response with the body `package-status:running`.
 

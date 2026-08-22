@@ -12,7 +12,7 @@ feedme uses [Maestro](https://maestro.mobile.dev) for black-box Android UI autom
 - **Maestro** (this skill) — scripted, repeatable interaction across real screens on the emulator. Use it to lock in a flow once you've verified it manually, or to re-check a flow you already wrote instead of re-doing manual taps every time.
 - **Manual `android-emulator-adb` verification** — still the right tool for one-off exploration, screenshots, and anything not yet worth scripting.
 
-Maestro only drives native Android/iOS apps — it does not work against the web build. Web changes still need the embedded-browser verification step from `AGENTS.md`.
+Maestro only drives native Android/iOS apps — it does not work against the web build. That's fine: the web build is deprecated and is no longer verified (see `AGENTS.md`).
 
 ## Prerequisite: app already running
 

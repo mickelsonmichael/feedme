@@ -2,6 +2,8 @@
 
 This file describes every screen in the app. Update this file whenever a new screen is added or a screen's primary purpose/features change.
 
+> **The web build is deprecated.** Web-only screens, layouts, and behaviours noted below (the wide-web sidebar, desktop layouts, browser fallbacks) are kept for history and are no longer verified.
+
 ---
 
 ## Navigation Structure

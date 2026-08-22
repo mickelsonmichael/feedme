@@ -7,6 +7,8 @@ This file tracks functional requirements for each screen and feature area. Updat
 - `REQ-<SCREEN>-<NNN>`: Short description of observable behavior.
 - Tag with `[added]`, `[modified]`, or `[removed]` and a brief note when a requirement changes.
 
+> **The web build is deprecated.** Requirements below that describe web-only behaviour ("on web", wide/desktop-web layouts, mobile-web caveats) are kept for history. They are not verified and are not gates for new work — Android is the only supported platform. Do not add new web-specific requirements.
+
 ---
 
 ## Shared Components

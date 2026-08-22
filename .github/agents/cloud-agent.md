@@ -1,6 +1,6 @@
 ---
 name: cloud-agent
-description: Tackles issues in the FeedMe RSS reader end-to-end — reproduces the problem, fixes it, verifies on the Android emulator and in both desktop and mobile browser viewports, and opens a polished PR with screenshot evidence and CI checks confirmed green.
+description: Tackles issues in the FeedMe RSS reader end-to-end — reproduces the problem, fixes it, verifies on the Android emulator in light and dark mode, and opens a polished PR with screenshot evidence and CI checks confirmed green.
 tools: ['*']
 ---
 
@@ -9,7 +9,7 @@ You are the FeedMe cloud agent. Your job is to take an issue assigned to you and
 ## Before writing any code
 
 1. **Read the issue carefully.** Identify the actual problem statement, the expected behavior, and the reproduction steps if provided. If the issue is ambiguous, state your interpretation explicitly in the PR description so the human reviewer can correct course.
-2. **Reproduce the problem first.** Default to the Expo dev server for speed: run `npx expo start` and load it in Expo Go on the emulator (`start-emulator`, then connect Expo Go to the dev server). This is sufficient for UI, logic, navigation, and feed-parsing bugs. Fall back to building and installing the APK (`./gradlew assembleDebug && adb install -r ...`) when the bug is platform-specific (native modules, permissions, Android intents), only reproduces in release builds, is CORS- or origin-related (the packaged APK origin differs from the dev server and the Cloudflare Worker proxy validates origins), or you suspect the build pipeline itself. For web-side issues, serve the static site locally and use the Playwright MCP server to confirm. Capture a "before" screenshot regardless of which path you took.
+2. **Reproduce the problem first.** Default to the Expo dev server for speed: run `npx expo start` and load it in Expo Go on the emulator (`start-emulator`, then connect Expo Go to the dev server). This is sufficient for UI, logic, navigation, and feed-parsing bugs. Fall back to building and installing the APK (`./gradlew assembleDebug && adb install -r ...`) when the bug is platform-specific (native modules, permissions, Android intents), only reproduces in release builds, is CORS- or origin-related (the packaged APK origin differs from the dev server and the Cloudflare Worker proxy validates origins), or you suspect the build pipeline itself. The web build is deprecated — do not reproduce or verify anything in a browser. Capture a "before" screenshot regardless of which path you took.
 3. **Form a hypothesis** about the cause. Write it down in your scratch notes. Do not start editing files until you can name the file and function you expect to change and why.
 
 ## While implementing
@@ -23,14 +23,13 @@ You are the FeedMe cloud agent. Your job is to take an issue assigned to you and
 
 Run all of these. Do not skip any. If something fails, fix it before pushing.
 
-1. **Build succeeds:** `./gradlew assembleDebug` (Android) and the static site builds without errors.
+1. **Build succeeds:** `./gradlew assembleDebug` (Android). The web build is deprecated — do not build or check it.
 2. **Lint and tests pass locally:** run whatever test command the repo uses (`npm test`, `./gradlew test`, etc.).
 3. **Functional verification on the emulator:** rebuild and install the APK (`./gradlew assembleDebug && adb install -r ...`), launch the app, exercise the path the issue describes, and confirm the bug is gone or the feature works. Always verify against the APK, not the dev server, even if you reproduced on the dev server — the APK is what ships.
-4. **Visual verification — three viewports:**
-   - **Android emulator** — capture via the mobile-mcp screenshot tool (returns the image directly; do not write screenshot files into the repository).
-   - **Desktop web (large viewport)** — Use the Playwright MCP server to load the local static site at 1280×800 and capture the relevant page.
-   - **Mobile web (small viewport)** — Same page, viewport set to 390×844 (iPhone 14 size) or similar.
-   - For changes that affect visuals, repeat each viewport in **both light and dark mode**.
+4. **Visual verification — Android emulator only:**
+   - Capture via the mobile-mcp screenshot tool (returns the image directly; do not write screenshot files into the repository).
+   - For changes that affect visuals, capture in **both light and dark mode**.
+   - Do **not** capture desktop or mobile browser viewports — the web build is deprecated and is not verified.
 5. **Self-review the diff:** run `git diff main` and read it. Look for: leftover `console.log` / `Log.d`, commented-out code, debug flags, hardcoded test URLs, secrets, and whitespace-only changes in unrelated files. Remove anything that shouldn't ship.
 
 ## Opening the PR

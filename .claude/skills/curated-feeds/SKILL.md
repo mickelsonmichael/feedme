@@ -32,7 +32,7 @@ Two Node.js helper scripts live in `.agents/skills/curated-feeds/scripts/`. **Al
 | `fetch-feed.js <url>` | Verifies a URL is a reachable RSS/Atom feed |
 | `fetch-icon.js <site-or-icon-url>` | Discovers and verifies a usable favicon |
 
-`fetch-icon.js` automatically follows redirects, skips SVG (unsupported by React Native), rejects images that lack CORS headers (would be blocked on web), and falls back to the WordPress blavatar CDN (which always has `Access-Control-Allow-Origin: *`). Pass `--skip-cors` only for Android-only verification where the web build is not a concern.
+`fetch-icon.js` automatically follows redirects, skips SVG (unsupported by React Native), rejects images that lack CORS headers, and falls back to the WordPress blavatar CDN (which always has `Access-Control-Allow-Origin: *`). CORS only ever mattered for the web build, which is now deprecated — so pass `--skip-cors` when an otherwise good icon is rejected for a missing CORS header.
 
 ## Workflow
 
@@ -62,7 +62,7 @@ node .agents/skills/curated-feeds/scripts/fetch-icon.js <site-url>
 The script prints `BEST ICON URL:` followed by the URL to use in `iconUrl`. If it exits with code 1, check the output — each candidate is listed with a reason for skipping. Common fixes:
 
 - **SVG skipped** — the site only serves SVG icons; try passing the `apple-touch-icon.png` URL directly.
-- **No CORS header** — the icon works on Android but will be blocked on web. The script already tries the WordPress blavatar CDN as a fallback. If that also fails, find a PNG asset on a CDN that sends `Access-Control-Allow-Origin: *`.
+- **No CORS header** — harmless on Android, and the web build is deprecated. Re-run with `--skip-cors` and use the icon.
 - **403 on favicon.ico** — try passing `<site-url>/apple-touch-icon.png` directly.
 
 Do not commit a 404 icon — `DiscoverScreen` will show a fallback RSS glyph, but a stale 404 wastes a network request.
@@ -75,12 +75,11 @@ Do not commit a 404 icon — `DiscoverScreen` will show a fallback RSS glyph, bu
 
 ### 5. Verify in the app
 
-Per the repo `AGENTS.md`, UI changes must be verified on both platforms:
+Per the repo `AGENTS.md`, UI changes are verified on Android only — the web build is deprecated and is not verified:
 
 - **Android emulator:** open the Discover tab, confirm the new/changed entry renders with its icon and description, and that tapping **Add** subscribes the feed without error.
-- **Web (embedded browser):** same checks.
 
-If the icon doesn't render, re-check the `iconUrl` (HTTPS only — mixed-content blocks HTTP icons on web).
+If the icon doesn't render, re-check the `iconUrl` (HTTPS only — cleartext HTTP is blocked by default).
 
 ## Anti-patterns
 
@@ -88,9 +87,8 @@ If the icon doesn't render, re-check the `iconUrl` (HTTPS only — mixed-content
 - ❌ Using a homepage URL instead of the feed URL.
 - ❌ Pointing `iconUrl` at a page (e.g. `https://example.com/`) instead of an image asset.
 - ❌ Using an SVG icon — React Native's `Image` component does not render SVG.
-- ❌ Using an icon without CORS headers — it will be blocked on the web build.
 - ❌ Long, multi-sentence descriptions — they're truncated to 2 lines on the card.
-- ❌ Committing entries with `http://` URLs — web blocks mixed content.
+- ❌ Committing entries with `http://` URLs — cleartext traffic is blocked by default.
 
 ## Common Issues
 

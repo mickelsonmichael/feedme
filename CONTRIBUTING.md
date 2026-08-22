@@ -337,7 +337,9 @@ Launch the installed app manually at any time:
 adb shell am start -n com.feedme.app/.MainActivity
 ```
 
-### Web
+### Web (deprecated)
+
+The web build is **deprecated**. It still runs, but it is not maintained or verified, and changes are not expected to work there.
 
 ```bash
 cd app

@@ -2,7 +2,7 @@
 
 This repository contains two isolated projects:
 
-- `app/` - React Native + TypeScript RSS reader app (Android + Web)
+- `app/` - React Native + TypeScript RSS reader app (Android; the web build is deprecated)
 - `worker/` - Cloudflare Worker services used by the app
 
 ## Directory layout
