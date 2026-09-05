@@ -39,7 +39,6 @@ import {
   addToReadLater,
   removeFromReadLater,
   getReadLaterItemIds,
-  getItemRawXml,
   addFeed,
   deleteFeed,
   getFeedByUrl,
@@ -1231,23 +1230,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
     [filter, markActivity, navigation]
   );
 
-  const handleSingleViewXml = useCallback(
-    async (id: number) => {
-      const item = itemsByIdRef.current.get(id);
-      let rawXml: string | null = null;
-      try {
-        rawXml = await getItemRawXml(id);
-      } catch {
-        // Fetch failure — navigate anyway to show the empty state
-      }
-      navigation.navigate("RawXml", {
-        rawXml,
-        title: item?.title ?? "Raw XML",
-      });
-    },
-    [navigation]
-  );
-
   useEffect(() => {
     if (
       (selectedFeedId !== undefined ||
@@ -2361,28 +2343,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
                     ]}
                   >
                     {currentSingleItem.read ? "Mark Unread" : "Mark Read"}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.singleMoreMenuItem,
-                    { borderBottomColor: colors.border },
-                  ]}
-                  onPress={() => {
-                    handleSingleViewXml(currentSingleItem.id);
-                    setShowSingleMoreMenu(false);
-                  }}
-                  activeOpacity={0.7}
-                  accessibilityLabel="View raw XML"
-                >
-                  <Feather name="code" size={16} color={colors.ink} />
-                  <Text
-                    style={[
-                      styles.singleMoreMenuItemText,
-                      { color: colors.ink },
-                    ]}
-                  >
-                    View XML
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity

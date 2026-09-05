@@ -5,7 +5,7 @@ import {
 } from "./feedRefresher";
 import { fetchFeedWithMeta, RateLimitError } from "./feedParser";
 import * as database from "./database";
-import { Feed, ParsedFeedItem } from "./types";
+import { Feed, FeedRefreshResult, ParsedFeedItem } from "./types";
 
 // Mock network and database calls so tests run offline and touch no real storage
 jest.mock("./feedParser", () => {
@@ -21,15 +21,9 @@ jest.mock("./feedParser", () => {
 jest.mock("./database", () => ({
   upsertItems: jest.fn(),
   deleteRedditCommentItems: jest.fn(),
-  updateFeedLastFetched: jest.fn(),
-  updateFeedCacheValidators: jest.fn(),
-  setFeedError: jest.fn(),
   getItemCountForFeed: jest.fn(),
-  setFeedRefreshSuccess: jest.fn(),
-  setFeedRefreshFailure: jest.fn(),
   getRecentPublishedAtForFeed: jest.fn(),
-  recordFeedFetchOutcome: jest.fn(),
-  updateFeedRateLimitInfo: jest.fn(),
+  recordFeedRefreshResult: jest.fn(),
 }));
 
 const mockFetchFeedWithMeta = fetchFeedWithMeta as jest.MockedFunction<
@@ -38,36 +32,17 @@ const mockFetchFeedWithMeta = fetchFeedWithMeta as jest.MockedFunction<
 const mockUpsertItems = database.upsertItems as jest.MockedFunction<
   typeof database.upsertItems
 >;
-const mockUpdateFeedLastFetched =
-  database.updateFeedLastFetched as jest.MockedFunction<
-    typeof database.updateFeedLastFetched
-  >;
-const mockUpdateFeedCacheValidators =
-  database.updateFeedCacheValidators as jest.MockedFunction<
-    typeof database.updateFeedCacheValidators
-  >;
-const mockSetFeedError = database.setFeedError as jest.MockedFunction<
-  typeof database.setFeedError
->;
 const mockGetItemCountForFeed =
   database.getItemCountForFeed as jest.MockedFunction<
     typeof database.getItemCountForFeed
-  >;
-const mockSetFeedRefreshSuccess =
-  database.setFeedRefreshSuccess as jest.MockedFunction<
-    typeof database.setFeedRefreshSuccess
-  >;
-const mockSetFeedRefreshFailure =
-  database.setFeedRefreshFailure as jest.MockedFunction<
-    typeof database.setFeedRefreshFailure
   >;
 const mockGetRecentPublishedAtForFeed =
   database.getRecentPublishedAtForFeed as jest.MockedFunction<
     typeof database.getRecentPublishedAtForFeed
   >;
-const mockUpdateFeedRateLimitInfo =
-  database.updateFeedRateLimitInfo as jest.MockedFunction<
-    typeof database.updateFeedRateLimitInfo
+const mockRecordFeedRefreshResult =
+  database.recordFeedRefreshResult as jest.MockedFunction<
+    typeof database.recordFeedRefreshResult
   >;
 const mockDeleteRedditCommentItems =
   database.deleteRedditCommentItems as jest.MockedFunction<
@@ -105,19 +80,23 @@ beforeEach(() => {
     notModified: false,
     etag: null,
     lastModified: null,
-    rateLimitHeaders: null,
   });
   mockUpsertItems.mockResolvedValue(undefined);
-  mockUpdateFeedLastFetched.mockResolvedValue(undefined);
-  mockUpdateFeedCacheValidators.mockResolvedValue(undefined);
-  mockSetFeedError.mockResolvedValue(undefined);
   mockGetItemCountForFeed.mockResolvedValue(0);
-  mockSetFeedRefreshSuccess.mockResolvedValue(undefined);
-  mockSetFeedRefreshFailure.mockResolvedValue(undefined);
   mockGetRecentPublishedAtForFeed.mockResolvedValue([]);
-  mockUpdateFeedRateLimitInfo.mockResolvedValue(undefined);
+  mockRecordFeedRefreshResult.mockResolvedValue(undefined);
   mockDeleteRedditCommentItems.mockResolvedValue(undefined);
 });
+
+/** The refresh outcome recorded for `feedId`, or undefined if the feed was
+ *  never written (e.g. it was skipped). One write per feed per run, so this
+ *  is unambiguous. */
+function resultFor(feedId: number): FeedRefreshResult | undefined {
+  const call = mockRecordFeedRefreshResult.mock.calls.find(
+    ([id]) => id === feedId
+  );
+  return call?.[1];
+}
 
 describe("refreshFeeds", () => {
   it("returns 0 when the feeds list is empty", async () => {
@@ -157,12 +136,49 @@ describe("refreshFeeds", () => {
     expect(mockUpsertItems).toHaveBeenCalledTimes(2);
     expect(mockUpsertItems).toHaveBeenCalledWith(1, [parsedItem]);
     expect(mockUpsertItems).toHaveBeenCalledWith(2, [parsedItem]);
-    expect(mockUpdateFeedLastFetched).toHaveBeenCalledTimes(2);
-    expect(mockUpdateFeedLastFetched).toHaveBeenCalledWith(1);
-    expect(mockUpdateFeedLastFetched).toHaveBeenCalledWith(2);
-    expect(mockSetFeedError).toHaveBeenCalledTimes(2);
-    expect(mockSetFeedError).toHaveBeenCalledWith(1, null);
-    expect(mockSetFeedError).toHaveBeenCalledWith(2, null);
+    expect(mockRecordFeedRefreshResult).toHaveBeenCalledTimes(2);
+    expect(resultFor(1)).toMatchObject({
+      success: true,
+      error: null,
+      lastFetched: expect.any(Number),
+    });
+    expect(resultFor(2)).toMatchObject({
+      success: true,
+      error: null,
+      lastFetched: expect.any(Number),
+    });
+  });
+
+  it("records each feed's outcome in exactly one database write", async () => {
+    // Arrange — the whole point of the consolidated write: a successful
+    // refresh used to cost six separate UPDATEs, each taking the global write
+    // lock while the feed still held a concurrency slot.
+    const feeds = [makeFeed(1), makeFeed(2), makeFeed(3)];
+    mockFetchFeedWithMeta
+      .mockResolvedValueOnce({
+        items: [parsedItem],
+        usedProxy: false,
+        notModified: false,
+        etag: null,
+        lastModified: null,
+      })
+      .mockResolvedValueOnce({
+        items: [],
+        usedProxy: false,
+        notModified: true,
+        etag: null,
+        lastModified: null,
+      })
+      .mockRejectedValueOnce(new Error("Network error"));
+
+    // Act
+    await refreshFeeds(feeds, { concurrency: 1 });
+
+    // Assert — one write each, across the 200, 304 and failure paths alike.
+    expect(mockRecordFeedRefreshResult).toHaveBeenCalledTimes(3);
+    expect(
+      mockRecordFeedRefreshResult.mock.calls.map(([feedId]) => feedId).sort()
+    ).toEqual([1, 2, 3]);
   });
 
   it("counts individual feed failures without throwing", async () => {
@@ -191,9 +207,12 @@ describe("refreshFeeds", () => {
     // Assert
     expect(errors).toBe(1);
     expect(mockUpsertItems).toHaveBeenCalledTimes(2); // feeds 1 and 3
-    expect(mockSetFeedError).toHaveBeenCalledWith(1, null);
-    expect(mockSetFeedError).toHaveBeenCalledWith(2, "Network error");
-    expect(mockSetFeedError).toHaveBeenCalledWith(3, null);
+    expect(resultFor(1)).toMatchObject({ success: true, error: null });
+    expect(resultFor(2)).toMatchObject({
+      success: false,
+      error: "Network error",
+    });
+    expect(resultFor(3)).toMatchObject({ success: true, error: null });
   });
 
   it("returns the total error count when all feeds fail", async () => {
@@ -207,8 +226,8 @@ describe("refreshFeeds", () => {
     // Assert
     expect(errors).toBe(2);
     expect(mockUpsertItems).not.toHaveBeenCalled();
-    expect(mockSetFeedError).toHaveBeenCalledWith(1, "Offline");
-    expect(mockSetFeedError).toHaveBeenCalledWith(2, "Offline");
+    expect(resultFor(1)).toMatchObject({ success: false, error: "Offline" });
+    expect(resultFor(2)).toMatchObject({ success: false, error: "Offline" });
   });
 
   it("reports progress counts while refreshing feeds", async () => {
@@ -250,10 +269,10 @@ describe("refreshFeeds", () => {
 
     // Assert
     expect(errors).toBe(1);
-    expect(mockSetFeedError).toHaveBeenCalledWith(
-      1,
-      "Offline Showing cached posts."
-    );
+    expect(resultFor(1)).toMatchObject({
+      success: false,
+      error: "Offline Showing cached posts.",
+    });
   });
 
   it("completes all feeds when one upsert fails mid-concurrent-refresh", async () => {
@@ -272,12 +291,12 @@ describe("refreshFeeds", () => {
 
     // Assert — only the one broken feed counts as an error; the others succeed
     expect(errors).toBe(1);
-    expect(mockSetFeedError).toHaveBeenCalledWith(1, null);
-    expect(mockSetFeedError).toHaveBeenCalledWith(
-      2,
-      "cannot rollback - no transaction is active"
-    );
-    expect(mockSetFeedError).toHaveBeenCalledWith(3, null);
+    expect(resultFor(1)).toMatchObject({ success: true, error: null });
+    expect(resultFor(2)).toMatchObject({
+      success: false,
+      error: "cannot rollback - no transaction is active",
+    });
+    expect(resultFor(3)).toMatchObject({ success: true, error: null });
   });
 
   it("truncates items to MAX_ITEMS_PER_FEED before upserting", async () => {
@@ -365,11 +384,10 @@ describe("refreshFeeds", () => {
     await refreshFeeds(feeds);
 
     // Assert
-    expect(mockUpdateFeedCacheValidators).toHaveBeenCalledWith(
-      1,
-      '"newtag"',
-      "Thu, 02 Jan 2025 00:00:00 GMT"
-    );
+    expect(resultFor(1)).toMatchObject({
+      etag: '"newtag"',
+      lastModified: "Thu, 02 Jan 2025 00:00:00 GMT",
+    });
   });
 
   it("counts a 304 Not Modified result as success without upserting items", async () => {
@@ -390,9 +408,15 @@ describe("refreshFeeds", () => {
     // Assert
     expect(errors).toBe(0);
     expect(mockUpsertItems).not.toHaveBeenCalled();
-    expect(mockUpdateFeedCacheValidators).not.toHaveBeenCalled();
-    expect(mockUpdateFeedLastFetched).toHaveBeenCalledWith(1);
-    expect(mockSetFeedError).toHaveBeenCalledWith(1, null);
+    const result = resultFor(1);
+    expect(result).toMatchObject({
+      success: true,
+      error: null,
+      lastFetched: expect.any(Number),
+    });
+    // A 304 leaves the stored validators alone rather than rewriting them.
+    expect(result).not.toHaveProperty("etag");
+    expect(result).not.toHaveProperty("lastModified");
     expect(onProgress).toHaveBeenLastCalledWith(
       expect.objectContaining({ succeeded: 1, failed: 0, completed: 1 })
     );
@@ -418,15 +442,88 @@ describe("refreshFeeds", () => {
     // Act
     await refreshFeeds(feeds);
 
-    // Assert — success path must call setFeedRefreshSuccess (which resets
-    // consecutive_failures to 0) and not the failure helper.
-    expect(mockSetFeedRefreshSuccess).toHaveBeenCalledTimes(1);
-    expect(mockSetFeedRefreshSuccess).toHaveBeenCalledWith(
-      1,
-      expect.any(Number),
-      expect.any(Number)
-    );
-    expect(mockSetFeedRefreshFailure).not.toHaveBeenCalled();
+    // Assert — the success path records a cleared failure streak.
+    expect(mockRecordFeedRefreshResult).toHaveBeenCalledTimes(1);
+    expect(resultFor(1)).toMatchObject({
+      success: true,
+      consecutiveFailures: 0,
+      fetchIntervalMs: expect.any(Number),
+      nextFetchAt: expect.any(Number),
+    });
+  });
+
+  it("waits out a server freshness window longer than the learned cadence", async () => {
+    // Arrange — nothing learned (default 1h), but the server asks for 6h.
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [parsedItem],
+      usedProxy: false,
+      notModified: false,
+      etag: null,
+      lastModified: null,
+      freshness: { cacheControl: "public, max-age=21600" },
+    });
+    const feeds = [makeFeed(1)];
+
+    // Act
+    await refreshFeeds(feeds);
+
+    // Assert
+    const result = resultFor(1);
+    const delay = result!.nextFetchAt - Date.now();
+    expect(delay).toBeGreaterThan(6 * 60 * 60 * 1000 - 5_000);
+    expect(delay).toBeLessThanOrEqual(6 * 60 * 60 * 1000);
+    // The stored cadence stays what the feed's own timestamps imply.
+    expect(result!.fetchIntervalMs).toBe(60 * 60 * 1000);
+  });
+
+  it("honours the freshness window on a 304 as well", async () => {
+    // Arrange — a conditional GET still costs a round trip, so the floor has
+    // to apply here too or the feed gets re-polled just as often.
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [],
+      usedProxy: false,
+      notModified: true,
+      etag: '"abc"',
+      lastModified: null,
+      freshness: { cacheControl: "max-age=10800" },
+    });
+    const feeds = [makeFeed(1, { etag: '"abc"' })];
+
+    // Act
+    await refreshFeeds(feeds);
+
+    // Assert
+    const delay = resultFor(1)!.nextFetchAt - Date.now();
+    expect(delay).toBeGreaterThan(3 * 60 * 60 * 1000 - 5_000);
+    expect(delay).toBeLessThanOrEqual(3 * 60 * 60 * 1000);
+  });
+
+  it("ignores a freshness window shorter than the learned cadence", async () => {
+    // Arrange — a 5-minute cache header must not pull a daily feed forward.
+    const now = Date.now();
+    const day = 24 * 60 * 60 * 1000;
+    mockGetRecentPublishedAtForFeed.mockResolvedValue([
+      now,
+      now - day,
+      now - 2 * day,
+      now - 3 * day,
+    ]);
+    mockFetchFeedWithMeta.mockResolvedValue({
+      items: [parsedItem],
+      usedProxy: false,
+      notModified: false,
+      etag: null,
+      lastModified: null,
+      freshness: { cacheControl: "max-age=300" },
+    });
+    const feeds = [makeFeed(1)];
+
+    // Act
+    await refreshFeeds(feeds);
+
+    // Assert — the learned daily cadence wins
+    const delay = resultFor(1)!.nextFetchAt - Date.now();
+    expect(delay).toBeGreaterThan(day - 5_000);
   });
 
   it("skips feeds whose next_fetch_at is in the future and reports them as skipped", async () => {
@@ -502,46 +599,13 @@ describe("refreshFeeds", () => {
     await refreshFeeds(feeds);
 
     // Assert — third failure → 1h * 2^3 = 8h backoff
-    expect(mockSetFeedRefreshFailure).toHaveBeenCalledTimes(1);
-    const [feedId, failures, nextFetchAt] =
-      mockSetFeedRefreshFailure.mock.calls[0];
-    expect(feedId).toBe(1);
-    expect(failures).toBe(3);
-    const delay = nextFetchAt - Date.now();
+    expect(mockRecordFeedRefreshResult).toHaveBeenCalledTimes(1);
+    const result = resultFor(1);
+    expect(result).toMatchObject({ success: false, consecutiveFailures: 3 });
+    const delay = result!.nextFetchAt - Date.now();
     // Allow some slack for clock drift between the call and the assertion.
     expect(delay).toBeGreaterThan(8 * 60 * 60 * 1000 - 5_000);
     expect(delay).toBeLessThanOrEqual(8 * 60 * 60 * 1000);
-  });
-
-  it("persists rate-limit headers when fetch succeeds after a 429 retry", async () => {
-    // Arrange — fetchFeedWithMeta resolved successfully but encountered a 429
-    // during retries (rateLimitHeaders is populated).
-    const rateLimitHeaders = {
-      retryAfter: "5",
-      limit: "100",
-      remaining: "0",
-      reset: null,
-      capturedAt: Date.now(),
-    };
-    mockFetchFeedWithMeta.mockResolvedValue({
-      items: [parsedItem],
-      usedProxy: false,
-      notModified: false,
-      etag: null,
-      lastModified: null,
-      rateLimitHeaders,
-    });
-    const feeds = [makeFeed(1)];
-
-    // Act
-    await refreshFeeds(feeds);
-
-    // Assert — rate limit info should be persisted
-    expect(mockUpdateFeedRateLimitInfo).toHaveBeenCalledTimes(1);
-    expect(mockUpdateFeedRateLimitInfo).toHaveBeenCalledWith(
-      1,
-      JSON.stringify(rateLimitHeaders)
-    );
   });
 
   it("persists rate-limit headers when fetch fails with RateLimitError", async () => {
@@ -564,10 +628,10 @@ describe("refreshFeeds", () => {
 
     // Assert
     expect(errors).toBe(1);
-    expect(mockUpdateFeedRateLimitInfo).toHaveBeenCalledWith(
-      1,
-      JSON.stringify(rateLimitHeaders)
-    );
+    expect(resultFor(1)).toMatchObject({
+      success: false,
+      rateLimitInfo: JSON.stringify(rateLimitHeaders),
+    });
   });
 
   it("calls onFeedFailure for each failed feed with the error", async () => {
@@ -581,7 +645,6 @@ describe("refreshFeeds", () => {
         notModified: false,
         etag: null,
         lastModified: null,
-        rateLimitHeaders: null,
       });
     const failures: Array<{ id: number; message: string }> = [];
 
@@ -636,7 +699,6 @@ describe("refreshFeeds", () => {
           notModified: false,
           etag: null,
           lastModified: null,
-          rateLimitHeaders: null,
         });
       const onProgress = jest.fn();
 
@@ -683,7 +745,6 @@ describe("refreshFeeds", () => {
           notModified: false,
           etag: null,
           lastModified: null,
-          rateLimitHeaders: null,
         });
 
       // Act
@@ -755,7 +816,6 @@ describe("refreshFeeds", () => {
           notModified: false,
           etag: null,
           lastModified: null,
-          rateLimitHeaders: null,
         };
       });
 
@@ -786,7 +846,6 @@ describe("refreshFeeds", () => {
           notModified: false,
           etag: null,
           lastModified: null,
-          rateLimitHeaders: null,
         };
       });
 

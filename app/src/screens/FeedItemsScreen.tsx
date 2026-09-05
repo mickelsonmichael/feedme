@@ -57,7 +57,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
   const [backgroundRefreshing, setBackgroundRefreshing] = useState(false);
   const [savedIds, setSavedIds] = useState<Set<number>>(new Set());
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
-  const [rawXmlItem, setRawXmlItem] = useState<FeedItem | null>(null);
   const [allFeeds, setAllFeeds] = useState<Feed[]>([]);
   const listRef = useRef<FlashListRef<FeedItem>>(null);
   const pendingScrollToTopRef = useRef(false);
@@ -299,10 +298,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
     }
   }, []);
 
-  const handleOpenRawXml = useCallback((id: number) => {
-    setRawXmlItem(itemsByIdRef.current.get(id) ?? null);
-  }, []);
-
   const handleFollowAuthor = useCallback(
     async (id: number) => {
       const item = itemsByIdRef.current.get(id);
@@ -352,7 +347,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           saved={savedIds.has(item.id)}
           expanded={expandedIds.has(item.id)}
           showExpand
-          showRawXml
           expandedMediaTestID={`expanded-media-${item.id}`}
           onOpenItem={handleOpenItem}
           onToggleExpand={handleToggleExpand}
@@ -360,7 +354,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           onToggleSave={toggleSave}
           onOpenOriginalLink={handleOpenOriginalLink}
           onOpenContentLink={handleOpenContentLink}
-          onOpenRawXml={handleOpenRawXml}
           authorFollowed={itemAuthorFollowed}
           onFollowAuthor={itemRedditAuthor ? handleFollowAuthor : undefined}
         />
@@ -379,7 +372,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
       toggleSave,
       handleOpenOriginalLink,
       handleOpenContentLink,
-      handleOpenRawXml,
       handleFollowAuthor,
     ]
   );
@@ -451,61 +443,6 @@ export default function FeedItemsScreen({ route, navigation }: Props) {
           ItemSeparatorComponent={Separator}
         />
       )}
-      <Modal
-        visible={rawXmlItem !== null}
-        animationType="slide"
-        transparent
-        onRequestClose={() => setRawXmlItem(null)}
-      >
-        {rawXmlItem ? (
-          <View
-            style={[
-              styles.rawModalOverlay,
-              { backgroundColor: "rgba(0,0,0,0.5)" },
-            ]}
-          >
-            <View
-              style={[
-                styles.rawModalSheet,
-                {
-                  backgroundColor: colors.paperWarm,
-                  borderColor: colors.border,
-                },
-              ]}
-            >
-              <View
-                style={[
-                  styles.rawModalHeader,
-                  { borderBottomColor: colors.inkFaint },
-                ]}
-              >
-                <Feather name="terminal" size={16} color={colors.inkSoft} />
-                <Text style={[styles.rawModalTitle, { color: colors.ink }]}>
-                  Raw XML
-                </Text>
-                <TouchableOpacity
-                  onPress={() => setRawXmlItem(null)}
-                  hitSlop={8}
-                  accessibilityLabel="Close raw XML"
-                >
-                  <Feather name="x" size={18} color={colors.inkSoft} />
-                </TouchableOpacity>
-              </View>
-              <ScrollView
-                style={styles.rawModalScroll}
-                contentContainerStyle={styles.rawModalContent}
-              >
-                <Text
-                  style={[styles.rawModalText, { color: colors.ink }]}
-                  selectable
-                >
-                  {rawXmlItem.raw_xml ?? "(no raw XML available)"}
-                </Text>
-              </ScrollView>
-            </View>
-          </View>
-        ) : null}
-      </Modal>
     </View>
   );
 }
@@ -551,41 +488,5 @@ const styles = StyleSheet.create({
   fetchBtnText: {
     fontWeight: "600",
     fontFamily: fonts.sans,
-  },
-  rawModalOverlay: {
-    flex: 1,
-    justifyContent: "flex-end",
-  },
-  rawModalSheet: {
-    maxHeight: "70%",
-    borderTopWidth: 1,
-    borderTopLeftRadius: radii.md,
-    borderTopRightRadius: radii.md,
-    overflow: "hidden",
-  },
-  rawModalHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-  },
-  rawModalTitle: {
-    flex: 1,
-    fontSize: fontSize.body,
-    fontFamily: fonts.sans,
-    fontWeight: "600",
-  },
-  rawModalScroll: {
-    flex: 1,
-  },
-  rawModalContent: {
-    padding: spacing.md,
-  },
-  rawModalText: {
-    fontSize: fontSize.meta,
-    fontFamily: fonts.mono,
-    lineHeight: 18,
   },
 });

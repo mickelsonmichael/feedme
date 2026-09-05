@@ -29,6 +29,17 @@ export const PUBLISHED_AT_SAMPLE_SIZE = 20;
  *  already well past the 24h cap. */
 export const MAX_BACKOFF_EXPONENT = 6;
 
+/** Response headers the freshness floor is derived from. */
+export type FreshnessHeaders = {
+  /** `Cache-Control` response header value, if any. */
+  cacheControl?: string | null;
+  /** `Expires` response header value, if any. */
+  expires?: string | null;
+  /** `Date` response header value. Used as the origin for `Expires` so a
+   *  device with a skewed clock doesn't mis-measure the lifetime. */
+  date?: string | null;
+};
+
 const clamp = (value: number, min: number, max: number): number =>
   Math.min(Math.max(value, min), max);
 
@@ -92,4 +103,69 @@ export function computeBackoffDelay(
   );
   const delay = base * Math.pow(2, exponent);
   return Math.min(delay, MAX_FETCH_INTERVAL_MS);
+}
+
+/**
+ * Computes how long a response stays fresh according to the server, in ms,
+ * or null when the server said nothing usable.
+ *
+ * The learned interval only models how often a feed *publishes*; it says
+ * nothing about how often the origin wants to be asked. A feed serving
+ * `Cache-Control: max-age=3600` is telling us plainly that a request inside
+ * the next hour is wasted work — for us and for them. Treating that as a
+ * floor on `next_fetch_at` is the cheapest rate-limit protection available,
+ * and it is what a real HTTP cache would do for free.
+ *
+ * Follows RFC 9111 §4.2.1 for the parts that apply to a private cache:
+ * `max-age` wins over `Expires`; `no-store`/`no-cache` mean "always
+ * revalidate", so they yield no floor at all; `s-maxage` is ignored, being
+ * directed at shared caches. The result is clamped to
+ * {@link MAX_FETCH_INTERVAL_MS} so a server cannot park a feed indefinitely.
+ *
+ * @param now Injectable clock, for deterministic tests.
+ */
+export function computeFreshnessLifetimeMs(
+  headers: FreshnessHeaders,
+  now: () => number = Date.now
+): number | null {
+  const cacheControl = headers.cacheControl?.toLowerCase() ?? "";
+
+  if (/(^|[\s,])(no-store|no-cache)([\s,;]|$)/.test(cacheControl)) {
+    return null;
+  }
+
+  const maxAge = cacheControl.match(/(?:^|[\s,])max-age\s*=\s*"?(\d+)"?/);
+  if (maxAge) {
+    const seconds = Number(maxAge[1]);
+    if (!Number.isFinite(seconds) || seconds <= 0) return null;
+    return Math.min(seconds * 1000, MAX_FETCH_INTERVAL_MS);
+  }
+
+  if (headers.expires) {
+    const expiresAt = new Date(headers.expires).getTime();
+    if (Number.isNaN(expiresAt)) return null;
+    // Measure against the server's own clock when it gave us one — the
+    // device clock can be minutes off, which would otherwise turn a short
+    // lifetime into a long one or vice versa.
+    const origin = headers.date ? new Date(headers.date).getTime() : NaN;
+    const lifetime = expiresAt - (Number.isNaN(origin) ? now() : origin);
+    if (lifetime <= 0) return null;
+    return Math.min(lifetime, MAX_FETCH_INTERVAL_MS);
+  }
+
+  return null;
+}
+
+/**
+ * Combines the learned publishing cadence with the server's declared
+ * freshness. Whichever asks us to wait longer wins: the feed is never
+ * contacted sooner than the origin said it should be, and a slow-publishing
+ * feed is not polled more eagerly just because the server allows it.
+ */
+export function computeNextFetchDelay(
+  learnedIntervalMs: number,
+  freshnessLifetimeMs: number | null
+): number {
+  if (freshnessLifetimeMs === null) return learnedIntervalMs;
+  return Math.max(learnedIntervalMs, freshnessLifetimeMs);
 }

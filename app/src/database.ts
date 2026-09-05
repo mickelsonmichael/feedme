@@ -4,6 +4,7 @@ import {
   CustomFeedWithMemberCount,
   Feed,
   FeedItem,
+  FeedRefreshResult,
   FeedItemWithFeed,
   ItemsPageOptions,
   ParsedFeedItem,
@@ -12,7 +13,11 @@ import {
   Tag,
   TagWithFeedCount,
 } from "./types";
-import { isRedditCommentRawXml } from "./redditUtils";
+import {
+  buildItemInsertSql,
+  buildItemInsertValues,
+  chunkForInsert,
+} from "./itemInsertBatch";
 
 // Serialises all write operations on the shared SQLite connection.
 // Prevents concurrent writes from racing and leaving the DB in an
@@ -105,6 +110,7 @@ async function initializeSchema(
       url TEXT,
       content TEXT,
       image_url TEXT,
+      is_reddit_comment INTEGER NOT NULL DEFAULT 0,
       published_at INTEGER,
       read INTEGER NOT NULL DEFAULT 0,
       FOREIGN KEY (feed_id) REFERENCES feeds(id) ON DELETE CASCADE,
@@ -180,11 +186,38 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
-  // Migration: add raw_xml column to items if it doesn't exist yet
+  // Migration: replace the stored raw_xml blob with the one bit of it we
+  // actually consult. raw_xml held the full source XML of every item — a
+  // second copy of every feed body, written on every refresh — purely so a
+  // debugging view could display it, plus the Reddit comment check below.
+  // The debugging view is gone; the check survives as a flag.
   try {
-    await database.execAsync("ALTER TABLE items ADD COLUMN raw_xml TEXT");
+    await database.execAsync(
+      "ALTER TABLE items ADD COLUMN is_reddit_comment INTEGER NOT NULL DEFAULT 0"
+    );
   } catch {
     // Column already exists — ignore
+  }
+
+  // Backfill the flag from any raw_xml still on disk, then drop the column.
+  // Reddit's Atom `<id>` encodes the fullname kind prefix (`t1_` = comment),
+  // matching `isRedditCommentRawXml`. GLOB is case-sensitive and treats `_`
+  // literally, so it matches the real payload exactly rather than LIKE's
+  // single-character wildcard. Both spacing variants are covered.
+  try {
+    await database.execAsync(
+      `UPDATE items SET is_reddit_comment = 1
+       WHERE raw_xml IS NOT NULL
+         AND (raw_xml GLOB '*<id>t1_*' OR raw_xml GLOB '*<id> *t1_*')`
+    );
+  } catch {
+    // Column already dropped on a previous launch — nothing to backfill.
+  }
+  try {
+    await database.execAsync("ALTER TABLE items DROP COLUMN raw_xml");
+  } catch {
+    // Already dropped, or the SQLite build predates DROP COLUMN. Harmless
+    // either way: nothing writes the column any more.
   }
 
   // Migration: add use_proxy column to feeds if it doesn't exist yet
@@ -531,69 +564,60 @@ export async function setFeedError(
   );
 }
 
-export async function updateFeedCacheValidators(
-  feedId: number,
-  etag: string | null,
-  lastModified: string | null
-): Promise<void> {
-  const database = await getDatabase();
-  await withWriteLock(() =>
-    database.runAsync(
-      "UPDATE feeds SET etag = ?, last_modified = ? WHERE id = ?",
-      [etag, lastModified, feedId]
-    )
-  );
-}
-
-/** Persist the most recent rate-limit headers for a feed.  Pass `null` to
- *  clear the stored info (e.g. on a clean success after a previous 429). */
-export async function updateFeedRateLimitInfo(
-  feedId: number,
-  info: string | null
-): Promise<void> {
-  const database = await getDatabase();
-  await withWriteLock(() =>
-    database.runAsync("UPDATE feeds SET rate_limit_info = ? WHERE id = ?", [
-      info,
-      feedId,
-    ])
-  );
-}
-
 /**
- * Persist the post-success state for a feed: clear the failure counter,
- * remember the learned base interval, and schedule the next eligible
- * refresh. Called from `refreshFeeds` for both 200 and 304 outcomes.
+ * Persist the outcome of a refresh attempt for `feedId` in one write.
  */
-export async function setFeedRefreshSuccess(
+export async function recordFeedRefreshResult(
   feedId: number,
-  fetchIntervalMs: number,
-  nextFetchAt: number
+  result: FeedRefreshResult
 ): Promise<void> {
   const database = await getDatabase();
-  await withWriteLock(() =>
-    database.runAsync(
-      "UPDATE feeds SET fetch_interval_ms = ?, consecutive_failures = 0, next_fetch_at = ? WHERE id = ?",
-      [fetchIntervalMs, nextFetchAt, feedId]
-    )
-  );
-}
 
-/**
- * Persist the post-failure state for a feed: bump `consecutive_failures`
- * and push out `next_fetch_at` according to the caller's already-computed
- * exponential backoff.
- */
-export async function setFeedRefreshFailure(
-  feedId: number,
-  consecutiveFailures: number,
-  nextFetchAt: number
-): Promise<void> {
-  const database = await getDatabase();
+  const assignments: string[] = [
+    "consecutive_failures = ?",
+    "next_fetch_at = ?",
+  ];
+  const params: SQLite.SQLiteBindValue[] = [
+    result.consecutiveFailures,
+    result.nextFetchAt,
+  ];
+
+  if (result.error !== undefined) {
+    assignments.push("error = ?");
+    params.push(result.error);
+  }
+
+  const counter = result.success
+    ? "fetch_success_count"
+    : "fetch_failure_count";
+  assignments.push(`${counter} = ${counter} + 1`);
+
+  if (result.lastFetched !== undefined) {
+    assignments.push("last_fetched = ?");
+    params.push(result.lastFetched);
+  }
+  if (result.etag !== undefined) {
+    assignments.push("etag = ?");
+    params.push(result.etag);
+  }
+  if (result.lastModified !== undefined) {
+    assignments.push("last_modified = ?");
+    params.push(result.lastModified);
+  }
+  if (result.rateLimitInfo !== undefined) {
+    assignments.push("rate_limit_info = ?");
+    params.push(result.rateLimitInfo);
+  }
+  if (result.fetchIntervalMs !== undefined) {
+    assignments.push("fetch_interval_ms = ?");
+    params.push(result.fetchIntervalMs);
+  }
+
+  params.push(feedId);
   await withWriteLock(() =>
     database.runAsync(
-      "UPDATE feeds SET consecutive_failures = ?, next_fetch_at = ? WHERE id = ?",
-      [consecutiveFailures, nextFetchAt, feedId]
+      `UPDATE feeds SET ${assignments.join(", ")} WHERE id = ?`,
+      params
     )
   );
 }
@@ -704,7 +728,7 @@ export async function getFeedItemWithFeedById(
   const database = await getDatabase();
   const row = await database.getFirstAsync<FeedItemWithFeed>(
     `SELECT items.id, items.feed_id, items.title, items.url, items.content,
-            items.image_url, items.raw_xml, items.published_at, items.read,
+            items.image_url, items.published_at, items.read,
             feeds.title AS feed_title
      FROM items
      JOIN feeds ON feeds.id = items.feed_id
@@ -826,9 +850,7 @@ export async function getAverageViewTimeForFeed(
 
 export async function getAllItems(): Promise<FeedItemWithFeed[]> {
   const database = await getDatabase();
-  // Skip raw_xml in the global list view: it can be tens of KB per row and is
-  // only needed by the per-feed raw XML modal, which loads it on demand.
-  const rows = await database.getAllAsync<Omit<FeedItemWithFeed, "raw_xml">>(
+  const rows = await database.getAllAsync<FeedItemWithFeed>(
     `SELECT items.id, items.feed_id, items.title, items.url, items.content,
             items.image_url, items.published_at, items.read,
             feeds.title AS feed_title
@@ -836,7 +858,7 @@ export async function getAllItems(): Promise<FeedItemWithFeed[]> {
      JOIN feeds ON items.feed_id = feeds.id
      ORDER BY items.published_at DESC`
   );
-  return rows.map((row) => ({ ...row, raw_xml: null }));
+  return rows;
 }
 
 export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
@@ -895,7 +917,7 @@ export async function getItemsPage(
   // adjustments only ever push items later, so rank-major paging never leaves
   // an item unloaded that should have displayed earlier.
   // Note: SQLite sorts NULLs last under DESC, matching the client sort.
-  const rows = await database.getAllAsync<Omit<FeedItemWithFeed, "raw_xml">>(
+  const rows = await database.getAllAsync<FeedItemWithFeed>(
     order === "stacked"
       ? `SELECT id, feed_id, title, url, content, image_url, published_at,
                 read, feed_title
@@ -923,7 +945,7 @@ export async function getItemsPage(
          LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
-  return rows.map((row) => ({ ...row, raw_xml: null }));
+  return rows;
 }
 
 export async function upsertItems(
@@ -932,48 +954,28 @@ export async function upsertItems(
 ): Promise<void> {
   if (items.length === 0) return;
   const database = await getDatabase();
-  let statement: SQLite.SQLiteStatement;
-  try {
-    statement = await database.prepareAsync(
-      `INSERT INTO items (feed_id, title, url, content, image_url, raw_xml, published_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (feed_id, url) DO UPDATE SET
-       title = excluded.title,
-       content = excluded.content,
-       image_url = excluded.image_url,
-       raw_xml = excluded.raw_xml,
-       published_at = excluded.published_at`
-    );
-  } catch (err) {
-    // If preparing the statement fails (e.g. a transient native NPE from
-    // expo-sqlite after Fast Refresh or a stale handle), drop the cached
-    // connection so the next caller re-opens the DB cleanly.
-    if (dbPromise) dbPromise = null;
-    throw err;
-  }
+
+  // One multi-row statement per batch instead of one per item. See
+  // `itemInsertBatch.ts` for why the per-statement round-trip is what costs.
+  const batches = chunkForInsert(items);
+
   try {
     await withWriteLock(() =>
       database.withTransactionAsync(async () => {
-        for (const item of items) {
-          await statement.executeAsync([
-            feedId,
-            item.title,
-            item.url ?? null,
-            item.content ?? null,
-            item.imageUrl ?? null,
-            item.rawXml ?? null,
-            item.publishedAt ?? null,
-          ]);
+        for (const batch of batches) {
+          await database.runAsync(
+            buildItemInsertSql(batch.length),
+            buildItemInsertValues(feedId, batch)
+          );
         }
       })
     );
-  } finally {
-    try {
-      await statement.finalizeAsync();
-    } catch {
-      // Finalising a statement on a broken connection can itself throw —
-      // swallow so we don't mask the original error.
-    }
+  } catch (err) {
+    // A transient native failure (e.g. an NPE from expo-sqlite after Fast
+    // Refresh, or a stale handle) can leave the cached connection unusable —
+    // drop it so the next caller re-opens the DB cleanly.
+    if (dbPromise) dbPromise = null;
+    throw err;
   }
 }
 
@@ -987,33 +989,12 @@ export async function upsertItems(
  */
 export async function deleteRedditCommentItems(feedId: number): Promise<void> {
   const database = await getDatabase();
-  const rows = await database.getAllAsync<{
-    id: number;
-    raw_xml: string | null;
-  }>(
-    "SELECT id, raw_xml FROM items WHERE feed_id = ? AND raw_xml IS NOT NULL",
-    [feedId]
-  );
-  const idsToDelete = rows
-    .filter((row) => isRedditCommentRawXml(row.raw_xml))
-    .map((row) => row.id);
-  if (idsToDelete.length === 0) return;
-  const placeholders = idsToDelete.map(() => "?").join(",");
   await withWriteLock(() =>
     database.runAsync(
-      `DELETE FROM items WHERE id IN (${placeholders})`,
-      idsToDelete
+      "DELETE FROM items WHERE feed_id = ? AND is_reddit_comment = 1",
+      [feedId]
     )
   );
-}
-
-export async function getItemRawXml(itemId: number): Promise<string | null> {
-  const database = await getDatabase();
-  const row = await database.getFirstAsync<{ raw_xml: string | null }>(
-    "SELECT raw_xml FROM items WHERE id = ?",
-    [itemId]
-  );
-  return row?.raw_xml ?? null;
 }
 
 export async function markItemRead(itemId: number): Promise<void> {

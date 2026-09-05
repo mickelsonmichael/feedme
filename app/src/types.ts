@@ -94,7 +94,11 @@ export type FeedItem = {
   url: string | null;
   content: string | null;
   image_url: string | null;
-  raw_xml: string | null;
+  /** Storage-level flag: 1 when the item is a Reddit comment rather than a
+   *  submitted post, so the "include comments" cleanup can find it without
+   *  re-parsing. Only populated on rows read with `SELECT *`; the list
+   *  queries select explicit columns and leave it undefined. */
+  is_reddit_comment?: number;
   published_at: number | null;
   read: number;
 };
@@ -153,11 +157,48 @@ export type ReadLaterPost = {
   added_at: number;
 };
 
+/**
+ * The complete result of one feed refresh attempt, written in a single
+ * statement.
+ *
+ * Each of these fields used to be its own `UPDATE feeds ...` call, so a
+ * successful refresh cost six round-trips to native SQLite and six separate
+ * acquisitions of the global write lock — all of it while the feed still
+ * occupied one of the refresher's concurrency slots. Undefined means "leave
+ * this column alone", which is what lets a 304 keep its existing validators
+ * and a failure keep its existing `last_fetched`.
+ */
+export type FeedRefreshResult = {
+  /** Drives the cumulative counters behind the feed detail stats panel. */
+  success: boolean;
+  /** Message to store, or null to clear a previous error. Omitted when the
+   *  attempt gave no verdict on the feed's health — a wall-clock timeout
+   *  leaves the existing message alone for the in-flight fetch to settle. */
+  error?: string | null;
+  /** Epoch ms. Omitted on failure so the column keeps the last good value. */
+  lastFetched?: number;
+  /** Omitted on a 304: the validators we already hold are still current. */
+  etag?: string | null;
+  lastModified?: string | null;
+  /** JSON snapshot of rate-limit headers. Omitted when none were seen. */
+  rateLimitInfo?: string | null;
+  /** Learned base interval. Success only. */
+  fetchIntervalMs?: number;
+  /** Post-attempt failure streak — 0 on success. */
+  consecutiveFailures: number;
+  /** When this feed next becomes eligible for a refresh. */
+  nextFetchAt: number;
+};
+
 export type ParsedFeedItem = {
   title: string;
   url: string | null;
   content: string | null;
   imageUrl?: string | null;
+  /** The item's source XML block. Held in memory for the duration of a refresh
+   *  only — it feeds the Reddit comment detection in `redditUtils` and is
+   *  never persisted. Storing it cost roughly a second copy of every feed body
+   *  on every refresh, for a debugging view that no longer exists. */
   rawXml?: string | null;
   publishedAt: number | null;
 };
@@ -187,7 +228,6 @@ export type RootStackParamList = {
   TagDetail: { tagId?: number; from?: string } | undefined;
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
-  RawXml: { rawXml: string | null; title?: string };
   FeedError: { error: string; feedTitle?: string };
 };
 
@@ -218,7 +258,6 @@ export type TabParamList = {
   TagDetail: { tagId?: number; from?: string } | undefined;
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
-  RawXml: { rawXml: string | null; title?: string };
   FeedError: { error: string; feedTitle?: string };
 };
 

@@ -25,7 +25,6 @@ import {
   getFeedByUrl,
   getFeedItemWithFeedById,
 } from "../database";
-import { getItemRawXml } from "../database";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedItem, RootStackParamList } from "../types";
@@ -134,18 +133,6 @@ export default function FeedItemScreen({ route, navigation }: Props) {
     });
   };
 
-  const handleViewXml = async () => {
-    let rawXml: string | null = null;
-    if (item.itemId != null) {
-      try {
-        rawXml = await getItemRawXml(item.itemId);
-      } catch {
-        // Fetch failure — navigate anyway to show the empty state
-      }
-    }
-    navigation.navigate("RawXml", { rawXml, title: item.title ?? "Raw XML" });
-  };
-
   const handleOpenContentLink = (url: string) => {
     openUrlWithPreference({ url, navigation, title: item.title });
   };
@@ -183,7 +170,6 @@ export default function FeedItemScreen({ route, navigation }: Props) {
           url: item.url,
           content: item.content,
           image_url: item.imageUrl,
-          raw_xml: null,
           published_at: item.publishedAt,
           read: 1,
         };
@@ -234,7 +220,6 @@ export default function FeedItemScreen({ route, navigation }: Props) {
           url: item.url,
           content: item.content,
           image_url: item.imageUrl,
-          raw_xml: null,
           published_at: item.publishedAt,
           read: read ? 1 : 0,
         };
@@ -391,23 +376,6 @@ export default function FeedItemScreen({ route, navigation }: Props) {
                 ]}
               >
                 {readLater ? "Remove from Later" : "Read Later"}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.moreMenuItem,
-                { borderBottomColor: colors.border },
-              ]}
-              onPress={() => {
-                handleViewXml();
-                setShowMoreMenu(false);
-              }}
-              activeOpacity={0.7}
-            >
-              <Feather name="code" size={16} color={colors.ink} />
-              <Text style={[styles.moreMenuItemText, { color: colors.ink }]}>
-                View XML
               </Text>
             </TouchableOpacity>
 

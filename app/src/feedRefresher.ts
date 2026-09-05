@@ -7,6 +7,8 @@ import {
 import {
   computeBackoffDelay,
   computeBaseInterval,
+  computeFreshnessLifetimeMs,
+  computeNextFetchDelay,
   DEFAULT_FETCH_INTERVAL_MS,
   PUBLISHED_AT_SAMPLE_SIZE,
 } from "./feedSchedule";
@@ -14,14 +16,8 @@ import {
   deleteRedditCommentItems,
   getItemCountForFeed,
   getRecentPublishedAtForFeed,
-  recordFeedFetchOutcome,
-  setFeedError,
-  setFeedRefreshFailure,
-  setFeedRefreshSuccess,
+  recordFeedRefreshResult,
   upsertItems,
-  updateFeedCacheValidators,
-  updateFeedLastFetched,
-  updateFeedRateLimitInfo,
 } from "./database";
 import {
   filterExcludedRedditComments,
@@ -216,44 +212,51 @@ export async function refreshFeeds(
             lastModified: feed.last_modified ?? null,
           }
         );
-        if (fetched.notModified) {
-          // Upstream confirms the feed is unchanged. Bump last_fetched and
-          // clear any prior error, but leave items and validators alone.
-          await updateFeedLastFetched(feed.id);
-          await setFeedError(feed.id, null);
-          if (fetched.rateLimitHeaders) {
-            await updateFeedRateLimitInfo(
-              feed.id,
-              serializeRateLimitHeaders(fetched.rateLimitHeaders)
-            );
-          }
-          await scheduleNextSuccess(feed);
-          await recordFeedFetchOutcome(feed.id, true);
-          succeeded += 1;
-          return;
-        }
-        const includedItems = filterExcludedRedditComments(feed, fetched.items);
-        await upsertItems(feed.id, includedItems.slice(0, MAX_ITEMS_PER_FEED));
-        if (shouldExcludeRedditComments(feed)) {
-          await deleteRedditCommentItems(feed.id);
-        }
-        await updateFeedCacheValidators(
-          feed.id,
-          fetched.etag ?? null,
-          fetched.lastModified ?? null
-        );
-        await updateFeedLastFetched(feed.id);
-        await setFeedError(feed.id, null);
-        if (fetched.rateLimitHeaders) {
-          await updateFeedRateLimitInfo(
-            feed.id,
-            serializeRateLimitHeaders(fetched.rateLimitHeaders)
+
+        if (!fetched.notModified) {
+          const includedItems = filterExcludedRedditComments(
+            feed,
+            fetched.items
           );
+          await upsertItems(
+            feed.id,
+            includedItems.slice(0, MAX_ITEMS_PER_FEED)
+          );
+          if (shouldExcludeRedditComments(feed)) {
+            await deleteRedditCommentItems(feed.id);
+          }
         }
-        await scheduleNextSuccess(feed);
-        await recordFeedFetchOutcome(feed.id, true);
+
+        const interval = await learnFetchInterval(feed);
+        // The learned interval models how often the feed publishes; the
+        // response headers say how often the origin wants to be asked. Wait
+        // for whichever is longer.
+        const delay = computeNextFetchDelay(
+          interval,
+          computeFreshnessLifetimeMs(fetched.freshness ?? {})
+        );
+        await recordFeedRefreshResult(feed.id, {
+          success: true,
+          error: null,
+          lastFetched: Date.now(),
+          // A 304 confirms the validators we already hold are still current,
+          // so leave them untouched rather than overwriting them with what
+          // the (bodiless) response happened to echo back.
+          ...(fetched.notModified
+            ? {}
+            : {
+                etag: fetched.etag ?? null,
+                lastModified: fetched.lastModified ?? null,
+              }),
+          // The stored interval stays the learned cadence — the server's
+          // freshness window applies to this fetch, not to what the feed is.
+          fetchIntervalMs: interval,
+          consecutiveFailures: 0,
+          nextFetchAt: Date.now() + delay,
+        });
         succeeded += 1;
       } catch (error) {
+        let rateLimitInfo: string | undefined;
         if (error instanceof RateLimitError) {
           // Propagate the rate limit to all feeds on the same host so
           // concurrent and subsequent workers — in this run and any run
@@ -266,21 +269,22 @@ export async function refreshFeeds(
             hostRateLimits.set(host, Date.now() + delayMs);
             strictHosts.add(host);
           }
-          await updateFeedRateLimitInfo(
-            feed.id,
-            serializeRateLimitHeaders(error.rateLimitHeaders)
-          );
+          rateLimitInfo = serializeRateLimitHeaders(error.rateLimitHeaders);
         }
         const cachedItemCount = await getItemCountForFeed(feed.id);
         const fallbackSuffix =
           cachedItemCount > 0 ? " Showing cached posts." : "";
-        await setFeedError(
-          feed.id,
-          `${(error as Error).message}${fallbackSuffix}`
-        );
         options.onFeedFailure?.(feed, error as Error);
-        await scheduleNextFailure(feed);
-        await recordFeedFetchOutcome(feed.id, false);
+
+        const failures = (feed.consecutive_failures ?? 0) + 1;
+        await recordFeedRefreshResult(feed.id, {
+          success: false,
+          error: `${(error as Error).message}${fallbackSuffix}`,
+          ...(rateLimitInfo !== undefined ? { rateLimitInfo } : {}),
+          consecutiveFailures: failures,
+          nextFetchAt:
+            Date.now() + computeBackoffDelay(feed.fetch_interval_ms, failures),
+        });
         failed += 1;
       }
     })();
@@ -307,8 +311,13 @@ export async function refreshFeeds(
       // acceptable: a slow-but-eventually-successful fetch will reset the
       // counter when it lands.
       try {
-        await scheduleNextFailure(feed);
-        await recordFeedFetchOutcome(feed.id, false);
+        const failures = (feed.consecutive_failures ?? 0) + 1;
+        await recordFeedRefreshResult(feed.id, {
+          success: false,
+          consecutiveFailures: failures,
+          nextFetchAt:
+            Date.now() + computeBackoffDelay(feed.fetch_interval_ms, failures),
+        });
       } catch {
         // Best-effort: never let scheduling errors mask the timeout itself.
       }
@@ -384,29 +393,19 @@ export async function refreshFeeds(
   return failed;
 }
 
-/** Recompute the learned base interval from the feed's current items and
- *  push out `next_fetch_at` accordingly. */
-async function scheduleNextSuccess(feed: Feed): Promise<void> {
-  let interval = DEFAULT_FETCH_INTERVAL_MS;
+/** Recompute the learned base interval from the feed's current items. */
+async function learnFetchInterval(feed: Feed): Promise<number> {
   try {
     const stamps = await getRecentPublishedAtForFeed(
       feed.id,
       PUBLISHED_AT_SAMPLE_SIZE
     );
-    interval = computeBaseInterval(stamps);
+    return computeBaseInterval(stamps);
   } catch {
     // If the items lookup fails we still want to schedule something
     // sensible — fall through with the default interval.
+    return DEFAULT_FETCH_INTERVAL_MS;
   }
-  await setFeedRefreshSuccess(feed.id, interval, Date.now() + interval);
-}
-
-/** Bump `consecutive_failures` and apply exponential backoff to
- *  `next_fetch_at`. */
-async function scheduleNextFailure(feed: Feed): Promise<void> {
-  const failures = (feed.consecutive_failures ?? 0) + 1;
-  const delay = computeBackoffDelay(feed.fetch_interval_ms, failures);
-  await setFeedRefreshFailure(feed.id, failures, Date.now() + delay);
 }
 
 /** Serialize rate-limit headers to the JSON string stored in `rate_limit_info`. */

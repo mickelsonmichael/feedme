@@ -1,6 +1,8 @@
 import {
   computeBackoffDelay,
   computeBaseInterval,
+  computeFreshnessLifetimeMs,
+  computeNextFetchDelay,
   DEFAULT_FETCH_INTERVAL_MS,
   MAX_FETCH_INTERVAL_MS,
   MIN_FETCH_INTERVAL_MS,
@@ -86,5 +88,170 @@ describe("computeBackoffDelay", () => {
 
   it("never exceeds the 24h ceiling even with a large base interval", () => {
     expect(computeBackoffDelay(12 * HOUR, 5)).toBe(MAX_FETCH_INTERVAL_MS);
+  });
+});
+
+describe("computeFreshnessLifetimeMs", () => {
+  const NOW = new Date("2026-01-01T12:00:00Z").getTime();
+  const now = () => NOW;
+
+  it("returns null when the server declared nothing", () => {
+    // Arrange / Act / Assert
+    expect(computeFreshnessLifetimeMs({}, now)).toBeNull();
+  });
+
+  it("reads max-age from Cache-Control", () => {
+    // Arrange / Act
+    const lifetime = computeFreshnessLifetimeMs(
+      { cacheControl: "public, max-age=3600" },
+      now
+    );
+
+    // Assert
+    expect(lifetime).toBe(HOUR);
+  });
+
+  it("reads max-age regardless of casing and spacing", () => {
+    // Arrange — servers are inconsistent about both
+    // Act / Assert
+    expect(
+      computeFreshnessLifetimeMs({ cacheControl: "Max-Age = 60" }, now)
+    ).toBe(60_000);
+  });
+
+  it("ignores s-maxage, which is addressed to shared caches", () => {
+    // Arrange / Act
+    const lifetime = computeFreshnessLifetimeMs(
+      { cacheControl: "public, s-maxage=86400" },
+      now
+    );
+
+    // Assert
+    expect(lifetime).toBeNull();
+  });
+
+  it("yields no floor when the server demands revalidation", () => {
+    // Arrange / Act / Assert
+    expect(
+      computeFreshnessLifetimeMs({ cacheControl: "no-cache" }, now)
+    ).toBeNull();
+    expect(
+      computeFreshnessLifetimeMs({ cacheControl: "no-store, max-age=600" }, now)
+    ).toBeNull();
+  });
+
+  it("yields no floor for max-age=0", () => {
+    // Arrange / Act / Assert
+    expect(
+      computeFreshnessLifetimeMs({ cacheControl: "max-age=0" }, now)
+    ).toBeNull();
+  });
+
+  it("falls back to Expires when there is no max-age", () => {
+    // Arrange / Act
+    const lifetime = computeFreshnessLifetimeMs(
+      {
+        expires: "Thu, 01 Jan 2026 14:00:00 GMT",
+        date: "Thu, 01 Jan 2026 12:00:00 GMT",
+      },
+      now
+    );
+
+    // Assert
+    expect(lifetime).toBe(2 * HOUR);
+  });
+
+  it("measures Expires against the server's Date, not the device clock", () => {
+    // Arrange — device clock running an hour fast
+    const skewed = () => NOW + HOUR;
+
+    // Act
+    const lifetime = computeFreshnessLifetimeMs(
+      {
+        expires: "Thu, 01 Jan 2026 14:00:00 GMT",
+        date: "Thu, 01 Jan 2026 12:00:00 GMT",
+      },
+      skewed
+    );
+
+    // Assert — still the two hours the server meant
+    expect(lifetime).toBe(2 * HOUR);
+  });
+
+  it("falls back to the device clock when the server sent no Date", () => {
+    // Arrange / Act
+    const lifetime = computeFreshnessLifetimeMs(
+      { expires: "Thu, 01 Jan 2026 13:00:00 GMT" },
+      now
+    );
+
+    // Assert
+    expect(lifetime).toBe(HOUR);
+  });
+
+  it("prefers max-age over Expires", () => {
+    // Arrange / Act
+    const lifetime = computeFreshnessLifetimeMs(
+      {
+        cacheControl: "max-age=60",
+        expires: "Thu, 01 Jan 2026 23:00:00 GMT",
+        date: "Thu, 01 Jan 2026 12:00:00 GMT",
+      },
+      now
+    );
+
+    // Assert
+    expect(lifetime).toBe(60_000);
+  });
+
+  it("yields no floor for an already-elapsed Expires", () => {
+    // Arrange / Act
+    const lifetime = computeFreshnessLifetimeMs(
+      {
+        expires: "Thu, 01 Jan 2026 11:00:00 GMT",
+        date: "Thu, 01 Jan 2026 12:00:00 GMT",
+      },
+      now
+    );
+
+    // Assert
+    expect(lifetime).toBeNull();
+  });
+
+  it("yields no floor for an unparseable Expires", () => {
+    // Arrange / Act / Assert
+    expect(
+      computeFreshnessLifetimeMs({ expires: "not a date" }, now)
+    ).toBeNull();
+  });
+
+  it("never lets a server park a feed beyond the 24h ceiling", () => {
+    // Arrange / Act
+    const lifetime = computeFreshnessLifetimeMs(
+      { cacheControl: "max-age=604800" },
+      now
+    );
+
+    // Assert
+    expect(lifetime).toBe(MAX_FETCH_INTERVAL_MS);
+  });
+});
+
+describe("computeNextFetchDelay", () => {
+  it("uses the learned interval when the server declared nothing", () => {
+    // Arrange / Act / Assert
+    expect(computeNextFetchDelay(HOUR, null)).toBe(HOUR);
+  });
+
+  it("waits out a freshness window longer than the learned interval", () => {
+    // Arrange — a feed that publishes hourly but asks for 6h of cache
+    // Act / Assert
+    expect(computeNextFetchDelay(HOUR, 6 * HOUR)).toBe(6 * HOUR);
+  });
+
+  it("does not poll faster than the learned cadence for a permissive server", () => {
+    // Arrange — a chatty cache header must not override the learned interval
+    // Act / Assert
+    expect(computeNextFetchDelay(6 * HOUR, 60_000)).toBe(6 * HOUR);
   });
 });

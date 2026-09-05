@@ -1,5 +1,6 @@
 import { ParsedFeedItem } from "./types";
 import { buildProxyRequestUrl, isLikelyCorsBlockedError } from "./proxyFetch";
+import { FreshnessHeaders } from "./feedSchedule";
 
 export type FetchFeedResult = {
   items: ParsedFeedItem[];
@@ -11,10 +12,11 @@ export type FetchFeedResult = {
   etag?: string | null;
   /** Latest `Last-Modified` response header from a 200 response, if any. */
   lastModified?: string | null;
-  /** Rate-limit headers captured from a 429 response encountered during this
-   *  fetch cycle (even if we eventually succeeded after retrying). Present
-   *  whenever at least one 429 was received; `null` otherwise. */
-  rateLimitHeaders?: RateLimitHeaders | null;
+  /** `Cache-Control`, `Expires` and `Date` from the response. The scheduler
+   *  turns these into a floor on when the feed may next be contacted, so a
+   *  server that declares its own freshness is not polled through it. Sent on
+   *  304s too, and honoured there. */
+  freshness?: FreshnessHeaders;
 };
 
 /** Rate-limiting metadata extracted from a 429 response. */
@@ -33,8 +35,14 @@ export type RateLimitHeaders = {
   capturedAt: number;
 };
 
-/** Thrown when a feed URL responds with HTTP 429 Too Many Requests and all
- *  retry attempts have been exhausted. */
+/** Thrown when a feed URL responds with HTTP 429 Too Many Requests.
+ *
+ *  Deliberately not retried here. A 429 is the server saying "stop", and
+ *  retrying it in-band held both a global refresh slot and the host's only
+ *  slot for up to 16 seconds while sending requests the server had already
+ *  refused. The refresher handles it properly instead: it records the
+ *  `Retry-After` against the whole host and skips every feed there until it
+ *  expires. */
 export class RateLimitError extends Error {
   constructor(public readonly rateLimitHeaders: RateLimitHeaders) {
     super("Rate limited (429 Too Many Requests)");
@@ -53,11 +61,6 @@ export type FetchFeedOptions = {
 };
 
 const FETCH_TIMEOUT_MS = 10_000;
-/** Maximum number of times to retry a 429 response before giving up. */
-const MAX_RATE_LIMIT_RETRIES = 2;
-/** Hard cap on how long (ms) we will wait before a single retry when the user
- *  is actively waiting for the refresh to complete. */
-const MAX_RETRY_DELAY_MS = 8_000;
 /** Maximum number of automatic retries for transient network errors (timeouts
  *  and connection failures), which are common on mobile radios. */
 const MAX_TRANSIENT_RETRIES = 1;
@@ -77,22 +80,6 @@ function isTransientNetworkError(error: unknown): boolean {
 }
 
 /**
- * Returns the delay in ms to wait before the next retry after a 429.
- * Honors `Retry-After` (capped at MAX_RETRY_DELAY_MS) when present;
- * otherwise applies exponential backoff: 1 s, 2 s, 4 s, …
- */
-function computeRetryDelay(headers: RateLimitHeaders, attempt: number): number {
-  if (headers.retryAfter !== null) {
-    const secs = Number(headers.retryAfter);
-    if (Number.isFinite(secs) && secs > 0) {
-      return Math.min(secs * 1000, MAX_RETRY_DELAY_MS);
-    }
-    // HTTP-date form of Retry-After: fall through to backoff
-  }
-  return Math.min(1000 * Math.pow(2, attempt), MAX_RETRY_DELAY_MS);
-}
-
-/**
  * Fetches and parses an RSS/Atom feed URL.
  * Returns an array of { title, url, content, publishedAt } items.
  */
@@ -109,6 +96,7 @@ type XhrResult = {
   body: string;
   etag: string | null;
   lastModified: string | null;
+  freshness: FreshnessHeaders;
 };
 
 export async function fetchFeedWithMeta(
@@ -142,8 +130,13 @@ export async function fetchFeedWithMeta(
       xhr.onload = () => {
         const etag = xhr.getResponseHeader?.("ETag") ?? null;
         const lastModified = xhr.getResponseHeader?.("Last-Modified") ?? null;
+        const freshness: FreshnessHeaders = {
+          cacheControl: xhr.getResponseHeader?.("Cache-Control") ?? null,
+          expires: xhr.getResponseHeader?.("Expires") ?? null,
+          date: xhr.getResponseHeader?.("Date") ?? null,
+        };
         if (xhr.status === 304) {
-          resolve({ status: 304, body: "", etag, lastModified });
+          resolve({ status: 304, body: "", etag, lastModified, freshness });
           return;
         }
         if (xhr.status === 429) {
@@ -175,6 +168,7 @@ export async function fetchFeedWithMeta(
             body: xhr.responseText,
             etag,
             lastModified,
+            freshness,
           });
         } else {
           reject(
@@ -192,11 +186,7 @@ export async function fetchFeedWithMeta(
       xhr.send();
     });
 
-  const toResult = (
-    xhr: XhrResult,
-    usedProxy: boolean,
-    rateLimitHeaders?: RateLimitHeaders | null
-  ): FetchFeedResult => {
+  const toResult = (xhr: XhrResult, usedProxy: boolean): FetchFeedResult => {
     if (xhr.status === 304) {
       return {
         items: [],
@@ -206,7 +196,7 @@ export async function fetchFeedWithMeta(
         // in place. Some servers also re-send ETag/Last-Modified on 304s.
         etag: xhr.etag ?? options.etag ?? null,
         lastModified: xhr.lastModified ?? options.lastModified ?? null,
-        rateLimitHeaders: rateLimitHeaders ?? null,
+        freshness: xhr.freshness,
       };
     }
     return {
@@ -215,43 +205,23 @@ export async function fetchFeedWithMeta(
       notModified: false,
       etag: xhr.etag,
       lastModified: xhr.lastModified,
-      rateLimitHeaders: rateLimitHeaders ?? null,
+      freshness: xhr.freshness,
     };
   };
 
-  /** Retry a fetch call handling both 429 rate-limit and transient network
-   *  errors.  Rate-limit retries are capped at MAX_RATE_LIMIT_RETRIES;
-   *  transient retries (timeout / connection failure) are capped at
-   *  MAX_TRANSIENT_RETRIES. Returns the successful result along with the last
-   *  seen rate-limit headers (so the caller can persist them even on success). */
+  /** Retries only transient network errors (timeout / connection failure),
+   *  which are common on a mobile radio and usually clear on a second try.
+   *  A 429 is not transient — it propagates immediately so the caller can
+   *  back the whole host off. */
   const fetchWithRetry = async (
     fetchFn: () => Promise<XhrResult>
-  ): Promise<{
-    result: XhrResult;
-    rateLimitHeaders: RateLimitHeaders | null;
-  }> => {
-    let lastHeaders: RateLimitHeaders | null = null;
-    let rateLimitAttempt = 0;
+  ): Promise<XhrResult> => {
     let transientAttempt = 0;
     // eslint-disable-next-line no-constant-condition
     while (true) {
       try {
-        const result = await fetchFn();
-        return { result, rateLimitHeaders: lastHeaders };
+        return await fetchFn();
       } catch (err) {
-        if (
-          err instanceof RateLimitError &&
-          rateLimitAttempt < MAX_RATE_LIMIT_RETRIES
-        ) {
-          lastHeaders = err.rateLimitHeaders;
-          const delay = computeRetryDelay(
-            err.rateLimitHeaders,
-            rateLimitAttempt
-          );
-          rateLimitAttempt++;
-          await sleep(delay);
-          continue;
-        }
         if (
           isTransientNetworkError(err) &&
           transientAttempt < MAX_TRANSIENT_RETRIES
@@ -266,23 +236,14 @@ export async function fetchFeedWithMeta(
   };
 
   if (forceProxy && proxyUrl) {
-    const { result, rateLimitHeaders } = await fetchWithRetry(() =>
-      xhrFetch(proxyUrl)
-    );
-    return toResult(result, true, rateLimitHeaders);
+    return toResult(await fetchWithRetry(() => xhrFetch(proxyUrl)), true);
   }
 
   try {
-    const { result, rateLimitHeaders } = await fetchWithRetry(() =>
-      xhrFetch(feedUrl)
-    );
-    return toResult(result, false, rateLimitHeaders);
+    return toResult(await fetchWithRetry(() => xhrFetch(feedUrl)), false);
   } catch (error) {
     if (proxyUrl && isLikelyCorsBlockedError(error)) {
-      const { result, rateLimitHeaders } = await fetchWithRetry(() =>
-        xhrFetch(proxyUrl)
-      );
-      return toResult(result, true, rateLimitHeaders);
+      return toResult(await fetchWithRetry(() => xhrFetch(proxyUrl)), true);
     }
     throw error;
   }

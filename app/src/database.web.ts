@@ -15,6 +15,7 @@ import {
   CustomFeed,
   Feed,
   FeedItem,
+  FeedRefreshResult,
   FeedItemWithFeed,
   ItemsPageOptions,
   ParsedFeedItem,
@@ -402,59 +403,43 @@ export async function setFeedError(
   }
 }
 
-export async function updateFeedCacheValidators(
+/** Web mirror of the native single-statement refresh write. See
+ *  `FeedRefreshResult` in `types.ts` for the field semantics — undefined
+ *  means "leave this field alone". */
+export async function recordFeedRefreshResult(
   feedId: number,
-  etag: string | null,
-  lastModified: string | null
+  result: FeedRefreshResult
 ): Promise<void> {
   const state = loadState();
   const feed = state.feeds.find((f) => f.id === feedId);
-  if (feed) {
-    feed.etag = etag;
-    feed.last_modified = lastModified;
-    saveState(state);
-  }
-}
+  if (!feed) return;
 
-export async function updateFeedRateLimitInfo(
-  feedId: number,
-  info: string | null
-): Promise<void> {
-  const state = loadState();
-  const feed = state.feeds.find((f) => f.id === feedId);
-  if (feed) {
-    feed.rate_limit_info = info;
-    saveState(state);
+  if (result.error !== undefined) {
+    feed.error = result.error;
   }
-}
-
-export async function setFeedRefreshSuccess(
-  feedId: number,
-  fetchIntervalMs: number,
-  nextFetchAt: number
-): Promise<void> {
-  const state = loadState();
-  const feed = state.feeds.find((f) => f.id === feedId);
-  if (feed) {
-    feed.fetch_interval_ms = fetchIntervalMs;
-    feed.consecutive_failures = 0;
-    feed.next_fetch_at = nextFetchAt;
-    saveState(state);
+  feed.consecutive_failures = result.consecutiveFailures;
+  feed.next_fetch_at = result.nextFetchAt;
+  if (result.success) {
+    feed.fetch_success_count = (feed.fetch_success_count ?? 0) + 1;
+  } else {
+    feed.fetch_failure_count = (feed.fetch_failure_count ?? 0) + 1;
   }
-}
-
-export async function setFeedRefreshFailure(
-  feedId: number,
-  consecutiveFailures: number,
-  nextFetchAt: number
-): Promise<void> {
-  const state = loadState();
-  const feed = state.feeds.find((f) => f.id === feedId);
-  if (feed) {
-    feed.consecutive_failures = consecutiveFailures;
-    feed.next_fetch_at = nextFetchAt;
-    saveState(state);
+  if (result.lastFetched !== undefined) {
+    feed.last_fetched = result.lastFetched;
   }
+  if (result.etag !== undefined) {
+    feed.etag = result.etag;
+  }
+  if (result.lastModified !== undefined) {
+    feed.last_modified = result.lastModified;
+  }
+  if (result.rateLimitInfo !== undefined) {
+    feed.rate_limit_info = result.rateLimitInfo;
+  }
+  if (result.fetchIntervalMs !== undefined) {
+    feed.fetch_interval_ms = result.fetchIntervalMs;
+  }
+  saveState(state);
 }
 
 export async function recordFeedFetchOutcome(
@@ -693,7 +678,7 @@ export async function upsertItems(
         existing.title = item.title;
         existing.content = item.content ?? null;
         existing.image_url = item.imageUrl ?? null;
-        existing.raw_xml = item.rawXml ?? null;
+        existing.is_reddit_comment = isRedditCommentRawXml(item.rawXml) ? 1 : 0;
         existing.published_at = item.publishedAt ?? null;
         continue;
       }
@@ -706,7 +691,7 @@ export async function upsertItems(
       url: item.url ?? null,
       content: item.content ?? null,
       image_url: item.imageUrl ?? null,
-      raw_xml: item.rawXml ?? null,
+      is_reddit_comment: isRedditCommentRawXml(item.rawXml) ? 1 : 0,
       published_at: item.publishedAt ?? null,
       read: 0,
     });
@@ -727,12 +712,6 @@ export async function markItemRead(itemId: number): Promise<void> {
   saveState(state);
 }
 
-export async function getItemRawXml(itemId: number): Promise<string | null> {
-  const state = loadState();
-  const item = state.items.find((i) => i.id === itemId);
-  return item?.raw_xml ?? null;
-}
-
 /**
  * Deletes previously-stored items for `feedId` that are Reddit comment
  * entries (as opposed to submitted posts). Used to clean up items ingested
@@ -745,7 +724,7 @@ export async function deleteRedditCommentItems(feedId: number): Promise<void> {
   const state = loadState();
   const before = state.items.length;
   state.items = state.items.filter(
-    (item) => !(item.feed_id === feedId && isRedditCommentRawXml(item.raw_xml))
+    (item) => !(item.feed_id === feedId && item.is_reddit_comment === 1)
   );
   if (state.items.length !== before) {
     saveState(state);

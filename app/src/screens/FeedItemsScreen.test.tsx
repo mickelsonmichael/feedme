@@ -107,8 +107,6 @@ const mockItem = {
   content:
     '&lt;p&gt;Item content&lt;/p&gt; &lt;a href="https://example.com/direct"&gt;[link]&lt;/a&gt; &lt;a href="https://www.reddit.com/r/castiron/comments/1sw5l42/post/"&gt;[comments]&lt;/a&gt;',
   image_url: null,
-  raw_xml:
-    "<item><title>Test Item Title</title><link>https://example.com/item</link></item>",
   published_at: Date.now(),
   read: 0,
 };
@@ -126,7 +124,7 @@ function buildProps(): Props {
   };
 }
 
-describe("FeedItemsScreen – View Raw", () => {
+describe("FeedItemsScreen", () => {
   beforeEach(() => {
     (getItemsForFeed as jest.Mock).mockResolvedValue([mockItem]);
     (getSavedItemIdsForFeed as jest.Mock).mockResolvedValue(new Set<number>());
@@ -141,110 +139,6 @@ describe("FeedItemsScreen – View Raw", () => {
   afterEach(() => {
     jest.clearAllMocks();
     jest.useRealTimers();
-  });
-
-  it("renders a 'View raw XML' button for each feed item", async () => {
-    // Arrange
-    jest.useFakeTimers();
-    const props = buildProps();
-    let tree: renderer.ReactTestRenderer;
-
-    // Act
-    await act(async () => {
-      tree = renderer.create(<FeedItemsScreen {...props} />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    // Assert
-    const rawButton = tree!.root.findByProps({
-      accessibilityLabel: "View raw XML",
-    });
-    expect(rawButton).toBeTruthy();
-
-    await act(async () => {
-      tree!.unmount();
-      jest.runOnlyPendingTimers();
-    });
-  });
-
-  it("opens the raw XML modal when 'View raw XML' is pressed", async () => {
-    // Arrange
-    jest.useFakeTimers();
-    const props = buildProps();
-    let tree: renderer.ReactTestRenderer;
-
-    await act(async () => {
-      tree = renderer.create(<FeedItemsScreen {...props} />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const rawButton = tree!.root.findByProps({
-      accessibilityLabel: "View raw XML",
-    });
-
-    // Act
-    await act(async () => {
-      await rawButton.props.onPress();
-    });
-
-    // Assert – modal close button is now visible
-    const closeButton = tree!.root.findByProps({
-      accessibilityLabel: "Close raw XML",
-    });
-    expect(closeButton).toBeTruthy();
-
-    // Assert – raw XML content is shown
-    const allText = tree!.root
-      .findAllByType(Text)
-      .map((node: renderer.ReactTestInstance) => node.props.children);
-    expect(allText).toContain(mockItem.raw_xml);
-
-    await act(async () => {
-      tree!.unmount();
-      jest.runOnlyPendingTimers();
-    });
-  });
-
-  it("closes the raw XML modal when the close button is pressed", async () => {
-    // Arrange
-    jest.useFakeTimers();
-    const props = buildProps();
-    let tree: renderer.ReactTestRenderer;
-
-    await act(async () => {
-      tree = renderer.create(<FeedItemsScreen {...props} />);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    const rawButton = tree!.root.findByProps({
-      accessibilityLabel: "View raw XML",
-    });
-
-    await act(async () => {
-      await rawButton.props.onPress();
-    });
-
-    const closeButton = tree!.root.findByProps({
-      accessibilityLabel: "Close raw XML",
-    });
-
-    // Act
-    await act(async () => {
-      await closeButton.props.onPress();
-    });
-
-    // Assert – close button is gone once modal is dismissed
-    expect(
-      tree!.root.findAllByProps({ accessibilityLabel: "Close raw XML" })
-    ).toHaveLength(0);
-
-    await act(async () => {
-      tree!.unmount();
-      jest.runOnlyPendingTimers();
-    });
   });
 
   it("opens the in-app item view when a post is tapped", async () => {

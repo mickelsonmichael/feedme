@@ -12,7 +12,6 @@ function item(id: number, read = 0): FeedItemWithFeed {
     image_url: null,
     published_at: 1_700_000_000_000 - id,
     read,
-    raw_xml: null,
   };
 }
 

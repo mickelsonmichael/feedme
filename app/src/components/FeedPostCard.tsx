@@ -49,7 +49,6 @@ type Props = {
   readLater?: boolean;
   expanded?: boolean;
   showExpand?: boolean;
-  showRawXml?: boolean;
   cardWidth?: number;
   cardMediaRevealed?: boolean;
   cardMediaTestID?: string;
@@ -62,7 +61,6 @@ type Props = {
   onToggleReadLater?: (id: number) => void;
   onOpenOriginalLink: (id: number) => void;
   onOpenContentLink: (url: string) => void;
-  onOpenRawXml?: (id: number) => void;
   /** undefined = no Reddit author detected; false = not followed; true = followed */
   authorFollowed?: boolean;
   onFollowAuthor?: (id: number) => void;
@@ -78,7 +76,6 @@ function FeedPostCardComponent({
   readLater = false,
   expanded = false,
   showExpand = false,
-  showRawXml = false,
   cardWidth,
   cardMediaRevealed = false,
   cardMediaTestID,
@@ -91,7 +88,6 @@ function FeedPostCardComponent({
   onToggleReadLater,
   onOpenOriginalLink,
   onOpenContentLink,
-  onOpenRawXml,
   authorFollowed,
   onFollowAuthor,
 }: Props) {
@@ -464,17 +460,6 @@ function FeedPostCardComponent({
             />
           </TouchableOpacity>
         ) : null}
-        {showRawXml && onOpenRawXml ? (
-          <TouchableOpacity
-            style={styles.iconActionBtn}
-            onPress={() => onOpenRawXml(item.id)}
-            activeOpacity={0.6}
-            hitSlop={8}
-            accessibilityLabel="View raw XML"
-          >
-            <Feather name="terminal" size={18} color={colors.inkSoft} />
-          </TouchableOpacity>
-        ) : null}
       </View>
       {showExpand && expanded ? (
         <View
@@ -755,7 +740,6 @@ function arePropsEqual(prev: Props, next: Props): boolean {
     prev.readLater === next.readLater &&
     prev.expanded === next.expanded &&
     prev.showExpand === next.showExpand &&
-    prev.showRawXml === next.showRawXml &&
     prev.cardWidth === next.cardWidth &&
     prev.cardMediaRevealed === next.cardMediaRevealed &&
     prev.cardMediaTestID === next.cardMediaTestID &&
@@ -768,7 +752,6 @@ function arePropsEqual(prev: Props, next: Props): boolean {
     prev.onToggleReadLater === next.onToggleReadLater &&
     prev.onOpenOriginalLink === next.onOpenOriginalLink &&
     prev.onOpenContentLink === next.onOpenContentLink &&
-    prev.onOpenRawXml === next.onOpenRawXml &&
     prev.authorFollowed === next.authorFollowed &&
     prev.onFollowAuthor === next.onFollowAuthor
   );

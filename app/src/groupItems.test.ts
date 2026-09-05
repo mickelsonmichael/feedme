@@ -18,7 +18,6 @@ function makeItem(id: number, publishedAt: number | null): FeedItemWithFeed {
     url: `https://example.com/${id}`,
     content: null,
     image_url: null,
-    raw_xml: null,
     published_at: publishedAt,
     read: 0,
     feed_title: "Test Feed",

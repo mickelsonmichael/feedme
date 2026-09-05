@@ -48,6 +48,7 @@ import {
   unsavePost,
   updateFeed,
   updateFeedLastFetched,
+  recordFeedRefreshResult,
   updateTag,
   upsertItems,
   addCustomFeed,
@@ -170,6 +171,133 @@ describe("database.web — feeds", () => {
     expect(feeds.map((f) => f.title)).toEqual(["Persistent"]);
     // Clean up so subsequent tests start empty.
     reloaded!.__resetForTests();
+  });
+});
+
+describe("database.web — recordFeedRefreshResult", () => {
+  async function seedFeed(): Promise<number> {
+    return addFeed({
+      title: "Example",
+      url: "https://example.com/feed",
+      description: null,
+    });
+  }
+
+  it("writes the whole successful outcome in one call", async () => {
+    // Arrange
+    const id = await seedFeed();
+
+    // Act
+    await recordFeedRefreshResult(id, {
+      success: true,
+      error: null,
+      lastFetched: 1_700_000_000_000,
+      etag: '"abc"',
+      lastModified: "Thu, 02 Jan 2025 00:00:00 GMT",
+      fetchIntervalMs: 3_600_000,
+      consecutiveFailures: 0,
+      nextFetchAt: 1_700_003_600_000,
+    });
+
+    // Assert
+    expect((await getFeeds())[0]).toMatchObject({
+      error: null,
+      last_fetched: 1_700_000_000_000,
+      etag: '"abc"',
+      last_modified: "Thu, 02 Jan 2025 00:00:00 GMT",
+      fetch_interval_ms: 3_600_000,
+      consecutive_failures: 0,
+      next_fetch_at: 1_700_003_600_000,
+      fetch_success_count: 1,
+      fetch_failure_count: 0,
+    });
+  });
+
+  it("leaves omitted fields untouched", async () => {
+    // Arrange — a feed with validators already stored, as after a 200.
+    const id = await seedFeed();
+    await recordFeedRefreshResult(id, {
+      success: true,
+      error: null,
+      lastFetched: 1_000,
+      etag: '"kept"',
+      lastModified: "Mon, 01 Jan 2024 00:00:00 GMT",
+      consecutiveFailures: 0,
+      nextFetchAt: 2_000,
+    });
+
+    // Act — a 304 omits the validators; a failure would omit lastFetched.
+    await recordFeedRefreshResult(id, {
+      success: true,
+      error: null,
+      lastFetched: 5_000,
+      consecutiveFailures: 0,
+      nextFetchAt: 9_000,
+    });
+
+    // Assert
+    expect((await getFeeds())[0]).toMatchObject({
+      etag: '"kept"',
+      last_modified: "Mon, 01 Jan 2024 00:00:00 GMT",
+      last_fetched: 5_000,
+      next_fetch_at: 9_000,
+    });
+  });
+
+  it("preserves the previous error message when no verdict is given", async () => {
+    // Arrange — a wall-clock timeout records a failure without a message.
+    const id = await seedFeed();
+    await recordFeedRefreshResult(id, {
+      success: false,
+      error: "Offline",
+      consecutiveFailures: 1,
+      nextFetchAt: 1_000,
+    });
+
+    // Act
+    await recordFeedRefreshResult(id, {
+      success: false,
+      consecutiveFailures: 2,
+      nextFetchAt: 2_000,
+    });
+
+    // Assert
+    expect((await getFeeds())[0]).toMatchObject({
+      error: "Offline",
+      consecutive_failures: 2,
+      fetch_failure_count: 2,
+    });
+  });
+
+  it("counts successes and failures on separate cumulative counters", async () => {
+    // Arrange
+    const id = await seedFeed();
+
+    // Act
+    await recordFeedRefreshResult(id, {
+      success: true,
+      error: null,
+      consecutiveFailures: 0,
+      nextFetchAt: 1,
+    });
+    await recordFeedRefreshResult(id, {
+      success: false,
+      error: "boom",
+      consecutiveFailures: 1,
+      nextFetchAt: 2,
+    });
+    await recordFeedRefreshResult(id, {
+      success: false,
+      error: "boom",
+      consecutiveFailures: 2,
+      nextFetchAt: 3,
+    });
+
+    // Assert
+    expect((await getFeeds())[0]).toMatchObject({
+      fetch_success_count: 1,
+      fetch_failure_count: 2,
+    });
   });
 });
 

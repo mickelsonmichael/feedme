@@ -21,7 +21,6 @@ function makeItem(
     url: `https://example.com/${id}`,
     content: null,
     image_url: null,
-    raw_xml: null,
     published_at: 1_000 - id,
     read: 0,
     ...overrides,
