@@ -1,6 +1,10 @@
 import React from "react";
-import { Animated, RefreshControl } from "react-native";
-import { GestureDetector } from "react-native-gesture-handler";
+import { RefreshControl } from "react-native";
+import { animatedTranslateX } from "../testUtils/animatedTranslateX";
+import {
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import renderer, { act } from "react-test-renderer";
 import {
   SingleViewPager,
@@ -98,16 +102,16 @@ function renderPager(
   };
   return {
     props,
-    element: <SingleViewPager ref={ref} {...props} />,
+    element: (
+      <GestureHandlerRootView>
+        <SingleViewPager ref={ref} {...props} />
+      </GestureHandlerRootView>
+    ),
   };
 }
 
 function getTranslateX(tree: renderer.ReactTestRenderer): number {
-  const track = tree.root.findByType(GestureDetector).findByType(Animated.View);
-  const style = track.props.style as Array<{
-    transform?: Array<{ translateX: { __getValue: () => number } }>;
-  }>;
-  return style.find((s) => s?.transform)!.transform![0].translateX.__getValue();
+  return animatedTranslateX(tree.root.findByType(GestureDetector));
 }
 
 /** The `left` each mounted post is laid out at, keyed by post id. */
@@ -136,6 +140,26 @@ function mountedIds(tree: renderer.ReactTestRenderer): number[] {
     .map((stub) => (stub.props as { itemId: number }).itemId)
     .sort((a, b) => a - b);
 }
+
+type TouchGesture = {
+  config: { activeOffsetXStart: number; activeOffsetXEnd: number };
+  handlers: {
+    onTouchesDown: (event: unknown) => void;
+    onTouchesMove: (event: unknown) => void;
+    onFinalize: () => void;
+  };
+};
+
+const touchAt = (x: number, y: number) => ({
+  allTouches: [{ absoluteX: x, absoluteY: y }],
+});
+
+const readGesture = (tree: renderer.ReactTestRenderer) =>
+  tree.root.findByType(GestureDetector).props.gesture as TouchGesture;
+
+/** How far the finger must travel sideways before the pager takes the touch. */
+const activationDistance = (tree: renderer.ReactTestRenderer) =>
+  readGesture(tree).config.activeOffsetXEnd;
 
 describe("SingleViewPager", () => {
   beforeEach(() => {
@@ -172,9 +196,11 @@ describe("SingleViewPager", () => {
     expect(offsetsBefore.get(103)).toBe(3 * VIEWPORT);
     expect(getTranslateX(tree!)).toBe(-3 * VIEWPORT);
 
-    // Act — the active post moves on.
+    // Act — the active post moves on. The track picks up its new position
+    // on the next animation frame.
     act(() => {
       tree!.update(renderPager({ activeIndex: 4 }).element);
+      jest.advanceTimersByTime(16);
     });
 
     // Assert — every post that was already mounted is still laid out at
@@ -225,10 +251,6 @@ describe("SingleViewPager", () => {
       };
     };
 
-    // The slide runs on the native driver, so its end value is not readable
-    // from JS — capture the target it animates to instead.
-    const timing = jest.spyOn(Animated, "timing");
-
     // Act — a decisive forward swipe.
     act(() => {
       gesture.handlers.onBegin();
@@ -244,10 +266,9 @@ describe("SingleViewPager", () => {
     });
 
     // Assert — the advance is only committed once the slide has finished,
-    // and the slide's destination is the new active post's resting position.
+    // and the slide has come to rest on the new active post's position.
     expect(onAdvance).toHaveBeenCalledWith(1);
-    const slideTarget = (timing.mock.calls[0][1] as { toValue: number })
-      .toValue;
+    const slideTarget = getTranslateX(tree!);
     expect(slideTarget).toBe(-3 * VIEWPORT);
 
     const offsetsBefore = slotOffsets(tree!);
@@ -266,7 +287,6 @@ describe("SingleViewPager", () => {
     for (const [id, left] of offsetsBefore) {
       if (offsetsAfter.has(id)) expect(offsetsAfter.get(id)).toBe(left);
     }
-    timing.mockRestore();
   });
 
   it("asks the parent to page in more posts instead of advancing past the last one", () => {
@@ -395,5 +415,126 @@ describe("SingleViewPager", () => {
 
     // Assert — no animation for a button press, so it commits immediately.
     expect(onAdvance).toHaveBeenCalledWith(1);
+  });
+
+  // Android starts a text selection in the selectable article body once a
+  // press has sat still for its long-press timeout, and draws the magnifier
+  // and handles as a native popup React cannot dismiss. If the pager swiped on
+  // that same touch, the popup was left stranded over the next post.
+  describe("standing down for a text selection", () => {
+    it("keeps the swipe reachable for a press that has not dwelled", () => {
+      // Arrange / Act
+      let tree: renderer.ReactTestRenderer;
+      act(() => {
+        tree = renderer.create(renderPager({ activeIndex: 2 }).element);
+      });
+      act(() => {
+        readGesture(tree!).handlers.onTouchesDown(touchAt(300, 400));
+        jest.advanceTimersByTime(200);
+      });
+
+      // Assert
+      expect(activationDistance(tree!)).toBe(20);
+    });
+
+    it("puts the swipe out of reach once the press has dwelled long enough to select text", () => {
+      // Arrange
+      let tree: renderer.ReactTestRenderer;
+      act(() => {
+        tree = renderer.create(renderPager({ activeIndex: 2 }).element);
+      });
+
+      // Act — finger down and still, past Android's long-press timeout.
+      act(() => {
+        readGesture(tree!).handlers.onTouchesDown(touchAt(300, 400));
+        jest.advanceTimersByTime(600);
+      });
+
+      // Assert — the decision is already made before any drag can race it.
+      expect(activationDistance(tree!)).toBeGreaterThan(1_000);
+    });
+
+    it("leaves the swipe reachable when the finger left the press point before the timeout", () => {
+      // Arrange — moving off the press point cancels the platform's pending
+      // long press, so no selection can start however long the drag then
+      // takes. A slow, deliberate swipe must still work.
+      let tree: renderer.ReactTestRenderer;
+      act(() => {
+        tree = renderer.create(renderPager({ activeIndex: 2 }).element);
+      });
+
+      // Act
+      act(() => {
+        readGesture(tree!).handlers.onTouchesDown(touchAt(300, 400));
+        jest.advanceTimersByTime(100);
+        readGesture(tree!).handlers.onTouchesMove(touchAt(288, 400));
+        jest.advanceTimersByTime(900);
+      });
+
+      // Assert
+      expect(activationDistance(tree!)).toBe(20);
+    });
+
+    it("ignores a tremor smaller than the platform's touch slop", () => {
+      // Arrange — a couple of pixels of drift is still a press held still, and
+      // still selects text.
+      let tree: renderer.ReactTestRenderer;
+      act(() => {
+        tree = renderer.create(renderPager({ activeIndex: 2 }).element);
+      });
+
+      // Act
+      act(() => {
+        readGesture(tree!).handlers.onTouchesDown(touchAt(300, 400));
+        jest.advanceTimersByTime(100);
+        readGesture(tree!).handlers.onTouchesMove(touchAt(303, 402));
+        jest.advanceTimersByTime(500);
+      });
+
+      // Assert
+      expect(activationDistance(tree!)).toBeGreaterThan(1_000);
+    });
+
+    it("re-arms itself when the touch ends, so the next swipe works", () => {
+      // Arrange
+      let tree: renderer.ReactTestRenderer;
+      act(() => {
+        tree = renderer.create(renderPager({ activeIndex: 2 }).element);
+      });
+
+      // Act — a dwell that took the touch, then the finger lifts.
+      act(() => {
+        readGesture(tree!).handlers.onTouchesDown(touchAt(300, 400));
+        jest.advanceTimersByTime(600);
+      });
+      expect(activationDistance(tree!)).toBeGreaterThan(1_000);
+      act(() => {
+        readGesture(tree!).handlers.onFinalize();
+        // The touch ending is reported back to JS as scheduled work.
+        jest.advanceTimersByTime(0);
+      });
+
+      // Assert — standing down lasts for the one touch, not for the session.
+      expect(activationDistance(tree!)).toBe(20);
+    });
+
+    it("does not stand down for a press that ends before the timeout", () => {
+      // Arrange
+      let tree: renderer.ReactTestRenderer;
+      act(() => {
+        tree = renderer.create(renderPager({ activeIndex: 2 }).element);
+      });
+
+      // Act — a tap: down and up well inside the long-press window.
+      act(() => {
+        readGesture(tree!).handlers.onTouchesDown(touchAt(300, 400));
+        jest.advanceTimersByTime(120);
+        readGesture(tree!).handlers.onFinalize();
+        jest.advanceTimersByTime(1_000);
+      });
+
+      // Assert — the disarmed watch must not fire late and block a later swipe.
+      expect(activationDistance(tree!)).toBe(20);
+    });
   });
 });

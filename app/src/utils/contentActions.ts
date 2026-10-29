@@ -71,6 +71,60 @@ function toActionLabel(value: string): ContentActionLink["label"] | null {
   return null;
 }
 
+// Named entities beyond the five XML ones. Feed bodies are written as HTML,
+// so typographic entities like `&mdash;` and `&nbsp;` turn up constantly and
+// would otherwise reach the screen as literal text. Not the full HTML5 table —
+// just what feeds actually use.
+const NAMED_ENTITIES: Record<string, string> = {
+  nbsp: " ",
+  ensp: " ",
+  emsp: " ",
+  thinsp: " ",
+  ndash: "–",
+  mdash: "—",
+  hellip: "…",
+  lsquo: "‘",
+  rsquo: "’",
+  sbquo: "‚",
+  ldquo: "“",
+  rdquo: "”",
+  bdquo: "„",
+  laquo: "«",
+  raquo: "»",
+  lsaquo: "‹",
+  rsaquo: "›",
+  bull: "•",
+  middot: "·",
+  prime: "′",
+  Prime: "″",
+  copy: "©",
+  reg: "®",
+  trade: "™",
+  deg: "°",
+  plusmn: "±",
+  times: "×",
+  divide: "÷",
+  frac12: "½",
+  frac14: "¼",
+  frac34: "¾",
+  sect: "§",
+  para: "¶",
+  dagger: "†",
+  Dagger: "‡",
+  euro: "€",
+  pound: "£",
+  yen: "¥",
+  cent: "¢",
+  iexcl: "¡",
+  iquest: "¿",
+  larr: "←",
+  rarr: "→",
+  uarr: "↑",
+  darr: "↓",
+  zwj: "‍",
+  zwnj: "‌",
+};
+
 function decodeHtmlEntities(value: string): string {
   const decodeCodePoint = (rawCodePoint: string, radix: 10 | 16): string => {
     const parsed = Number.parseInt(rawCodePoint, radix);
@@ -93,6 +147,10 @@ function decodeHtmlEntities(value: string): string {
         const decoded = decodeCodePoint(codePoint, 16);
         return decoded || match;
       })
+      .replace(
+        /&([a-zA-Z][a-zA-Z0-9]*);/g,
+        (match, name: string) => NAMED_ENTITIES[name] ?? match
+      )
       .replace(/&quot;/g, '"')
       .replace(/&apos;/g, "'")
       .replace(/&lt;/g, "<")

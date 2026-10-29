@@ -10,8 +10,6 @@ import React, {
   useState,
 } from "react";
 import {
-  Animated,
-  Easing,
   NativeScrollEvent,
   NativeSyntheticEvent,
   RefreshControlProps,
@@ -19,6 +17,15 @@ import {
   View,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
 import { FeedItemWithFeed } from "../types";
 import { resolveSingleSwipeDirection } from "../singleSwipeDirection";
 import { SingleViewPost, SingleViewPostHandle } from "./SingleViewPost";
@@ -35,6 +42,35 @@ export const SINGLE_SWIPE_ENTER_DURATION_MS = 240;
 // while the user is still reading, and swiping back costs no more than
 // swiping forward.
 export const SINGLE_VIEW_WINDOW = 2;
+
+// Android's own long-press timeout and touch slop, mirrored here.
+//
+// A press that stays within the slop for this long makes the platform start a
+// text selection in the article underneath (the body is selectable so a
+// passage can be copied), which puts the selection magnifier and handles on
+// screen as a native popup. Those live outside React, so if the pager then
+// claims the same touch as a swipe, the popup is left stranded over whatever
+// post arrives next with nothing to dismiss it. Hence the guard in the pan
+// gesture below: once a touch has dwelled long enough to be a long press, it
+// belongs to the selection and can never become a swipe. A selection that is
+// finished and released before the swipe starts is fine and needs no guard —
+// the platform tears its own overlay down on a touch it still owns.
+//
+// A press that escapes the slop *before* the timeout cancels the platform's
+// pending long press, so no selection can start and the swipe is free to run
+// — which is every ordinary flick.
+const ANDROID_LONG_PRESS_MS = 500;
+const ANDROID_TOUCH_SLOP = 8;
+
+const SWIPE_ACTIVATE_DX = 20;
+const SWIPE_FAIL_DY = 10;
+
+// Stands in for "never activate": the selection guard stands the pager down
+// by putting activation out of reach rather than failing the gesture, so the
+// handler stays alive to report the touch ending and re-arm itself.
+const SWIPE_UNREACHABLE_DX = 100_000;
+
+const SNAP_BACK_SPRING = { damping: 26, stiffness: 260, mass: 1 };
 
 export type SingleViewPagerHandle = {
   /** Move one post forward/back, as the toolbar buttons do (no animation). */
@@ -93,21 +129,41 @@ export const SingleViewPager = memo(
     },
     ref
   ) {
-    const translateX = useRef(
-      new Animated.Value(-activeIndex * viewportWidth)
-    ).current;
+    // The track's position lives on the UI thread. The gesture writes it and
+    // the slide animates it there directly, so a finger-follow or a slide
+    // never waits on JavaScript — which is busy exactly when it matters,
+    // committing the previous swipe and parsing the next post's HTML.
+    const translateX = useSharedValue(-activeIndex * viewportWidth);
+    const gestureBaseX = useSharedValue(0);
     const activePostRef = useRef<SingleViewPostHandle | null>(null);
 
-    // Mirrors of values the gesture callbacks read, so the Gesture.Pan object
-    // never has to be rebuilt as the user reads. Handing GestureDetector a
-    // brand-new gesture while the previous one is still settling produced
-    // skipped and duplicated advances.
+    // UI-thread copies of what the gesture needs to decide a move, so the
+    // gesture object is not rebuilt as the user reads. Handing GestureDetector
+    // a brand-new gesture while the previous one is still settling produced
+    // skipped and duplicated advances. (The selection guard below does
+    // rebuild it, but only on a touch it has already taken out of the pager's
+    // hands.)
+    const activeIndexValue = useSharedValue(activeIndex);
+    const itemsLengthValue = useSharedValue(items.length);
+    const viewportWidthValue = useSharedValue(viewportWidth);
+    useLayoutEffect(() => {
+      activeIndexValue.value = activeIndex;
+      itemsLengthValue.value = items.length;
+      viewportWidthValue.value = viewportWidth;
+    }, [
+      activeIndex,
+      items.length,
+      viewportWidth,
+      activeIndexValue,
+      itemsLengthValue,
+      viewportWidthValue,
+    ]);
+
+    // JS-side mirrors for the imperative toolbar path.
     const activeIndexRef = useRef(activeIndex);
     activeIndexRef.current = activeIndex;
     const itemsLengthRef = useRef(items.length);
     itemsLengthRef.current = items.length;
-    const viewportWidthRef = useRef(viewportWidth);
-    viewportWidthRef.current = viewportWidth;
     const onAdvanceRef = useRef(onAdvance);
     onAdvanceRef.current = onAdvance;
     const onEdgeForwardRef = useRef(onEdgeForward);
@@ -117,128 +173,229 @@ export const SingleViewPager = memo(
     // used to tear anything down, only to hold new things back.
     const [isSettled, setIsSettled] = useState(true);
 
-    const restingX = useCallback(
-      (index: number) => -index * viewportWidthRef.current,
-      []
-    );
+    // ── JS-side reactions to UI-thread gesture events ──────────────────────
+    // Each is scheduled from the gesture worklets below with scheduleOnRN.
 
-    // Slides to `edge`, then commits. Only on a clean finish: if the user
-    // starts another swipe before this one settles, onBegin's stopAnimation
-    // interrupts it (`finished: false`) and the pending advance is dropped.
-    // Committing an interrupted slide lands the change right as the new
+    const handleSlideStart = useCallback((direction: 1 | -1) => {
+      if (direction === 1) {
+        // End the view-time row for the post being left — only on an
+        // explicit forward move. Going back leaves it open (see
+        // SingleViewPost).
+        activePostRef.current?.endViewTimeForNext();
+      }
+      setIsSettled(false);
+    }, []);
+
+    // Called only once a slide has *finished*. If the user starts another
+    // swipe before this one settles, onBegin cancels the animation, the slide
+    // reports `finished: false`, and the pending advance is dropped:
+    // committing an interrupted slide lands the change right as the new
     // gesture begins, snapping the content forward a full post mid-touch —
-    // far more jarring than simply letting the new gesture take over from
-    // wherever the old one got to.
-    const slideTo = useCallback(
-      (edge: number, onComplete: () => void) => {
-        setIsSettled(false);
-        Animated.timing(translateX, {
-          toValue: edge,
-          duration: SINGLE_SWIPE_ENTER_DURATION_MS,
-          easing: Easing.out(Easing.cubic),
-          useNativeDriver: true,
-        }).start(({ finished }) => {
-          if (finished) {
-            setIsSettled(true);
-            onComplete();
-          }
-        });
-      },
-      [translateX]
-    );
+    // far more jarring than letting the new gesture take over from wherever
+    // the old one got to.
+    const handleSlideDone = useCallback((direction: 1 | -1) => {
+      setIsSettled(true);
+      onAdvanceRef.current(direction);
+    }, []);
 
-    const snapBack = useCallback(() => {
-      Animated.spring(translateX, {
-        toValue: restingX(activeIndexRef.current),
-        useNativeDriver: true,
-      }).start(({ finished }) => {
-        if (finished) setIsSettled(true);
-      });
-    }, [restingX, translateX]);
+    const handleSettled = useCallback(() => setIsSettled(true), []);
 
-    const beginAdvance = useCallback(
-      (direction: 1 | -1, animated: boolean) => {
-        if (direction === 1) {
-          // End the view-time row for the post being left — only on an
-          // explicit forward move. Going back leaves it open (see
-          // SingleViewPost).
-          activePostRef.current?.endViewTimeForNext();
-        }
-
-        const index = activeIndexRef.current;
-        const canAdvance =
-          direction === 1 ? index < itemsLengthRef.current - 1 : index > 0;
-
-        if (canAdvance) {
-          if (animated) {
-            slideTo(restingX(index + direction), () =>
-              onAdvanceRef.current(direction)
-            );
-          } else {
-            onAdvanceRef.current(direction);
-          }
-          return;
-        }
-
-        if (direction === 1) {
-          // Nothing loaded to move into — let the parent decide whether to
-          // page in more, and put the track back where it was meanwhile.
-          if (animated) snapBack();
-          onEdgeForwardRef.current();
-          return;
-        }
-
-        if (animated) snapBack();
-      },
-      [restingX, slideTo, snapBack]
-    );
+    // A forward swipe off the last loaded post still leaves that post: the
+    // parent pages in more and advances on its own once they land.
+    const handleEdgeForward = useCallback(() => {
+      activePostRef.current?.endViewTimeForNext();
+      onEdgeForwardRef.current();
+    }, []);
 
     useImperativeHandle(
       ref,
       () => ({
-        advance: (direction: 1 | -1) => beginAdvance(direction, false),
+        // The toolbar buttons: an immediate move with no slide, which the
+        // layout effect below turns into the jump itself.
+        advance: (direction: 1 | -1) => {
+          const index = activeIndexRef.current;
+          const canAdvance =
+            direction === 1 ? index < itemsLengthRef.current - 1 : index > 0;
+          if (direction === 1) {
+            activePostRef.current?.endViewTimeForNext();
+          }
+          if (canAdvance) {
+            onAdvanceRef.current(direction);
+          } else if (direction === 1) {
+            onEdgeForwardRef.current();
+          }
+        },
         scrollToTop: () => activePostRef.current?.scrollToTop(),
       }),
-      [beginAdvance]
+      []
     );
 
     // Park the track at the active post's resting position. After a swipe
-    // this is the position the animation already reached, so it changes
-    // nothing on screen; after a toolbar tap (no animation) it is the jump
-    // itself. Also covers viewport resizes such as rotation.
+    // this is the position the slide already reached, so it changes nothing
+    // on screen; after a toolbar tap (no animation) it is the jump itself.
+    // Also covers viewport resizes such as rotation.
     useLayoutEffect(() => {
-      translateX.setValue(-activeIndex * viewportWidth);
+      translateX.value = -activeIndex * viewportWidth;
     }, [activeIndex, viewportWidth, translateX]);
 
-    const gestureBaseXRef = useRef(0);
+    // Where the current touch went down, and the watch that decides whether it
+    // has turned into a text selection. The slop check runs on the UI thread
+    // with the gesture; the long-press timer runs here on JS.
+    const touchStartX = useSharedValue(0);
+    const touchStartY = useSharedValue(0);
+    const watchingForLongPress = useSharedValue(false);
+    const longPressWatchRef = useRef<ReturnType<typeof setTimeout> | null>(
+      null
+    );
+
+    // Set while the touch in progress belongs to a text selection rather than
+    // to the pager. Raising activeOffsetX out of reach is what stands the
+    // pager down: unlike disabling the gesture it does not cancel it, so the
+    // handler stays alive to report the touch ending and re-arm itself.
+    const [yieldedToSelection, setYieldedToSelection] = useState(false);
+
+    const endLongPressWatch = useCallback(() => {
+      if (longPressWatchRef.current !== null) {
+        clearTimeout(longPressWatchRef.current);
+        longPressWatchRef.current = null;
+      }
+    }, []);
+
+    // The watch is armed on touch-down and disarmed by the first movement
+    // that leaves the platform's touch slop. Whatever it is still running
+    // when the long-press timeout elapses is a finger that has sat still on
+    // selectable article text — so the platform is selecting, and the pager
+    // stands down for the rest of the touch.
+    //
+    // Deciding this on a timer rather than on the first move after the dwell
+    // is what makes it reliable: the decision is already made and pushed to
+    // the native handler before the drag that would race it has begun.
+    const armLongPressWatch = useCallback(() => {
+      endLongPressWatch();
+      longPressWatchRef.current = setTimeout(() => {
+        longPressWatchRef.current = null;
+        setYieldedToSelection(true);
+      }, ANDROID_LONG_PRESS_MS);
+    }, [endLongPressWatch]);
+
+    const handleTouchFinished = useCallback(() => {
+      endLongPressWatch();
+      setYieldedToSelection(false);
+    }, [endLongPressWatch]);
+
+    useEffect(() => endLongPressWatch, [endLongPressWatch]);
+
     const gesture = useMemo(
       () =>
         Gesture.Pan()
-          .activeOffsetX([-20, 20])
-          .failOffsetY([-10, 10])
+          .activeOffsetX(
+            yieldedToSelection
+              ? [-SWIPE_UNREACHABLE_DX, SWIPE_UNREACHABLE_DX]
+              : [-SWIPE_ACTIVATE_DX, SWIPE_ACTIVATE_DX]
+          )
+          .failOffsetY([-SWIPE_FAIL_DY, SWIPE_FAIL_DY])
+          .onTouchesDown((event) => {
+            const touch = event.allTouches[0];
+            if (!touch) return;
+            touchStartX.value = touch.absoluteX;
+            touchStartY.value = touch.absoluteY;
+            watchingForLongPress.value = true;
+            scheduleOnRN(armLongPressWatch);
+          })
+          .onTouchesMove((event) => {
+            // Checked here, per move, on the UI thread; JS only hears about
+            // the one move that leaves the slop.
+            if (!watchingForLongPress.value) return;
+            const touch = event.allTouches[0];
+            if (!touch) return;
+            const dx = touch.absoluteX - touchStartX.value;
+            const dy = touch.absoluteY - touchStartY.value;
+            if (
+              Math.abs(dx) > ANDROID_TOUCH_SLOP ||
+              Math.abs(dy) > ANDROID_TOUCH_SLOP
+            ) {
+              watchingForLongPress.value = false;
+              scheduleOnRN(endLongPressWatch);
+            }
+          })
+          .onFinalize(() => {
+            watchingForLongPress.value = false;
+            scheduleOnRN(handleTouchFinished);
+          })
           .onBegin(() => {
-            translateX.stopAnimation();
-            gestureBaseXRef.current = restingX(activeIndexRef.current);
+            cancelAnimation(translateX);
+            gestureBaseX.value =
+              -activeIndexValue.value * viewportWidthValue.value;
           })
           .onUpdate((e) => {
-            translateX.setValue(gestureBaseXRef.current + e.translationX);
+            translateX.value = gestureBaseX.value + e.translationX;
           })
           .onEnd((e) => {
-            const direction = resolveSingleSwipeDirection(
+            const width = viewportWidthValue.value;
+            const index = activeIndexValue.value;
+            const rest = -index * width;
+            const swipe = resolveSingleSwipeDirection(
               e.translationX,
               e.translationY,
               e.velocityX
             );
-            if (direction === "next") {
-              beginAdvance(1, true);
-            } else if (direction === "previous") {
-              beginAdvance(-1, true);
-            } else {
-              snapBack();
+            const direction: 1 | -1 | 0 =
+              swipe === "next" ? 1 : swipe === "previous" ? -1 : 0;
+            const canAdvance =
+              direction === 1
+                ? index < itemsLengthValue.value - 1
+                : direction === -1 && index > 0;
+
+            if (direction !== 0 && canAdvance) {
+              scheduleOnRN(handleSlideStart, direction);
+              translateX.value = withTiming(
+                -(index + direction) * width,
+                {
+                  duration: SINGLE_SWIPE_ENTER_DURATION_MS,
+                  easing: Easing.out(Easing.cubic),
+                },
+                (finished) => {
+                  if (finished) scheduleOnRN(handleSlideDone, direction);
+                }
+              );
+              return;
             }
+
+            // Nothing to move into (or not a swipe): spring back. A forward
+            // swipe off the last loaded post also asks the parent to page in
+            // more posts.
+            translateX.value = withSpring(
+              rest,
+              SNAP_BACK_SPRING,
+              (finished) => {
+                if (finished) scheduleOnRN(handleSettled);
+              }
+            );
+            if (direction === 1) scheduleOnRN(handleEdgeForward);
           }),
-      [beginAdvance, restingX, snapBack, translateX]
+      [
+        yieldedToSelection,
+        translateX,
+        gestureBaseX,
+        activeIndexValue,
+        itemsLengthValue,
+        viewportWidthValue,
+        touchStartX,
+        touchStartY,
+        watchingForLongPress,
+        armLongPressWatch,
+        endLongPressWatch,
+        handleTouchFinished,
+        handleSlideStart,
+        handleSlideDone,
+        handleSettled,
+        handleEdgeForward,
+      ]
     );
+
+    const trackStyle = useAnimatedStyle(() => ({
+      transform: [{ translateX: translateX.value }],
+    }));
 
     const activeItemId = items[activeIndex]?.id ?? null;
 
@@ -269,10 +426,8 @@ export const SingleViewPager = memo(
           <Animated.View
             style={[
               styles.track,
-              {
-                width: Math.max(1, items.length) * viewportWidth,
-                transform: [{ translateX }],
-              },
+              { width: Math.max(1, items.length) * viewportWidth },
+              trackStyle,
             ]}
           >
             {slots.map(({ item, index }) => (

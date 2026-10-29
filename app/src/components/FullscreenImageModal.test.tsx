@@ -1,13 +1,14 @@
 import React from "react";
 import { Modal, TouchableOpacity } from "react-native";
 import renderer, { act } from "react-test-renderer";
+import * as ScreenOrientation from "expo-screen-orientation";
 import { FullscreenImageModal } from "../components/FullscreenImageModal";
 
 jest.mock("react-native-safe-area-context", () => ({
   useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
 }));
 
-jest.mock("@expo/vector-icons", () => ({
+jest.mock("@react-native-vector-icons/feather", () => ({
   Feather: "Feather",
 }));
 
@@ -157,5 +158,53 @@ describe("FullscreenImageModal", () => {
     const modal = tree!.root.findByType(Modal);
     expect(modal.props.supportedOrientations).toContain("landscape");
     expect(modal.props.supportedOrientations).toContain("portrait");
+  });
+
+  describe("orientation lock", () => {
+    const viewer = (visible: boolean) => (
+      <FullscreenImageModal
+        visible={visible}
+        imageUrl="https://example.com/image.jpg"
+        onClose={() => {}}
+      />
+    );
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+    });
+
+    it("leaves the orientation alone for a viewer that is never opened", () => {
+      // Arrange / Act — every image in a feed mounts one of these, closed.
+      act(() => {
+        renderer.create(viewer(false));
+      });
+
+      // Assert
+      expect(ScreenOrientation.lockAsync).not.toHaveBeenCalled();
+      expect(ScreenOrientation.unlockAsync).not.toHaveBeenCalled();
+    });
+
+    it("unlocks rotation while open and restores portrait when closed", () => {
+      // Arrange
+      let tree!: renderer.ReactTestRenderer;
+      act(() => {
+        tree = renderer.create(viewer(false));
+      });
+
+      // Act
+      act(() => {
+        tree.update(viewer(true));
+      });
+      const unlockedWhileOpen = (ScreenOrientation.unlockAsync as jest.Mock)
+        .mock.calls.length;
+      act(() => {
+        tree.update(viewer(false));
+      });
+
+      // Assert
+      expect(unlockedWhileOpen).toBe(1);
+      expect(ScreenOrientation.lockAsync).toHaveBeenCalledTimes(1);
+      expect(ScreenOrientation.lockAsync).toHaveBeenCalledWith("PORTRAIT_UP");
+    });
   });
 });

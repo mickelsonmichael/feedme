@@ -30,9 +30,7 @@ export type CollapsedRunRow = {
 };
 
 export type CollapsedFeedListRow =
-  | FeedListRow
-  | CollapsedItemRow
-  | CollapsedRunRow;
+  FeedListRow | CollapsedItemRow | CollapsedRunRow;
 
 /**
  * Maximum number of individual collapsed rows shown in a single contiguous

@@ -10,8 +10,14 @@ import { BackgroundSyncBanner } from "./LoadingState";
  * so an in-flight sync stays visible after switching to Feeds, Discover or
  * Settings. The Feed screen remains the only writer of the state.
  */
-export function BackgroundSyncBannerHost() {
+export function BackgroundSyncBannerHost({
+  bottom,
+}: {
+  /** Distance from the bottom of the host's parent to float at — the tab
+   *  navigator passes the tab bar's height so the pill sits just above it. */
+  bottom?: number;
+}) {
   const { syncing, progress } = useBackgroundSync();
   if (!syncing) return null;
-  return <BackgroundSyncBanner progress={progress} />;
+  return <BackgroundSyncBanner progress={progress} bottom={bottom} />;
 }

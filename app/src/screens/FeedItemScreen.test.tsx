@@ -47,7 +47,7 @@ jest.mock("../context/ThemeContext", () => ({
   }),
 }));
 
-jest.mock("@expo/vector-icons", () => {
+jest.mock("@react-native-vector-icons/feather", () => {
   const React = require("react");
   const { Text } = require("react-native");
   return {
@@ -386,7 +386,6 @@ describe("FeedItemScreen", () => {
     expect(getFeedItemWithFeedById).toHaveBeenCalledWith(22);
     expect(props.navigation.navigate).toHaveBeenCalledWith("FeedDetail", {
       feedId: 5,
-      returnToItem: props.route.params.item,
     });
 
     await act(async () => {

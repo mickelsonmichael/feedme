@@ -13,9 +13,18 @@ import {
 
 type Props = {
   html: string;
+  /** Whether a passage can be long-pressed to copy/share it. Turning this off
+   *  is also how a live selection is dismissed: Android drops the selection,
+   *  its handles and its action bar the moment the text stops being
+   *  selectable. Callers use that to make sure a selection never outlives the
+   *  post it was made in — see FeedItemContent. */
+  selectable?: boolean;
 };
 
-const DEFAULT_TEXT_PROPS = { selectable: true };
+// The press that starts a selection is also how a swipe starts, so the pager
+// stands down for it — see SingleViewPager's long-press guard.
+const SELECTABLE_TEXT_PROPS = { selectable: true };
+const INERT_TEXT_PROPS = { selectable: false };
 const IGNORED_DOM_TAGS: string[] = ["iframe"];
 
 const BODY_SIZE = fontSize.bodyLg;
@@ -31,7 +40,7 @@ function headingStyle(size: number) {
   };
 }
 
-function SanitizedHtmlContentImpl({ html }: Props) {
+function SanitizedHtmlContentImpl({ html, selectable = true }: Props) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const contentWidth = Math.max(width - spacing.lg * 2, 0);
@@ -106,7 +115,7 @@ function SanitizedHtmlContentImpl({ html }: Props) {
         tagsStyles={tagsStyles}
         enableCSSInlineProcessing={false}
         enableExperimentalMarginCollapsing
-        defaultTextProps={DEFAULT_TEXT_PROPS}
+        defaultTextProps={selectable ? SELECTABLE_TEXT_PROPS : INERT_TEXT_PROPS}
         ignoredDomTags={IGNORED_DOM_TAGS}
       />
     </View>

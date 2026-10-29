@@ -44,7 +44,7 @@ jest.mock("expo-sharing", () => ({
   shareAsync: jest.fn(),
 }));
 
-jest.mock("@expo/vector-icons", () => {
+jest.mock("@react-native-vector-icons/feather", () => {
   const React = require("react");
   const { Text } = require("react-native");
   return {

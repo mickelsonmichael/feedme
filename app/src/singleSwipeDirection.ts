@@ -8,6 +8,8 @@ export function resolveSingleSwipeDirection(
   translationY: number,
   velocityX: number
 ): SingleSwipeDirection {
+  // Called from the pager's gesture callbacks, which run on the UI thread.
+  "worklet";
   if (Math.abs(translationX) < Math.abs(translationY)) {
     return null;
   }

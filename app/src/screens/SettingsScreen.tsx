@@ -11,7 +11,7 @@ import {
   Modal,
   Pressable,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import * as BackgroundTask from "expo-background-task";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
@@ -552,9 +552,7 @@ function BackgroundSyncDevPanel() {
         disabled={busy !== null}
       />
       <Row
-        label={
-          busy === "os" ? "Triggering…" : "Trigger OS background worker"
-        }
+        label={busy === "os" ? "Triggering…" : "Trigger OS background worker"}
         onPress={triggerOsWorker}
         disabled={busy !== null}
       />
@@ -817,8 +815,8 @@ export default function SettingsScreen({ navigation }: Props) {
         {isMobile ? (
           <Section heading="Background sync">
             <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
-              How often the app refreshes your feeds in the background to
-              check for new items and deliver notifications.
+              How often the app refreshes your feeds in the background to check
+              for new items and deliver notifications.
             </Text>
             <Dropdown
               label="Sync frequency"
@@ -841,8 +839,8 @@ export default function SettingsScreen({ navigation }: Props) {
               onValueChange={handleBackgroundSyncWifiOnlyChange}
             />
             <Text style={[styles.settingHint, { color: colors.inkFaint }]}>
-              When on, background syncs are skipped on cellular networks.
-              Manual pull-to-refresh always works.
+              When on, background syncs are skipped on cellular networks. Manual
+              pull-to-refresh always works.
             </Text>
             {__DEV__ ? <BackgroundSyncDevPanel /> : null}
           </Section>
@@ -854,7 +852,11 @@ export default function SettingsScreen({ navigation }: Props) {
             value="OPML"
             onPress={() => navigation.navigate("ImportExport")}
           />
-          <Row label="Reset statistics" onPress={handleResetStatistics} danger />
+          <Row
+            label="Reset statistics"
+            onPress={handleResetStatistics}
+            danger
+          />
         </Section>
       </ScrollView>
     </View>

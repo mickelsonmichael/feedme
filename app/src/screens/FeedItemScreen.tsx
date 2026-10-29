@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import {
   addToReadLater,
   getReadLaterItemIds,
@@ -145,10 +145,7 @@ export default function FeedItemScreen({ route, navigation }: Props) {
         Alert.alert("Error", "Could not find the feed for this post.");
         return;
       }
-      navigation.navigate("FeedDetail", {
-        feedId: feedItem.feed_id,
-        returnToItem: item,
-      });
+      navigation.navigate("FeedDetail", { feedId: feedItem.feed_id });
     } catch {
       Alert.alert("Error", "Could not find the feed for this post.");
     }
@@ -471,7 +468,8 @@ export default function FeedItemScreen({ route, navigation }: Props) {
           <View style={styles.itemMetaRow}>
             <FeedIcon feedUrl={item.feedUrl} />
             <Text style={[styles.itemMeta, { color: colors.inkSoft }]}>
-              {item.feedTitle} - {formatDate(item.publishedAt)}
+              {item.feedTitle}
+              {item.publishedAt ? ` - ${formatDate(item.publishedAt)}` : null}
             </Text>
           </View>
           <Text style={[styles.itemTitle, { color: colors.ink }]}>

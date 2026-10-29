@@ -17,10 +17,9 @@ import {
   RefreshControl,
   useWindowDimensions,
   Platform,
-  ViewToken,
   ActivityIndicator,
 } from "react-native";
-import { FlashList, FlashListRef } from "@shopify/flash-list";
+import { FlashList, FlashListRef, ViewToken } from "@shopify/flash-list";
 import { useFocusEffect, useIsFocused } from "@react-navigation/native";
 import { CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
@@ -43,7 +42,7 @@ import {
   deleteFeed,
   getFeedByUrl,
 } from "../database";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import { refreshFeeds } from "../feedRefresher";
 import type { FeedRefreshProgress } from "../feedRefresher";
 import {
@@ -56,12 +55,19 @@ import {
 import { toggleExpandedId } from "../expandItemIds";
 import { ChompingLoader, FeedLoadingScreen } from "../components/LoadingState";
 import { Toast } from "../components/Toast";
+import { FloatingPill } from "../components/FloatingPill";
+import { IconButton } from "../components/IconButton";
+import { releaseSplash } from "../splash";
 import { CompactMenu } from "../components/CompactMenu";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { useHeaderContent } from "../context/HeaderContentContext";
 import { useFeedScroll } from "../context/FeedScrollContext";
-import { useBackgroundSync } from "../context/BackgroundSyncContext";
+import {
+  useBackgroundSyncActions,
+  useBackgroundSyncing,
+  useBackgroundSyncProgress,
+} from "../context/BackgroundSyncContext";
 import { SortMode, applySortMode } from "../sortItems";
 import { FilterMode, applyFilter } from "../filterItems";
 import { mergeRetainedItems } from "../mergeRetainedItems";
@@ -105,18 +111,23 @@ const CARD_IMAGE_WIDTH = 100;
 const CARD_LAYOUT_WIDTH = 760;
 const PAGE_SIZE = 50;
 
+// Room the toast leaves for the floating "New posts available" pill below it,
+// so a refresh that ends with failures doesn't cover the button to reload.
+const NEW_POSTS_PILL_CLEARANCE = 44;
+
 // How long the very first local read gets before we're willing to put a
 // loading screen up. An app restart with cached posts must land on those posts
 // plus the background banner — the full loader on the way there reads as "the
 // app is loading" all over again, which is precisely what the banner replaces.
 //
-// Sized against a measured cold start (emulator, dev bundle): the first read
-// costs roughly a second, because getDatabase() runs the whole schema
-// init/migration pass before getFeeds() and the first page query can even
-// begin. This wants to cover that comfortably rather than clip it. A fresh
-// install has no cache to find, runs past the window, and still gets the
-// loader — followed by a far longer network fetch, so the extra wait to reach
-// it is not the part that matters.
+// The native splash stays up through this window (see splash.ts), so the
+// plain-paper hold below is only a fallback for a splash that has already
+// lifted. The first read used to take about a second because getDatabase()
+// re-ran every schema migration on each launch; that pass is now skipped once
+// the schema is current (SCHEMA_VERSION), but the window is kept generous for
+// slow devices. A fresh install has no cache to find, runs past the window,
+// and still gets the loader — followed by a far longer network fetch, so the
+// extra wait to reach it is not the part that matters.
 const INITIAL_LOAD_GRACE_MS = 1_200;
 
 // Minimum idle time — no refresh and no user activity — before returning to
@@ -187,13 +198,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // banner itself (BackgroundSyncBannerHost). A sync outlives this screen's
   // visibility — leaving for Feeds/Discover/Settings must not make it look like
   // the sync stopped — so the state can't be local to the screen. This screen
-  // is still the only writer.
+  // is still the only writer. It deliberately doesn't read the per-feed
+  // progress: that ticks once per feed, and subscribing to it here re-rendered
+  // the entire feed on every tick. SyncProgressLoadingScreen reads it instead.
   const {
-    syncing: backgroundRefreshing,
     setSyncing: setBackgroundRefreshing,
-    progress: refreshProgress,
     setProgress: setRefreshProgress,
-  } = useBackgroundSync();
+  } = useBackgroundSyncActions();
+  const backgroundRefreshing = useBackgroundSyncing();
   // Set when a background refresh finished and brought in posts the user isn't
   // seeing yet. Drives the "New posts available. Tap to reload" button; the
   // freshly-queried page waits in pendingRefreshedPageRef until the user taps,
@@ -327,41 +339,77 @@ export default function FeedListScreen({ navigation, route }: Props) {
     return () => clearTimeout(timer);
   }, []);
 
+  // The native splash is held until now (see splash.ts): lift it the moment
+  // there are posts to show, or once the grace window has passed and the
+  // loading screen is the right thing to show instead (a fresh install
+  // fetching for the first time).
+  useEffect(() => {
+    if (!loading || initialLoadGraceElapsed) releaseSplash();
+  }, [loading, initialLoadGraceElapsed]);
+
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 60,
     minimumViewTime: 400,
   }).current;
 
+  // Ids whose mark-as-read write is in flight. FlashList re-reports rows that
+  // are still on screen, so without this a row that stays visible while its
+  // write lands is marked read over and over.
+  const markingReadIdsRef = useRef<Set<number>>(new Set());
+
+  // Batched per callback rather than per row: each newly visible post used to
+  // cost three state updates and a full copy of `items` — re-running the whole
+  // sort/filter/group pipeline — once per row, mid-scroll. Now a scroll that
+  // reveals several posts commits them together.
   const handleViewableItemsChanged = useCallback(
-    ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+    ({
+      viewableItems,
+    }: {
+      viewableItems: ViewToken<CollapsedFeedListRow>[];
+    }) => {
       if (!markAsReadOnScrollRef.current) return;
+      const newlyRead: number[] = [];
       for (const token of viewableItems) {
-        const row = token.item as CollapsedFeedListRow;
+        const row = token.item;
         if (
           isGroupDivider(row) ||
           isCollapsedItemRow(row) ||
           isCollapsedRunRow(row)
         )
           continue;
-        const item = row;
-        if (!item.read) {
-          setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
-          markItemRead(item.id)
-            .then(() => {
-              setItems((prev) =>
-                prev.map((i) => (i.id === item.id ? { ...i, read: 1 } : i))
-              );
-              // markItemRead auto-removes from Read Later list.
-              setReadLaterIds((prev) => {
-                if (!prev.has(item.id)) return prev;
-                const next = new Set(prev);
-                next.delete(item.id);
-                return next;
-              });
-            })
-            .catch(() => {});
+        if (!row.read && !markingReadIdsRef.current.has(row.id)) {
+          newlyRead.push(row.id);
         }
       }
+      if (newlyRead.length === 0) return;
+
+      for (const id of newlyRead) markingReadIdsRef.current.add(id);
+      setRetainedUnreadIds((prev) => {
+        const next = new Set(prev);
+        for (const id of newlyRead) next.add(id);
+        return next;
+      });
+
+      Promise.allSettled(newlyRead.map((id) => markItemRead(id))).then(
+        (results) => {
+          const marked = new Set<number>();
+          results.forEach((result, index) => {
+            markingReadIdsRef.current.delete(newlyRead[index]);
+            if (result.status === "fulfilled") marked.add(newlyRead[index]);
+          });
+          if (marked.size === 0) return;
+          setItems((prev) =>
+            prev.map((i) => (marked.has(i.id) ? { ...i, read: 1 } : i))
+          );
+          // markItemRead auto-removes from Read Later list.
+          setReadLaterIds((prev) => {
+            if (![...marked].some((id) => prev.has(id))) return prev;
+            const next = new Set(prev);
+            for (const id of marked) next.delete(id);
+            return next;
+          });
+        }
+      );
     },
     []
   );
@@ -875,7 +923,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
     return () => subscription.remove();
   }, [loadData, shouldRefreshOnFocus]);
 
-  const handleRefreshAll = async () => {
+  // Held stable: it feeds singleRefreshControl, which is handed to every
+  // mounted post in the single-post reader. A fresh function each render
+  // rebuilt that control on every render of this screen, defeating the memo
+  // on SingleViewPager and every SingleViewPost under it.
+  const handleRefreshAll = useCallback(async () => {
     // A manual refresh supersedes any pending background result — its stashed
     // page was queried before this fetch, so drop it and re-stash below.
     pendingRefreshedPageRef.current = null;
@@ -894,7 +946,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
     // swiping stay live, and the feed only moves when the user taps "New posts
     // available". Forced so feeds still in backoff are actually fetched.
     await loadData(true, true, true);
-  };
+  }, [loadData, markActivity]);
 
   const feedDetailsById = useMemo(
     () => new Map(feeds.map((feed) => [feed.id, feed])),
@@ -1873,8 +1925,45 @@ export default function FeedListScreen({ navigation, route }: Props) {
         />
       );
     }
-    return <FeedLoadingScreen progress={refreshProgress} />;
+    return <SyncProgressLoadingScreen />;
   }
+
+  // What an empty feed says, for both the list layouts (inside the list) and
+  // the single-post reader.
+  const emptyState = (
+    <>
+      <Text style={[styles.emptyTitle, { color: colors.ink }]}>
+        {hasSearch
+          ? "No matches found."
+          : filter === "unread"
+            ? "All caught up!"
+            : filter === "starred"
+              ? "No saved items."
+              : "No items yet."}
+      </Text>
+      <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
+        {hasSearch
+          ? "Try a different word, feed name, or topic."
+          : filter === "unread"
+            ? "You have no unread items."
+            : filter === "starred"
+              ? "Bookmark items to see them here."
+              : "Pull down to refresh your feeds."}
+      </Text>
+      {!hasSearch && filter === "all" ? (
+        <TouchableOpacity
+          onPress={handleRefreshAll}
+          disabled={refreshing}
+          hitSlop={8}
+          style={styles.refreshBtn}
+        >
+          <Text style={[styles.refreshBtnText, { color: colors.accent }]}>
+            Refresh
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+    </>
+  );
 
   return (
     <View style={[styles.container, { backgroundColor: colors.paper }]}>
@@ -1961,35 +2050,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
         </View>
       ) : null}
 
-      {/* The sync banner itself is rendered by the tab navigator, not here, so
-          it survives switching tabs. It still carries the per-feed counts, so
-          it replaces the separate "Refreshing n/n" row that used to sit here.
-
-          One banner at a time: the sync banner is *replaced* by the reset
-          banner when the sync finishes, rather than stacking with it if new
-          posts were already waiting when the sync started. The reset banner
-          stays screen-local because tapping it acts on this feed. */}
-      {newPostsAvailable && !backgroundRefreshing ? (
-        <TouchableOpacity
-          onPress={handleShowNewPosts}
-          activeOpacity={0.85}
-          accessibilityLabel="Show new posts"
-          accessibilityRole="button"
-          style={[
-            styles.newPostsButton,
-            {
-              backgroundColor: colors.accent,
-              borderBottomColor: colors.inkFaint,
-            },
-          ]}
-        >
-          <Feather name="arrow-up" size={14} color={colors.paper} />
-          <Text style={[styles.newPostsButtonText, { color: colors.paper }]}>
-            New posts available. Tap to reload
-          </Text>
-        </TouchableOpacity>
-      ) : null}
-
       {feeds.length === 0 ? (
         <View style={styles.center}>
           <Text style={[styles.emptyTitle, { color: colors.ink }]}>
@@ -2008,7 +2068,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             </Text>
           </TouchableOpacity>
         </View>
-      ) : visibleItems.length === 0 ? (
+      ) : visibleItems.length === 0 && feedLayout === "single" ? (
         <ScrollView
           style={styles.fill}
           contentContainerStyle={styles.center}
@@ -2021,36 +2081,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             />
           }
         >
-          <Text style={[styles.emptyTitle, { color: colors.ink }]}>
-            {hasSearch
-              ? "No matches found."
-              : filter === "unread"
-                ? "All caught up!"
-                : filter === "starred"
-                  ? "No saved items."
-                  : "No items yet."}
-          </Text>
-          <Text style={[styles.emptySub, { color: colors.inkSoft }]}>
-            {hasSearch
-              ? "Try a different word, feed name, or topic."
-              : filter === "unread"
-                ? "You have no unread items."
-                : filter === "starred"
-                  ? "Bookmark items to see them here."
-                  : "Pull down to refresh your feeds."}
-          </Text>
-          {!hasSearch && filter === "all" ? (
-            <TouchableOpacity
-              onPress={handleRefreshAll}
-              disabled={refreshing}
-              hitSlop={8}
-              style={styles.refreshBtn}
-            >
-              <Text style={[styles.refreshBtnText, { color: colors.accent }]}>
-                Refresh
-              </Text>
-            </TouchableOpacity>
-          ) : null}
+          {emptyState}
         </ScrollView>
       ) : feedLayout === "single" &&
         currentSingleItem &&
@@ -2069,9 +2100,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
               ]}
             >
               <View style={styles.singleToolbarLeft}>
-                <TouchableOpacity
+                <IconButton
                   onPress={() => setShowSingleMoreMenu((v) => !v)}
-                  activeOpacity={0.7}
                   accessibilityLabel="More options"
                   style={styles.singleToolbarButton}
                 >
@@ -2080,10 +2110,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
                     size={22}
                     color={colors.ink}
                   />
-                </TouchableOpacity>
-                <TouchableOpacity
+                </IconButton>
+                <IconButton
                   onPress={() => setShowSingleFilters((v) => !v)}
-                  activeOpacity={0.7}
                   accessibilityLabel={
                     showSingleFilters ? "Hide filters" : "Show filters"
                   }
@@ -2098,21 +2127,19 @@ export default function FeedListScreen({ navigation, route }: Props) {
                         : colors.ink
                     }
                   />
-                </TouchableOpacity>
-                <TouchableOpacity
+                </IconButton>
+                <IconButton
                   onPress={() => handleOpenOriginalLink(currentSingleItem.id)}
-                  activeOpacity={0.7}
                   accessibilityLabel="Open post link"
                   style={styles.singleToolbarButton}
                 >
                   <Feather name="external-link" size={22} color={colors.ink} />
-                </TouchableOpacity>
+                </IconButton>
               </View>
               <View style={styles.singleToolbarRight}>
-                <TouchableOpacity
+                <IconButton
                   onPress={handleSinglePrevious}
                   disabled={singlePreviousDisabled}
-                  activeOpacity={0.7}
                   accessibilityLabel="Previous post"
                   style={styles.singleToolbarButton}
                 >
@@ -2123,11 +2150,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
                       singlePreviousDisabled ? colors.inkFaint : colors.ink
                     }
                   />
-                </TouchableOpacity>
-                <TouchableOpacity
+                </IconButton>
+                <IconButton
                   onPress={handleSingleNext}
                   disabled={singleNextDisabled}
-                  activeOpacity={0.7}
                   accessibilityLabel={
                     singleAwaitingNextPost ? "Loading next post" : "Next post"
                   }
@@ -2142,7 +2168,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                       color={singleNextDisabled ? colors.inkFaint : colors.ink}
                     />
                   )}
-                </TouchableOpacity>
+                </IconButton>
               </View>
             </View>
 
@@ -2355,7 +2381,6 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   onPress={() => {
                     navigation.navigate("FeedDetail", {
                       feedId: currentSingleItem.feed_id,
-                      returnToItem: currentSingleViewItem ?? undefined,
                     });
                     setShowSingleMoreMenu(false);
                   }}
@@ -2495,13 +2520,51 @@ export default function FeedListScreen({ navigation, route }: Props) {
             feedLayout === "card" ? styles.cardList : null,
           ]}
           renderItem={renderItem}
+          // Inside the list rather than in place of it: switching to a filter
+          // or search with no results used to unmount the whole list, so
+          // switching back rebuilt it from the top and lost the scroll
+          // position.
+          ListEmptyComponent={
+            <View style={styles.emptyInList}>{emptyState}</View>
+          }
           ItemSeparatorComponent={Separator}
           onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
+          // Pages come from local SQLite, so start the next one two screens
+          // early: at half a screen, a normal fling reached the end before it
+          // landed and the user scrolled into the loading footer.
+          onEndReachedThreshold={2}
           ListFooterComponent={loadingMore ? LoadingMoreFooter : null}
         />
       )}
-      <Toast message={toastMessage} onHide={() => setToastMessage(null)} />
+      {/* Floats over the bottom of the feed, where the background-sync pill
+          (owned by the navigator) also sits — the reset prompt *replaces*
+          the sync status when it finishes rather than stacking with it.
+          Screen-local because tapping it acts on this feed. */}
+      {newPostsAvailable && !backgroundRefreshing ? (
+        <FloatingPill
+          tone="accent"
+          bottom={spacing.md}
+          onPress={handleShowNewPosts}
+          accessibilityLabel="Show new posts"
+        >
+          <Feather name="arrow-up" size={14} color={colors.paper} />
+          <Text
+            style={[styles.newPostsButtonText, { color: colors.paper }]}
+            numberOfLines={1}
+          >
+            New posts available
+          </Text>
+        </FloatingPill>
+      ) : null}
+      <Toast
+        message={toastMessage}
+        onHide={() => setToastMessage(null)}
+        bottom={
+          newPostsAvailable && !backgroundRefreshing
+            ? spacing.md + NEW_POSTS_PILL_CLEARANCE
+            : undefined
+        }
+      />
     </View>
   );
 }
@@ -2512,6 +2575,13 @@ const keyExtractor = (item: CollapsedFeedListRow) => {
   if (isCollapsedItemRow(item)) return `collapsed-${item.item.id}`;
   return String(item.id);
 };
+
+// The full-screen loader is the one place on this screen that shows per-feed
+// progress, so it subscribes to it on its own rather than through the screen.
+function SyncProgressLoadingScreen() {
+  const progress = useBackgroundSyncProgress();
+  return <FeedLoadingScreen progress={progress} />;
+}
 
 function Separator() {
   return <View style={styles.separator} />;
@@ -2587,15 +2657,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
     padding: 0,
   },
-  newPostsButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: spacing.xs,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderBottomWidth: 1,
-  },
   newPostsButtonText: {
     fontFamily: fonts.sans,
     fontSize: fontSize.body,
@@ -2666,6 +2727,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.body,
   },
   list: { padding: spacing.md, gap: spacing.md, paddingBottom: spacing.xxl },
+  emptyInList: {
+    alignItems: "center",
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xxl * 2,
+  },
   groupDivider: {
     paddingVertical: spacing.xs,
     paddingHorizontal: spacing.xs,

@@ -1,3 +1,5 @@
+// First, so the native splash is held before anything else loads or renders.
+import "./src/splash";
 import React from "react";
 import {
   View,
@@ -20,7 +22,8 @@ import {
   createBottomTabNavigator,
   BottomTabBarProps,
 } from "@react-navigation/bottom-tabs";
-import { Feather } from "@expo/vector-icons";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { Feather } from "@react-native-vector-icons/feather";
 import { StatusBar } from "expo-status-bar";
 import {
   SafeAreaProvider,
@@ -48,6 +51,7 @@ import {
   Feed,
   Tag,
   TabParamList,
+  RootStackParamList,
   CustomFeedWithMemberCount,
 } from "./src/types";
 import { fonts, fontSize, spacing } from "./src/theme";
@@ -82,6 +86,10 @@ import { ErrorBoundary } from "./src/components/ErrorBoundary";
 installCrashHandler();
 
 const Tab = createBottomTabNavigator<TabParamList>();
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+// Height of the bottom tab bar, not counting the bottom safe-area inset.
+const TAB_BAR_HEIGHT = 62;
 
 // Width of the left sidebar on web
 const WEB_SIDEBAR_WIDTH = 180;
@@ -101,7 +109,7 @@ const TAB_CONFIG: {
   { name: "Settings", icon: "settings", label: "Settings" },
 ];
 
-const navigationRef = createNavigationContainerRef<TabParamList>();
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 function FeatherTabIcon({
   icon,
@@ -525,7 +533,7 @@ function Tabs() {
           backgroundColor: colors.paper,
           borderTopWidth: 1,
           borderTopColor: colors.border,
-          height: 62 + insets.bottom,
+          height: TAB_BAR_HEIGHT + insets.bottom,
           paddingBottom: insets.bottom + 6,
           paddingTop: 6,
         },
@@ -542,7 +550,7 @@ function Tabs() {
           return (
             <View style={styles.tabsRoot}>
               <AppHeader />
-              <BackgroundSyncBannerHost />
+              <BackgroundSyncBannerHost bottom={spacing.md} />
               <View style={styles.webLayout}>
                 <WebSideNav
                   state={state}
@@ -559,11 +567,15 @@ function Tabs() {
         return (
           <View style={styles.tabsRoot}>
             <AppHeader />
-            {/* Above {children} so the banner spans every tab, not just Feed:
-                a sync started on the Feed tab stays visible after switching to
-                Feeds/Discover/Settings and keeps running in the background. */}
-            <BackgroundSyncBannerHost />
             {children}
+            {/* Here rather than inside a screen so the status spans every tab:
+                a sync started on the Feed tab stays visible after switching to
+                Feeds/Discover/Settings and keeps running in the background.
+                It floats just above the tab bar instead of taking a row of
+                the layout, so it never moves the content under it. */}
+            <BackgroundSyncBannerHost
+              bottom={TAB_BAR_HEIGHT + insets.bottom + spacing.md}
+            />
           </View>
         );
       }}
@@ -657,62 +669,69 @@ function Tabs() {
           ),
         }}
       />
-      <Tab.Screen
-        name="FeedSearch"
-        component={FeedSearchScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
-        name="AddFeed"
-        component={AddFeedScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
-        name="FeedItems"
-        component={FeedItemsScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
-        name="FeedItemView"
-        component={FeedItemScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
-        name="FeedDetail"
-        component={FeedDetailScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
-        name="TagDetail"
-        component={TagDetailScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
-        name="CustomFeedEdit"
-        component={CustomFeedEditScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
+    </Tab.Navigator>
+  );
+}
+
+/**
+ * The tabs, with every other screen pushed over them on a native stack.
+ *
+ * These detail screens used to be hidden tabs. A tab has no transition, never
+ * unmounts and has no history: opening a post just swapped the screen in place
+ * under a tab bar with nothing selected, a second post opened scrolled to
+ * wherever the first was left, a video or web page kept running after "back",
+ * and every screen had to work out by hand where back should go. On a stack
+ * they slide in over the whole app, pop back to whatever opened them, and are
+ * torn down when they leave.
+ */
+function RootStack() {
+  const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
+
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        contentStyle: { backgroundColor: colors.paper },
+      }}
+      // The tabs draw their own header strip and tab bar (which carries the
+      // bottom inset); a pushed screen covers both, so it gets the same
+      // header strip and pads itself clear of the system navigation bar.
+      screenLayout={({ children, route }) =>
+        route.name === "Tabs" ? (
+          children
+        ) : (
+          <View
+            style={[
+              styles.root,
+              {
+                backgroundColor: colors.paper,
+                paddingBottom: insets.bottom,
+              },
+            ]}
+          >
+            <AppHeader />
+            {children}
+          </View>
+        )
+      }
+    >
+      <Stack.Screen name="Tabs" component={Tabs} />
+      <Stack.Screen name="FeedItemView" component={FeedItemScreen} />
+      <Stack.Screen name="FeedDetail" component={FeedDetailScreen} />
+      <Stack.Screen name="FeedError" component={FeedErrorScreen} />
+      <Stack.Screen name="FeedItems" component={FeedItemsScreen} />
+      <Stack.Screen name="FeedSearch" component={FeedSearchScreen} />
+      <Stack.Screen name="AddFeed" component={AddFeedScreen} />
+      <Stack.Screen name="TagDetail" component={TagDetailScreen} />
+      <Stack.Screen name="CustomFeedEdit" component={CustomFeedEditScreen} />
+      <Stack.Screen
         name="CustomFeedManage"
         component={CustomFeedManageScreen}
-        options={HIDDEN_TAB_OPTIONS}
       />
-      <Tab.Screen
-        name="ImportExport"
-        component={ImportExportScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
-        name="InAppBrowser"
-        component={InAppBrowserScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-      <Tab.Screen
-        name="FeedError"
-        component={FeedErrorScreen}
-        options={HIDDEN_TAB_OPTIONS}
-      />
-    </Tab.Navigator>
+      <Stack.Screen name="ImportExport" component={ImportExportScreen} />
+      <Stack.Screen name="InAppBrowser" component={InAppBrowserScreen} />
+    </Stack.Navigator>
   );
 }
 
@@ -772,7 +791,7 @@ function AppContent() {
     <View style={[styles.root, { backgroundColor: colors.paper }]}>
       <NavigationContainer ref={navigationRef}>
         <StatusBar style={isDark ? "light" : "dark"} />
-        <Tabs />
+        <RootStack />
       </NavigationContainer>
     </View>
   );

@@ -7,11 +7,11 @@ import React, {
 } from "react";
 import {
   ActivityIndicator,
-  Image as RNImage,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Platform,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -19,7 +19,7 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import {
   extractRedditGalleryUrl,
   extractRedditVideoPostUrl,
@@ -29,6 +29,7 @@ import {
 } from "../redditGallery";
 import { extractGifEmbedUrl, extractGifEmbedUrlFromContent } from "../gifUtils";
 import { proxiedImageUrl } from "../proxyFetch";
+import { measureImage } from "../imageSize";
 import { useTheme } from "../context/ThemeContext";
 import {
   extractYouTubeVideoId,
@@ -82,14 +83,21 @@ function ExpandedFeedMediaImpl({
   const { colors } = useTheme();
   const { width: viewportWidth } = useWindowDimensions();
   const maxGalleryWidth = Math.max(1, viewportWidth - spacing.lg * 2);
-  const galleryScrollRef = useRef<ScrollView | null>(null);
-  const [galleryImageUrls, setGalleryImageUrls] = useState<string[] | null>(
+  const galleryScrollRef = useRef<ScrollViewInstance | null>(null);
+  // The Reddit post the media state below was fetched for. List cells are
+  // recycled onto other posts with their state intact, and the effect that
+  // clears it runs a frame late — long enough to flash the previous post's
+  // gallery. Reads go through the post-checked values further down instead.
+  const [mediaOwner, setMediaOwner] = useState<string | null>(null);
+  const [ownedGalleryImageUrls, setGalleryImageUrls] = useState<
+    string[] | null
+  >(null);
+  const [ownedRedditVideo, setRedditVideo] = useState<RedditVideoMedia | null>(
     null
   );
-  const [redditVideo, setRedditVideo] = useState<RedditVideoMedia | null>(null);
-  const [galleryError, setGalleryError] = useState<string | null>(null);
+  const [ownedGalleryError, setGalleryError] = useState<string | null>(null);
   const [isLoadingGallery, setIsLoadingGallery] = useState(false);
-  const [galleryContainerSize, setGalleryContainerSize] = useState<{
+  const [ownedGalleryContainerSize, setGalleryContainerSize] = useState<{
     width: number;
     height: number;
   } | null>(null);
@@ -121,6 +129,11 @@ function ExpandedFeedMediaImpl({
     [itemUrl, content]
   );
   const shouldLoadGallery = Boolean(redditPostUrl) && hasRequestedGalleryLoad;
+  const ownsMedia = redditPostUrl !== null && mediaOwner === redditPostUrl;
+  const galleryImageUrls = ownsMedia ? ownedGalleryImageUrls : null;
+  const redditVideo = ownsMedia ? ownedRedditVideo : null;
+  const galleryError = ownsMedia ? ownedGalleryError : null;
+  const galleryContainerSize = ownsMedia ? ownedGalleryContainerSize : null;
 
   useEffect(() => {
     setHasRequestedGalleryLoad(!deferGalleryLoad);
@@ -172,6 +185,7 @@ function ExpandedFeedMediaImpl({
           .filter((url): url is string => Boolean(url));
         setGalleryImageUrls(proxiedUrls.length ? proxiedUrls : null);
         setRedditVideo(media.video);
+        setMediaOwner(redditPostUrl);
         setIsLoadingGallery(false);
       })
       .catch((error: unknown) => {
@@ -183,6 +197,7 @@ function ExpandedFeedMediaImpl({
         setRedditVideo(null);
         setIsLoadingGallery(false);
         setGalleryError(formatRedditLoadError(error));
+        setMediaOwner(redditPostUrl);
       });
 
     return () => {
@@ -223,16 +238,9 @@ function ExpandedFeedMediaImpl({
       }
     };
 
-    RNImage.getSize(
-      url,
-      (w, h) => apply(w, h),
-      () => {
-        if (!active) return;
-        setGalleryContainerSize({
-          width: maxGalleryWidth,
-          height: maxGalleryWidth,
-        });
-      }
+    // A failed measurement lands in apply's square fallback.
+    measureImage(url).then((size) =>
+      size === "failed" ? apply(0, 0) : apply(size.width, size.height)
     );
 
     return () => {
@@ -1141,17 +1149,17 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   previewImage: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
   },
   previewBlurClip: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     overflow: "hidden",
   },
   galleryBlurClip: {
     overflow: "hidden",
   },
   placeholderOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
   },

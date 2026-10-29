@@ -204,7 +204,7 @@ export function saveConfig(patch: Partial<WebConfig>): void {
   try {
     const file = getNativeConfigFile();
     if (file) {
-      file.write(JSON.stringify(updated));
+      file.writeSync(JSON.stringify(updated));
     }
   } catch (e) {
     console.warn("[feedme] Failed to persist config:", e);

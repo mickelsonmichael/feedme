@@ -1,80 +1,42 @@
-# Repository Instructions
+# FeedMe
 
-## Projects
+An RSS reader. Two independent projects, each with its own `package.json` — run commands from inside the relevant directory:
 
-| Directory | Description |
-|-----------|-------------|
-| `app/` | React Native + TypeScript RSS app (Android; web build deprecated) |
-| `worker/` | Cloudflare Worker backend/service code |
+| Directory | What                                                                  |
+| --------- | --------------------------------------------------------------------- |
+| `app/`    | React Native + Expo + TypeScript app (Android). See `app/AGENTS.md`.  |
+| `worker/` | Cloudflare Worker that proxies feed requests. See `worker/AGENTS.md`. |
 
-**Always `cd` into the relevant project directory before running any scripts or tests.**
-These instructions apply to both projects unless a nested `AGENTS.md` says otherwise.
+`npm run start` from the root runs both dev servers (Expo on `:8081`, worker on `:8787`). Check whether one is already running before starting another.
 
----
+## Android is the only target
 
-## Hard requirements — a task is NOT complete without all of these
+The web build is deprecated. Don't run, verify or screenshot it, and don't add web-only behaviour. Leave existing web code (`Platform.OS === "web"` branches, the wide-web sidebar) in place rather than removing it as a drive-by.
 
-These are gates, not suggestions. Do not open a PR, mark a task done, or stop work until every item is satisfied.
+## Done means
 
-1. **Android emulator verification** — run the app on the emulator using the Expo dev server and view it through the available tooling (do not save screenshot files into the repository). See the `android-emulator-adb` skill for setup. `start-emulator` must succeed and the app must visibly launch before you proceed.
-2. **Visual changes — verify both themes** — for any change that affects visuals, verify the result in **both light mode and dark mode** before considering the task complete.
-3. **Tests pass** — all pre-existing tests must still pass. Add or update tests for the changed behaviour. Do not disable or delete tests to make this green.
-4. **Code quality** — run the `code quality` skill **as the very last step** before submitting. This must include running `npm run format:check` (and fixing any issues with `npm run format`) followed by `npm run typecheck`. Both must exit cleanly.
+- The change is verified in the running app on the Android emulator — tests and code reading don't substitute for this. Visual changes are checked in both light and dark mode. Screenshots stay out of the repo.
+- Tests pass, and changed behaviour has tests that check requirements and edge cases rather than implementation details.
+- `npm run format:check` and `npm run typecheck` pass in `app/` (`npm run format` fixes formatting).
 
-> If the emulator fails to boot, fix the boot problem before doing anything else. Do not substitute code reading, test suites, or your own reasoning for live verification on the target platform. Settings persistence, data loading, navigation, and any runtime behaviour can only be confirmed by actually running the app.
+## Skills
 
----
-
-## Deprecated: the web build
-
-The web version of the app is **deprecated**. It is no longer used, and verifying it wastes time — so don't.
-
-- **Never** start the web build, open the app in a browser, or capture web screenshots as part of verifying a change. Android is the only platform that must be verified.
-- Existing web-specific code (`Platform.OS === "web"` branches, the wide-web sidebar, browser fallbacks) stays where it is — leave it alone rather than ripping it out as a drive-by change. Don't add new web-only behaviour, and don't spend effort keeping a change working on web.
-- Web-only entries in the `feedme` skill's `requirements.md` and `screens.md` are historical. They are not gates.
-
----
-
-## Task workflow
-
-Follow these steps in order. Repeat as necessary until the hard requirements above are all satisfied.
-
-1. **Plan** — use the Plan agent before writing any code. If anything is ambiguous, use the ask-user tool before proceeding.
-2. **Implement** — make the change. Stay in scope; do not fix unrelated things.
-3. **Test** — write or update tests following Arrange–Act–Assert. Test requirements and edge cases, not code paths.
-4. **Verify on Android** — `start-emulator` → Expo dev server → confirm the change visually via the available emulator tooling. Do **not** write screenshot files into the repository.
-5. **Verify both themes (visual changes only)** — toggle between light and dark mode and confirm the change looks correct in both.
-6. **Quality check** — run the `code quality` skill **as the very last step before `report_progress`**. Run `npm run format:check` from `app/` and fix any issues with `npm run format`, then re-confirm with `npm run format:check`. Also run `npm run typecheck`. Both must exit with no errors.
-
----
-
-## Testing standards
-
-- Structure: Arrange – Act – Assert.
-- Test requirements and edge/error cases, not implementation details.
-- Do not break existing tests unless the change explicitly requires a behaviour change, and document why in the PR.
-
----
-
-## Curated Discover feeds
-
-When adding, modifying, or removing a feed from the Discover screen's curated list, follow the `curated-feeds` skill exactly. It covers URL verification, favicon retrieval, and JSON format.
-
----
+- `android-emulator` — boot the emulator, run Metro, rebuild, screenshot, tap/swipe, read logs.
+- `maestro-e2e` — scripted end-to-end UI flows.
+- `feedme` — screen map and recorded requirements; update the requirements when behaviour changes.
+- `curated-feeds` — required whenever the Discover screen's curated list changes.
 
 ## Test feeds
 
-Use these when a feed is needed during development or testing.
+| Feed                | URL / description                                     |
+| ------------------- | ----------------------------------------------------- |
+| The Daily (podcast) | `https://feeds.simplecast.com/54nAGcIl`               |
+| NYT US News         | `https://rss.nytimes.com/services/xml/rss/nyt/US.xml` |
+| Reddit `ama`        | Text posts                                            |
+| Reddit `aww`        | Images                                                |
+| Reddit `gifs`       | GIFs                                                  |
+| Reddit `gonewild`   | NSFW images, galleries, GIFs                          |
+| YouTube `atrioc`    | YouTube channel                                       |
+| YouTube `ludwig`    | YouTube channel                                       |
 
-| Feed | URL / Description |
-|------|-------------------|
-| The Daily (podcast) | `https://feeds.simplecast.com/54nAGcIl` |
-| NYT US News | `https://rss.nytimes.com/services/xml/rss/nyt/US.xml` |
-| Reddit: `ama` | Text-focused subreddit |
-| Reddit: `aww` | Image-focused subreddit |
-| Reddit: `gifs` | GIF-focused subreddit |
-| Reddit: `gonewild` | NSFW subreddit (images, galleries, GIFs) |
-| YouTube: Atrioc | YouTube channel `atrioc` |
-| YouTube: Ludwig | YouTube channel `ludwig` |
-
-Clear existing feeds before testing if a clean state is needed. If a post with specific characteristics is required, scroll until you find one — do not assume the first result will qualify.
+If a post with particular characteristics is needed, scroll until you find one rather than assuming the first result qualifies.

@@ -1,7 +1,7 @@
 import React from "react";
 import { Image } from "expo-image";
 import { StyleSheet, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import { getFeedIconUrl } from "../feedIcon";
 import { useTheme } from "../context/ThemeContext";
 
@@ -10,10 +10,24 @@ type Props = {
   size?: number;
 };
 
+// What each icon URL did the last time it was shown, for the life of the app.
+// Without this every mount started from scratch: the placeholder glyph held
+// the slot, then a dead favicon removed it and the byline jumped sideways —
+// on every post from that feed, every time the reader swiped onto one.
+const failedIconUris = new Set<string>();
+const loadedIconUris = new Set<string>();
+
+/** Forgets every remembered icon outcome. For tests. */
+export function resetFeedIconOutcomes(): void {
+  failedIconUris.clear();
+  loadedIconUris.clear();
+}
+
 /**
  * Small favicon-style feed icon. Shows a placeholder glyph while the
  * favicon loads so switching feeds doesn't leave a blank gap. Renders
- * nothing if no URL is derivable or the image fails to load.
+ * nothing if no URL is derivable or the image fails to load — and, once an
+ * icon is known to fail, renders nothing from the first frame on.
  */
 function FeedIconImpl({ feedUrl, size = 16 }: Props) {
   const { colors } = useTheme();
@@ -29,17 +43,13 @@ function FeedIconImpl({ feedUrl, size = 16 }: Props) {
     () => (iconUri ? { uri: iconUri } : null),
     [iconUri]
   );
-  const [failed, setFailed] = React.useState(false);
-  const [loaded, setLoaded] = React.useState(false);
+  // Bumped when this instance learns an outcome, to re-read the sets above.
+  const [, setOutcomeVersion] = React.useState(0);
 
-  React.useEffect(() => {
-    setFailed(false);
-    setLoaded(false);
-  }, [iconUri]);
-
-  if (!iconUri || !source || failed) {
+  if (!iconUri || !source || failedIconUris.has(iconUri)) {
     return null;
   }
+  const loaded = loadedIconUris.has(iconUri);
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
@@ -59,9 +69,16 @@ function FeedIconImpl({ feedUrl, size = 16 }: Props) {
           { width: size, height: size, borderRadius: size / 4 },
         ]}
         cachePolicy="memory-disk"
-        transition={80}
-        onLoad={() => setLoaded(true)}
-        onError={() => setFailed(true)}
+        transition={loaded ? null : 80}
+        onLoad={() => {
+          if (loadedIconUris.has(iconUri)) return;
+          loadedIconUris.add(iconUri);
+          setOutcomeVersion((v) => v + 1);
+        }}
+        onError={() => {
+          failedIconUris.add(iconUri);
+          setOutcomeVersion((v) => v + 1);
+        }}
       />
     </View>
   );

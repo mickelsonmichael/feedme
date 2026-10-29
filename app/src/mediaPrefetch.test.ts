@@ -1,13 +1,12 @@
-import { Image as RNImage } from "react-native";
+import { mockImageSize } from "./testUtils/mockImageSize";
 import { Image } from "expo-image";
 import { prefetchItemMedia } from "./mediaPrefetch";
 
 describe("prefetchItemMedia", () => {
   beforeEach(() => {
-    // Avoids exercising RN's real (promise-based) native ImageLoader bridge,
-    // which jest-expo's built-in mock doesn't model correctly — the size
-    // lookup itself isn't under test here.
-    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+    // Avoids exercising the native image loader, which jest-expo's built-in
+    // mock doesn't model — the size lookup itself isn't under test here.
+    mockImageSize((uri, success) => {
       success?.(1600, 800);
     });
   });

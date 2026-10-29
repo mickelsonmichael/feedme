@@ -5,13 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true
     },
@@ -28,6 +22,29 @@
     "experiments": {
       "baseUrl": "/feedme"
     },
-    "plugins": ["expo-web-browser", "expo-image", "expo-screen-orientation"]
+    "plugins": [
+      "expo-web-browser",
+      "expo-image",
+      "expo-screen-orientation",
+      "expo-background-task",
+      "expo-sharing",
+      "expo-sqlite",
+      "expo-status-bar",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#faf8f3",
+          "dark": {
+            "image": "./assets/splash-icon.png",
+            "backgroundColor": "#0f1012"
+          }
+        }
+      ],
+      "@react-native-vector-icons/feather"
+    ]
   }
 }

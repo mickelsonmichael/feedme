@@ -13,10 +13,8 @@ import {
   useWindowDimensions,
   Switch,
 } from "react-native";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import {
   addCustomFeedMember,
   addFeed,
@@ -25,7 +23,7 @@ import {
   setFeedTags,
 } from "../database";
 import { extractFeedTitle } from "../feedParser";
-import { RootStackParamList, Tag, TabParamList } from "../types";
+import { RootStackParamList, Tag } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { buildRedditFeedUrl, getRedditFeedTarget } from "../redditUtils";
@@ -37,11 +35,9 @@ import { buildGitHubReleaseFeedUrl, getGitHubRepo } from "../githubUtils";
 import { buildSubstackFeedUrl, getSubstackName } from "../substackUtils";
 import { fetchWithProxyFallback } from "../proxyFetch";
 import { SelectedTag, TagMultiSelect } from "../components/TagMultiSelect";
+import { goBackOr, tabFromParam } from "../navigation";
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "AddFeed">,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
 
 type FeedSource = "url" | "reddit" | "youtube" | "github" | "substack";
 
@@ -200,14 +196,20 @@ export default function AddFeedScreen({ navigation, route }: Props) {
       if (isScopedToCustomFeed && customFeedId !== undefined) {
         await addCustomFeedMember(customFeedId, feedId);
         resetForm();
-        navigation.navigate("CustomFeedManage", {
-          customFeedId,
-          from: "Feeds",
-        });
+        // Opened from the custom feed's manage screen: pop back to it (it
+        // reloads its members on focus). With nothing to pop, show it.
+        if (navigation.canGoBack()) {
+          navigation.goBack();
+        } else {
+          navigation.replace("CustomFeedManage", {
+            customFeedId,
+            from: "Feeds",
+          });
+        }
         return;
       }
       resetForm();
-      navigation.navigate(from as "Feeds");
+      goBackOr(navigation, tabFromParam(from));
     };
 
     if (source === "reddit") {
@@ -523,7 +525,7 @@ export default function AddFeedScreen({ navigation, route }: Props) {
             <View style={styles.actionRow}>
               <TouchableOpacity
                 style={[styles.actionBtn, { borderColor: colors.border }]}
-                onPress={() => navigation.navigate(from as "Feeds")}
+                onPress={() => goBackOr(navigation, tabFromParam(from))}
                 activeOpacity={0.7}
                 accessibilityLabel="Back"
               >

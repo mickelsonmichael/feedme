@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Platform,
   StyleSheet,
@@ -8,7 +8,8 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { Feather } from "@expo/vector-icons";
+import Animated, { FadeIn } from "react-native-reanimated";
+import { Feather } from "@react-native-vector-icons/feather";
 import { useTheme } from "../context/ThemeContext";
 import { parseContentAndLinks } from "../utils/contentActions";
 import { loadConfig } from "../storage";
@@ -23,6 +24,7 @@ import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { ArticleText } from "./ArticleText";
 import { SanitizedHtmlContent } from "./SanitizedHtmlContent";
 import { MetaText } from "./ui";
+import { IconButton } from "./IconButton";
 import { fonts, fontSize, NSFW_BLUR_RADIUS, radii, spacing } from "../theme";
 import { prepareArticleHtml } from "../utils/articleHtml";
 import { hasRenderableHtml } from "../utils/sanitizeHtml";
@@ -99,9 +101,26 @@ function FeedPostCardComponent({
     links: contentLinks,
     paragraphs: contentParagraphs,
   } = useMemo(() => parseContentAndLinks(item.content), [item.content]);
+  // The article body only renders in a compact row's expand panel, so only
+  // pay for it there. Sanitising a post's full HTML is the most expensive
+  // thing a row does, and doing it for every collapsed row — and again each
+  // time FlashList recycles a cell onto a new post — was wasted work on the
+  // scroll path. Card layout never shows the body at all.
+  const showsArticleBody = layout === "compact" && showExpand && expanded;
+  // Fade the panel in only when the user expands this post. FlashList
+  // recycles this component onto other posts, and an already-expanded post
+  // scrolling back into view must just be there, not fade in again.
+  const lastExpansionRef = useRef({ id: item.id, expanded });
+  const expandedByUser =
+    expanded &&
+    lastExpansionRef.current.id === item.id &&
+    !lastExpansionRef.current.expanded;
+  useEffect(() => {
+    lastExpansionRef.current = { id: item.id, expanded };
+  }, [item.id, expanded]);
   const shouldRenderHtmlContent = useMemo(
-    () => hasRenderableHtml(item.content),
-    [item.content]
+    () => showsArticleBody && hasRenderableHtml(item.content),
+    [item.content, showsArticleBody]
   );
   const [bionicReading] = useState(() => loadConfig().bionicReading ?? false);
   const sanitizedHtmlContent = useMemo(() => {
@@ -253,11 +272,9 @@ function FeedPostCardComponent({
                 onPress={() => onToggleReadLater(item.id)}
               />
             ) : null}
-            <TouchableOpacity
+            <IconButton
               style={styles.iconActionBtn}
               onPress={() => onOpenOriginalLink(item.id)}
-              activeOpacity={0.6}
-              hitSlop={8}
               accessibilityLabel="Open original link"
               disabled={!item.url}
             >
@@ -266,13 +283,11 @@ function FeedPostCardComponent({
                 size={18}
                 color={item.url ? colors.inkSoft : colors.inkFaint}
               />
-            </TouchableOpacity>
+            </IconButton>
             {redditCommentsLink ? (
-              <TouchableOpacity
+              <IconButton
                 style={styles.iconActionBtn}
                 onPress={() => onOpenContentLink(redditCommentsLink.url)}
-                activeOpacity={0.6}
-                hitSlop={8}
                 accessibilityLabel="Open Reddit comments"
               >
                 <Feather
@@ -280,14 +295,12 @@ function FeedPostCardComponent({
                   size={18}
                   color={colors.inkSoft}
                 />
-              </TouchableOpacity>
+              </IconButton>
             ) : null}
             {redditAuthor && onFollowAuthor ? (
-              <TouchableOpacity
+              <IconButton
                 style={styles.iconActionBtn}
                 onPress={() => onFollowAuthor(item.id)}
-                activeOpacity={0.6}
-                hitSlop={8}
                 accessibilityLabel={
                   authorFollowed
                     ? `Unfollow u/${redditAuthor}`
@@ -299,7 +312,7 @@ function FeedPostCardComponent({
                   size={18}
                   color={authorFollowed ? colors.accent : colors.inkSoft}
                 />
-              </TouchableOpacity>
+              </IconButton>
             ) : null}
           </View>
         </View>
@@ -319,7 +332,9 @@ function FeedPostCardComponent({
     >
       <View style={styles.cardRow}>
         {!expanded && (item.image_url || galleryThumbnailUrl) ? (
-          <View style={styles.cardImage}>
+          <View
+            style={[styles.cardImage, { backgroundColor: colors.paperWarm }]}
+          >
             <View
               style={[
                 styles.cardImageFill,
@@ -392,10 +407,8 @@ function FeedPostCardComponent({
         ]}
       >
         {showExpand && onToggleExpand ? (
-          <TouchableOpacity
+          <IconButton
             onPress={() => onToggleExpand(item.id)}
-            activeOpacity={0.6}
-            hitSlop={8}
             accessibilityLabel={expanded ? "Collapse post" : "Expand post"}
           >
             <Feather
@@ -403,7 +416,7 @@ function FeedPostCardComponent({
               size={18}
               color={expanded ? colors.accent : colors.inkSoft}
             />
-          </TouchableOpacity>
+          </IconButton>
         ) : null}
         <ReadToggleButton
           read={item.read}
@@ -416,11 +429,9 @@ function FeedPostCardComponent({
             onPress={() => onToggleReadLater(item.id)}
           />
         ) : null}
-        <TouchableOpacity
+        <IconButton
           style={styles.iconActionBtn}
           onPress={() => onOpenOriginalLink(item.id)}
-          activeOpacity={0.6}
-          hitSlop={8}
           disabled={!item.url}
           accessibilityLabel="Open original link"
         >
@@ -429,24 +440,20 @@ function FeedPostCardComponent({
             size={18}
             color={item.url ? colors.inkSoft : colors.inkFaint}
           />
-        </TouchableOpacity>
+        </IconButton>
         {redditCommentsLink ? (
-          <TouchableOpacity
+          <IconButton
             style={styles.iconActionBtn}
             onPress={() => onOpenContentLink(redditCommentsLink.url)}
-            activeOpacity={0.6}
-            hitSlop={8}
             accessibilityLabel="Open Reddit comments"
           >
             <Feather name="message-circle" size={18} color={colors.inkSoft} />
-          </TouchableOpacity>
+          </IconButton>
         ) : null}
         {redditAuthor && onFollowAuthor ? (
-          <TouchableOpacity
+          <IconButton
             style={styles.iconActionBtn}
             onPress={() => onFollowAuthor(item.id)}
-            activeOpacity={0.6}
-            hitSlop={8}
             accessibilityLabel={
               authorFollowed
                 ? `Unfollow u/${redditAuthor}`
@@ -458,11 +465,12 @@ function FeedPostCardComponent({
               size={18}
               color={authorFollowed ? colors.accent : colors.inkSoft}
             />
-          </TouchableOpacity>
+          </IconButton>
         ) : null}
       </View>
       {showExpand && expanded ? (
-        <View
+        <Animated.View
+          entering={expandedByUser ? FadeIn.duration(180) : undefined}
           style={[
             styles.expandPanel,
             {
@@ -500,7 +508,7 @@ function FeedPostCardComponent({
               onOpenContentLink={onOpenContentLink}
             />
           ) : null}
-        </View>
+        </Animated.View>
       ) : null}
     </View>
   );
@@ -574,11 +582,9 @@ function ReadToggleButton({
   const { colors } = useTheme();
 
   return (
-    <TouchableOpacity
+    <IconButton
       style={styles.iconActionBtn}
       onPress={onPress}
-      activeOpacity={0.6}
-      hitSlop={8}
       accessibilityLabel={read ? "Mark post as unread" : "Mark post as read"}
     >
       <Feather
@@ -586,7 +592,7 @@ function ReadToggleButton({
         size={18}
         color={read ? colors.inkSoft : colors.accent}
       />
-    </TouchableOpacity>
+    </IconButton>
   );
 }
 
@@ -600,14 +606,12 @@ function SaveButton({
   const { colors } = useTheme();
 
   return (
-    <TouchableOpacity
+    <IconButton
       style={[
         styles.iconActionBtn,
         saved && { backgroundColor: colors.ink, borderRadius: 999 },
       ]}
       onPress={onPress}
-      activeOpacity={0.6}
-      hitSlop={8}
       accessibilityLabel={saved ? "Unsave post" : "Save post"}
     >
       <Feather
@@ -615,7 +619,7 @@ function SaveButton({
         size={18}
         color={saved ? colors.paper : colors.inkSoft}
       />
-    </TouchableOpacity>
+    </IconButton>
   );
 }
 
@@ -629,14 +633,12 @@ function ReadLaterButton({
   const { colors } = useTheme();
 
   return (
-    <TouchableOpacity
+    <IconButton
       style={[
         styles.iconActionBtn,
         readLater && { backgroundColor: colors.ink, borderRadius: 999 },
       ]}
       onPress={onPress}
-      activeOpacity={0.6}
-      hitSlop={8}
       accessibilityLabel={
         readLater ? "Remove from read later" : "Add to read later"
       }
@@ -646,7 +648,7 @@ function ReadLaterButton({
         size={18}
         color={readLater ? colors.paper : colors.inkSoft}
       />
-    </TouchableOpacity>
+    </IconButton>
   );
 }
 
@@ -654,13 +656,16 @@ function useRedditGalleryThumbnail(
   galleryUrl: string | null,
   useProxy?: boolean
 ): string | null {
-  const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+  // Tagged with the gallery it was resolved for. FlashList recycles a cell —
+  // state and all — onto a different post, and an untagged thumbnail showed the
+  // previous post's image until the effect below caught up a frame later.
+  const [resolved, setResolved] = useState<{
+    galleryUrl: string;
+    thumbnailUrl: string | null;
+  } | null>(null);
 
   useEffect(() => {
-    if (!galleryUrl) {
-      setThumbnailUrl(null);
-      return;
-    }
+    if (!galleryUrl) return;
 
     let active = true;
     fetchRedditGalleryImageUrlsCached(galleryUrl, useProxy)
@@ -669,11 +674,11 @@ function useRedditGalleryThumbnail(
         const first = urls
           .map((url) => proxiedImageUrl(url, useProxy))
           .find((url): url is string => Boolean(url));
-        setThumbnailUrl(first ?? null);
+        setResolved({ galleryUrl, thumbnailUrl: first ?? null });
       })
       .catch(() => {
         if (!active) return;
-        setThumbnailUrl(null);
+        setResolved({ galleryUrl, thumbnailUrl: null });
       });
 
     return () => {
@@ -681,7 +686,9 @@ function useRedditGalleryThumbnail(
     };
   }, [galleryUrl, useProxy]);
 
-  return thumbnailUrl;
+  return galleryUrl && resolved?.galleryUrl === galleryUrl
+    ? resolved.thumbnailUrl
+    : null;
 }
 
 function formatDate(ts: number | null): string {

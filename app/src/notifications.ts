@@ -3,7 +3,7 @@ import * as BackgroundTask from "expo-background-task";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import * as Network from "expo-network";
 import * as TaskManager from "expo-task-manager";
-import type { EventSubscription } from "expo-modules-core";
+import type { EventSubscription } from "expo";
 import {
   getFeedTagMap,
   getFeeds,
@@ -409,8 +409,7 @@ export function subscribeToNotificationOpens(
   const Notifications = getNotifications();
   return Notifications.addNotificationResponseReceivedListener((response) => {
     const data = response.notification.request.content.data as
-      | NotificationOpenPayload
-      | undefined;
+      NotificationOpenPayload | undefined;
     if (data && typeof data.itemId === "number") {
       onOpen({
         itemId: data.itemId,
@@ -428,3 +427,10 @@ export function subscribeToNotificationOpens(
     }
   });
 }
+
+// Defined at import time, not on first registration. When the OS wakes the app
+// headless to run this task, no component mounts — so a definition made from
+// an effect (as registration used to do) never happens, and the scheduled sync
+// silently does nothing. App.tsx imports this module at startup, which is the
+// "global scope of a module imported at startup" TaskManager requires.
+ensureTaskDefined();

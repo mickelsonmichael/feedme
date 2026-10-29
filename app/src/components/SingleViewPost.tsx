@@ -11,12 +11,13 @@ import {
   NativeSyntheticEvent,
   RefreshControlProps,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import { startItemViewTime, endItemViewTime } from "../database";
 import { fonts, fontSize, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -79,7 +80,7 @@ export const SingleViewPost = memo(
   ) {
     const { colors } = useTheme();
     const [nsfwRevealed, setNsfwRevealed] = useState(false);
-    const scrollRef = useRef<ScrollView>(null);
+    const scrollRef = useRef<ScrollViewInstance>(null);
     const viewTimeRowIdRef = useRef<number | null>(null);
     const isNsfw = item.nsfw ?? false;
 
@@ -184,7 +185,10 @@ export const SingleViewPost = memo(
             <View style={styles.singlePostMetaRow}>
               <FeedIcon feedUrl={item.feedUrl} />
               <Text style={[styles.singlePostMeta, { color: colors.inkSoft }]}>
-                {item.feedTitle} - {formatRelativeDate(item.publishedAt)}
+                {item.feedTitle}
+                {item.publishedAt
+                  ? ` - ${formatRelativeDate(item.publishedAt)}`
+                  : null}
               </Text>
             </View>
             <Text style={[styles.singlePostTitle, { color: colors.ink }]}>

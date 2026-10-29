@@ -114,4 +114,54 @@ describe("parseContentAndLinks", () => {
     expect(links).toHaveLength(1);
     expect(links[0].label).toBe("Comments");
   });
+
+  describe("HTML entities", () => {
+    it("decodes the typographic entities feeds use in summaries", () => {
+      // Arrange — the shape of a real press-release summary on the emulator.
+      const html =
+        "Silver Spring, Md. (September 29, 2026)&nbsp;&mdash; The Association&rsquo;s results&hellip;";
+
+      // Act
+      const { text } = parseContentAndLinks(html);
+
+      // Assert
+      expect(text).toBe(
+        "Silver Spring, Md. (September 29, 2026) — The Association’s results…"
+      );
+      expect(text).not.toMatch(/&[a-z]+;/);
+    });
+
+    it("decodes entities in article paragraphs too, not only the preview", () => {
+      // Arrange
+      const html = "<p>One&nbsp;&ndash;&nbsp;two</p><p>&ldquo;Three&rdquo;</p>";
+
+      // Act
+      const { paragraphs } = parseContentAndLinks(html);
+
+      // Assert
+      expect(paragraphs).toEqual(["One – two", "“Three”"]);
+    });
+
+    it("leaves an unknown named entity as written rather than dropping it", () => {
+      // Arrange
+      const html = "Fish &chips; and &notarealentity;";
+
+      // Act
+      const { text } = parseContentAndLinks(html);
+
+      // Assert
+      expect(text).toBe("Fish &chips; and &notarealentity;");
+    });
+
+    it("unwraps a double-encoded named entity", () => {
+      // Arrange — some feeds escape their HTML a second time.
+      const html = "Before&amp;mdash;after";
+
+      // Act
+      const { text } = parseContentAndLinks(html);
+
+      // Assert
+      expect(text).toBe("Before—after");
+    });
+  });
 });

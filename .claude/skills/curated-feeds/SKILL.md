@@ -1,121 +1,42 @@
 ---
 name: curated-feeds
-description: "Add, modify, or remove a feed in the Discover screen's curated list. Use when: a user requests a new curated feed, asks to update an existing curated entry's URL/title/description/icon, or asks to remove a curated feed. Covers feed verification, favicon retrieval, and the JSON file format."
-argument-hint: "Describe the feed(s) to add, change, or remove"
+description: Add, modify or remove a feed in the Discover screen's curated list (app/src/data/curatedFeeds.json). Covers verifying the feed URL, finding a working icon, and the entry format.
 ---
 
-# Curated Discover Feeds
+# Curated Discover feeds
 
-The Discover screen shows a curated list of suggested feeds loaded from a single JSON file:
-
-**File:** [app/src/data/curatedFeeds.json](../../../app/src/data/curatedFeeds.json)
-
-Each entry must match this shape (see the `DiscoverScreen` consumer in [app/src/screens/DiscoverScreen.tsx](../../../app/src/screens/DiscoverScreen.tsx)):
+The list lives in `app/src/data/curatedFeeds.json`; array order is display order, grouped by topic where reasonable. Each entry:
 
 ```json
 {
-  "title": "Display title shown to users",
+  "title": "Display name",
   "url": "https://example.com/rss.xml",
-  "iconUrl": "https://example.com/favicon.ico",
-  "description": "One-sentence description (≈80 chars max, no marketing fluff)."
+  "iconUrl": "https://example.com/favicon.png",
+  "description": "One short sentence, about 80 characters."
 }
 ```
 
-Order in the array is the order shown on screen. Keep entries grouped by topic when reasonable.
+## Verify before adding
 
-## Scripts
+Never add a feed that fails verification — report it and ask for another URL. Run the helper scripts from `app/` (built-in Node only):
 
-Two Node.js helper scripts live in `.agents/skills/curated-feeds/scripts/`. **Always run them from the `app/` directory** (they use only built-in Node modules — no install needed).
+1. **Feed URL:** `node ../.claude/skills/curated-feeds/scripts/fetch-feed.js <url>` must print `OK`. For a homepage, try `/feed`, `/feed.xml`, `/rss`, `/rss.xml`, `/atom.xml`, `/index.xml`.
+2. **Icon:** `node ../.claude/skills/curated-feeds/scripts/fetch-icon.js <site-url>` prints `BEST ICON URL:`. CORS only mattered for the deprecated web build, so pass `--skip-cors` when an otherwise good icon is rejected for it.
 
-| Script | Purpose |
-|---|---|
-| `fetch-feed.js <url>` | Verifies a URL is a reachable RSS/Atom feed |
-| `fetch-icon.js <site-or-icon-url>` | Discovers and verifies a usable favicon |
+## Rules
 
-`fetch-icon.js` automatically follows redirects, skips SVG (unsupported by React Native), rejects images that lack CORS headers, and falls back to the WordPress blavatar CDN (which always has `Access-Control-Allow-Origin: *`). CORS only ever mattered for the web build, which is now deprecated — so pass `--skip-cors` when an otherwise good icon is rejected for a missing CORS header.
+- HTTPS only for both URLs; cleartext HTTP is blocked on Android.
+- No SVG icons — React Native's `Image` can't render them. Try `<site>/apple-touch-icon.png` instead.
+- `iconUrl` must point at an image, not a page. `og:image` banners crop badly in the 40×40 slot; last resort only.
+- Disambiguate multiple feeds from one site with an em-dash suffix: `Smithsonian — Photos`.
+- Descriptions are one plain sentence; longer text is truncated to two lines.
 
-## Workflow
+## Icon fallbacks
 
-Follow every step. Do **not** add a feed that fails any verification step — report the failure to the user and ask for a different URL.
+- **GitHub org avatar** (`https://avatars.githubusercontent.com/u/<org-id>`, optionally `?size=64`) for sites whose favicons are blocked or missing.
+- **Steam game feeds** (`store.steampowered.com/feeds/news/app/<appid>/`): use `https://cdn.cloudflare.steamstatic.com/steam/apps/<appid>/header.jpg`.
+- The WordPress blavatar CDN only has real icons for WordPress.com sites; `fetch-icon.js` detects the generic default and skips it.
 
-### 1. Verify the feed URL returns RSS or Atom
+## Check in the app
 
-```bash
-node .agents/skills/curated-feeds/scripts/fetch-feed.js <feed-url>
-```
-
-Expect `OK` on stdout. Any other output means the URL is not a valid feed.
-
-If you only have a homepage URL, try appending the common paths `/feed`, `/feed.xml`, `/rss`, `/rss.xml`, `/atom.xml`, `/index.xml` and re-run the script until one succeeds.
-
-### 2. Pick a stable title and description
-
-- **Title:** prefer the human-readable site/feed name. If the site has multiple feeds (e.g. Smithsonian articles vs photos), disambiguate with an em-dash suffix: `Smithsonian — Photos`.
-- **Description:** one short sentence describing what the feed publishes. No emojis, no marketing language, no trailing period if one isn't natural.
-
-### 3. Retrieve and verify the icon URL
-
-```bash
-node .agents/skills/curated-feeds/scripts/fetch-icon.js <site-url>
-```
-
-The script prints `BEST ICON URL:` followed by the URL to use in `iconUrl`. If it exits with code 1, check the output — each candidate is listed with a reason for skipping. Common fixes:
-
-- **SVG skipped** — the site only serves SVG icons; try passing the `apple-touch-icon.png` URL directly.
-- **No CORS header** — harmless on Android, and the web build is deprecated. Re-run with `--skip-cors` and use the icon.
-- **403 on favicon.ico** — try passing `<site-url>/apple-touch-icon.png` directly.
-
-Do not commit a 404 icon — `DiscoverScreen` will show a fallback RSS glyph, but a stale 404 wastes a network request.
-
-### 4. Edit `curatedFeeds.json`
-
-- **Add:** append the new object, or insert it at a topical position. Keep the JSON array valid (commas, no trailing comma).
-- **Modify:** update only the fields that changed. Re-run steps 1 and 3 if `url` or `iconUrl` changed.
-- **Remove:** delete the entry. If the feed was previously committed and users may already be subscribed, that's fine — the curated list is only used to suggest feeds; existing subscriptions are unaffected.
-
-### 5. Verify in the app
-
-Per the repo `AGENTS.md`, UI changes are verified on Android only — the web build is deprecated and is not verified:
-
-- **Android emulator:** open the Discover tab, confirm the new/changed entry renders with its icon and description, and that tapping **Add** subscribes the feed without error.
-
-If the icon doesn't render, re-check the `iconUrl` (HTTPS only — cleartext HTTP is blocked by default).
-
-## Anti-patterns
-
-- ❌ Adding a feed without running `fetch-feed.js` first ("looks right" is not verification).
-- ❌ Using a homepage URL instead of the feed URL.
-- ❌ Pointing `iconUrl` at a page (e.g. `https://example.com/`) instead of an image asset.
-- ❌ Using an SVG icon — React Native's `Image` component does not render SVG.
-- ❌ Long, multi-sentence descriptions — they're truncated to 2 lines on the card.
-- ❌ Committing entries with `http://` URLs — cleartext traffic is blocked by default.
-
-## Common Issues
-
-### Sites without a WordPress blavatar
-
-The `secure.gravatar.com/blavatar/` CDN only serves a real icon for sites hosted on WordPress.com. For non-WordPress sites the CDN returns a generic default avatar. The `fetch-icon.js` script probes with `?d=404` to detect this and skips blavatar for non-WordPress sites.
-
-**Fix:** Use the site's GitHub org avatar (`https://avatars.githubusercontent.com/u/{org_id}`) when available — these have CORS `*` and render on both platforms.
-
-### Sites with CORS-blocked favicons
-
-Some sites (e.g., NPR, Ubuntu, Matrix.org) serve all favicon assets from CDNs that do not include CORS headers. The `fetch-icon.js` script will exit with code 1 — no automatic icon discovery will succeed.
-
-**Fix:** Manually find a CORS-safe alternative:
-1. Look for a GitHub org avatar: visit `https://github.com/{org}` and copy the org ID from the avatar URL (e.g. `https://avatars.githubusercontent.com/u/8418310`).
-2. Pass it directly: `node .agents/skills/curated-feeds/scripts/fetch-icon.js https://avatars.githubusercontent.com/u/{org_id}`
-
-### Steam game feeds
-
-Steam store feeds use the format `https://store.steampowered.com/feeds/news/app/{appid}/`. The Steam favicon has no CORS, but the Steam CDN banner images do.
-
-**Fix:** Use `https://cdn.cloudflare.steamstatic.com/steam/apps/{appid}/header.jpg` as the `iconUrl`. The app ID appears in the feed URL itself.
-
-### `og:image` gives a banner, not a square icon
-
-`og:image` is usually a wide landscape banner (e.g. 1200×630). It will appear cropped in the 40×40 icon slot. Only use it as a last resort when no proper favicon is available.
-
-### GitHub avatar URLs have no file extension
-
-GitHub org/user avatar URLs (e.g. `https://avatars.githubusercontent.com/u/12345`) have no file extension, but they return `image/png`. The script handles this correctly for CORS-safe hosts, but you can also append `?size=64` to hint the size.
+Open the Discover tab on the emulator: the entry renders with its icon and description, and **Add** subscribes without error.

@@ -9,7 +9,7 @@ import {
   SkeletonFeedList,
 } from "./LoadingState";
 
-jest.mock("@expo/vector-icons", () => ({
+jest.mock("@react-native-vector-icons/feather", () => ({
   Feather: "Feather",
 }));
 

@@ -5,7 +5,7 @@
 // on common synonyms ("podcast" → mic, "video" → film, etc.).
 
 import type React from "react";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 
 export type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
 

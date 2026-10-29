@@ -14,9 +14,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
-import { Feather } from "@expo/vector-icons";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { Feather } from "@react-native-vector-icons/feather";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -28,7 +26,7 @@ import {
   setCustomFeedMembers,
   updateCustomFeed,
 } from "../database";
-import { Feed, RootStackParamList, TabParamList } from "../types";
+import { Feed, RootStackParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { getFeedIconUrl } from "../feedIcon";
@@ -38,11 +36,9 @@ import {
   filterCustomFeedIcons,
   resolveCustomFeedIcon,
 } from "../customFeedIcons";
+import { goBackOr } from "../navigation";
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "CustomFeedEdit">,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, "CustomFeedEdit">;
 
 export default function CustomFeedEditScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
@@ -98,11 +94,7 @@ export default function CustomFeedEditScreen({ route, navigation }: Props) {
   }, [navigation]);
 
   const goBack = () => {
-    if (route.params?.from === "Feeds") {
-      navigation.navigate("Feeds");
-    } else {
-      navigation.navigate("Feed", {});
-    }
+    goBackOr(navigation, route.params?.from === "Feeds" ? "Feeds" : "Feed");
   };
 
   const toggleFeed = (feedId: number) => {

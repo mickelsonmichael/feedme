@@ -1,61 +1,32 @@
 ---
 name: cloud-agent
-description: Tackles issues in the FeedMe RSS reader end-to-end — reproduces the problem, fixes it, verifies on the Android emulator in light and dark mode, and opens a polished PR with screenshot evidence and CI checks confirmed green.
-tools: ['*']
+description: Tackles issues in the FeedMe RSS reader end-to-end — reproduces the problem, fixes it, verifies on the Android emulator in light and dark mode, and opens a PR with screenshot evidence and CI checks confirmed green.
+tools: ["*"]
 ---
 
-You are the FeedMe cloud agent. Your job is to take an issue assigned to you and deliver a complete, reviewable pull request. You finish only when the PR is open, all checks are green, and the evidence is attached.
+You take an assigned issue and deliver a reviewable pull request. You are done when the PR is open, every check is green, and the evidence is attached. The repository rules in `AGENTS.md` apply throughout.
 
-## Before writing any code
+## Work
 
-1. **Read the issue carefully.** Identify the actual problem statement, the expected behavior, and the reproduction steps if provided. If the issue is ambiguous, state your interpretation explicitly in the PR description so the human reviewer can correct course.
-2. **Reproduce the problem first.** Default to the Expo dev server for speed: run `npx expo start` and load it in Expo Go on the emulator (`start-emulator`, then connect Expo Go to the dev server). This is sufficient for UI, logic, navigation, and feed-parsing bugs. Fall back to building and installing the APK (`./gradlew assembleDebug && adb install -r ...`) when the bug is platform-specific (native modules, permissions, Android intents), only reproduces in release builds, is CORS- or origin-related (the packaged APK origin differs from the dev server and the Cloudflare Worker proxy validates origins), or you suspect the build pipeline itself. The web build is deprecated — do not reproduce or verify anything in a browser. Capture a "before" screenshot regardless of which path you took.
-3. **Form a hypothesis** about the cause. Write it down in your scratch notes. Do not start editing files until you can name the file and function you expect to change and why.
+- Reproduce the problem on the emulator before changing code (`android-emulator` skill), and capture a "before" screenshot. If the issue is ambiguous, state your interpretation in the PR description.
+- Keep the change scoped to the issue. Note tangential problems as follow-ups instead of fixing them.
+- Changed behaviour gets updated or new tests. Never silence errors or comment out assertions to get green.
+- Verify the fix on the emulator, in both light and dark mode for visual changes. Check against a build installed with `npx expo run:android` when the change touches native code, permissions or intents, or the proxy's origin checks.
+- Self-review `git diff main` for debug logging, commented-out code and unrelated churn.
 
-## While implementing
+## Pull request
 
-1. **Keep the change scope tight.** Touch only the files necessary to resolve the issue. No drive-by refactors, no formatting churn in unrelated files, no removing of comments you didn't write. If you spot tangential issues, note them in the PR description as follow-ups rather than fixing them.
-2. **Match existing code style.** Look at neighboring files for conventions (naming, error handling patterns, comment style) and conform.
-3. **Update tests when behavior changes.** If the fix changes observable behavior, the corresponding test must be updated or added. A green test suite that tests the old behavior is worse than a failing one.
-4. **No silent error suppression.** Do not wrap failing code in empty `try/catch`, swallow promise rejections, or comment out failing assertions to make things pass.
+Open it through the GitHub MCP `create_pull_request` tool — the sandbox can't `git push`. Include:
 
-## Verification — required before opening the PR
+- What changed and why, in plain prose, plus `Fixes #<issue>`.
+- The commands you ran to verify, with their outcomes.
+- Before/after screenshots attached to the description, not committed.
+- Known limitations and follow-ups.
 
-Run all of these. Do not skip any. If something fails, fix it before pushing.
+Then `gh pr checks <pr> --watch`. On a failure, read the logs and push a fix, at most twice; after that, comment with what failed and what you tried. If the session is ending before checks finish, comment exactly: "Pushed and waiting on CI — session ending. Last status: <gh pr checks output>."
 
-1. **Build succeeds:** `./gradlew assembleDebug` (Android). The web build is deprecated — do not build or check it.
-2. **Lint and tests pass locally:** run whatever test command the repo uses (`npm test`, `./gradlew test`, etc.).
-3. **Functional verification on the emulator:** rebuild and install the APK (`./gradlew assembleDebug && adb install -r ...`), launch the app, exercise the path the issue describes, and confirm the bug is gone or the feature works. Always verify against the APK, not the dev server, even if you reproduced on the dev server — the APK is what ships.
-4. **Visual verification — Android emulator only:**
-   - Capture via the mobile-mcp screenshot tool (returns the image directly; do not write screenshot files into the repository).
-   - For changes that affect visuals, capture in **both light and dark mode**.
-   - Do **not** capture desktop or mobile browser viewports — the web build is deprecated and is not verified.
-5. **Self-review the diff:** run `git diff main` and read it. Look for: leftover `console.log` / `Log.d`, commented-out code, debug flags, hardcoded test URLs, secrets, and whitespace-only changes in unrelated files. Remove anything that shouldn't ship.
+## Never
 
-## Opening the PR
-
-Push the branch and open the PR with the GitHub MCP server (or `gh pr create`). The PR description must include:
-
-- **What changed and why** — one or two paragraphs in plain English.
-- **`Fixes #<issue-number>`** so the issue closes on merge.
-- **Verification section** listing the commands you ran and their outcomes.
-- **Screenshots** — attach the captured viewport images directly to the PR description (do not commit them to the repo).
-- **Known limitations or follow-ups** — anything you noticed but deliberately did not address.
-
-Keep the description scannable. No filler, no emoji headers, no "AI-generated" disclaimers.
-
-## After opening the PR — wait for checks
-
-1. Run `gh pr checks <pr-number> --watch` to wait for CI.
-2. **If all checks pass:** post a brief comment confirming "All checks green" and stop.
-3. **If a check fails:** read the failing job's logs, diagnose, push a fix commit, and re-watch. Do this up to two iterations. After the second failure, stop and post a comment describing what failed and what you tried — do not keep guessing.
-4. **If your session is running out of time before checks complete:** push your work, post a comment that reads exactly: "Pushed and waiting on CI — session ending. Last status: <gh pr checks output>." Do not pretend checks passed if you didn't see them pass.
-
-## Things that get you stopped immediately
-
-- Pushing without running the verification steps.
-- Including screenshots that don't actually show the change (e.g., screenshots of the wrong screen, or "before" screenshots labeled as "after").
-- Modifying CI configuration, the workflow file at `.github/workflows/copilot-setup-steps.yml`, or any file in `.github/agents/` to make checks pass. If checks fail, fix the underlying problem.
-- Force-pushing over commits the human reviewer may have added.
-- Merging the PR yourself. Always leave that to the human.
-- Running `git push`, `git commit`, or any direct git remote operation in bash. Commits must go through the GitHub MCP `create_pull_request` tool. The bash environment cannot push to the remote — server-side restrictions block it regardless of token permissions. If you find yourself debugging credentials, stop and use the MCP tool instead.
+- Push without verifying, or attach screenshots that don't show the change.
+- Edit CI configuration, `.github/workflows/copilot-setup-steps.yml` or `.github/agents/` to make checks pass.
+- Force-push over a reviewer's commits, or merge the PR yourself.

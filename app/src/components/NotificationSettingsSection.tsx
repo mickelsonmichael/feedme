@@ -27,8 +27,7 @@ import { fonts, fontSize, radii, spacing } from "../theme";
 import { Feed, Tag } from "../types";
 
 type Props =
-  | { source: "feed"; feedId: number }
-  | { source: "tag"; tagId: number };
+  { source: "feed"; feedId: number } | { source: "tag"; tagId: number };
 
 type FeedFrequency = "immediate" | "daily" | "off";
 

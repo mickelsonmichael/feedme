@@ -11,10 +11,8 @@ import {
   View,
 } from "react-native";
 import { Image } from "expo-image";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import { useFocusEffect } from "@react-navigation/native";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
   deleteCustomFeed,
@@ -22,17 +20,15 @@ import {
   getFeedsForCustomFeed,
   removeCustomFeedMember,
 } from "../database";
-import { CustomFeed, Feed, RootStackParamList, TabParamList } from "../types";
+import { CustomFeed, Feed, RootStackParamList } from "../types";
 import { DashedDivider } from "../components/ui";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { getFeedIconUrl } from "../feedIcon";
 import { resolveCustomFeedIcon } from "../customFeedIcons";
+import { goBackOr, tabFromParam, toTab } from "../navigation";
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "CustomFeedManage">,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, "CustomFeedManage">;
 
 export default function CustomFeedManageScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
@@ -80,11 +76,7 @@ export default function CustomFeedManageScreen({ navigation, route }: Props) {
   }, [feeds, search]);
 
   const handleBack = useCallback(() => {
-    if (navigation.canGoBack()) {
-      navigation.goBack();
-    } else {
-      navigation.navigate(from as "Feeds");
-    }
+    goBackOr(navigation, tabFromParam(from));
   }, [navigation, from]);
 
   const handleDelete = useCallback(() => {
@@ -92,7 +84,7 @@ export default function CustomFeedManageScreen({ navigation, route }: Props) {
     const performDelete = async () => {
       try {
         await deleteCustomFeed(customFeed.id);
-        navigation.navigate(from as "Feeds");
+        goBackOr(navigation, tabFromParam(from));
       } catch (err) {
         Alert.alert(
           "Error",
@@ -350,7 +342,7 @@ export default function CustomFeedManageScreen({ navigation, route }: Props) {
               <TouchableOpacity
                 style={styles.rowMain}
                 onPress={() =>
-                  navigation.navigate("Feed", {
+                  toTab(navigation, "Feed", {
                     selectedFeedId: item.id,
                     selectedFeedTitle: item.title,
                   })

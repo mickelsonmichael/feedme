@@ -185,7 +185,9 @@ describe("SettingsScreen", () => {
       .findAllByType(TouchableOpacity)
       .find((node: renderer.ReactTestInstance) => {
         const labels = node.findAllByType(Text);
-        return labels.some((label) => label.props.children === "Reset statistics");
+        return labels.some(
+          (label) => label.props.children === "Reset statistics"
+        );
       });
     expect(resetButton).toBeTruthy();
 

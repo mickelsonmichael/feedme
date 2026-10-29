@@ -38,7 +38,7 @@ import {
   BackgroundSyncBanner,
   FeedLoadingScreen,
 } from "../components/LoadingState";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FeedPostCard } from "../components/FeedPostCard";

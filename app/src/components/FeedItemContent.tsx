@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import { RootStackParamList } from "../types";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { fonts, fontSize, radii, spacing } from "../theme";
@@ -74,7 +74,11 @@ function FeedItemContentImpl({
       ) : null}
 
       {shouldRenderHtmlContent ? (
-        <SanitizedHtmlContent html={sanitizedHtmlContent} />
+        // Selectable only while the reader is settled here. Swiping on
+        // moves `isLive` to the new post, which drops any selection left
+        // behind in this one — handles, action bar and all — so a highlight
+        // can never turn up on top of a post it was not made in.
+        <SanitizedHtmlContent html={sanitizedHtmlContent} selectable={isLive} />
       ) : (
         <ArticleText
           paragraphs={contentParagraphs}

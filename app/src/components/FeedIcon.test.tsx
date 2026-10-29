@@ -1,9 +1,13 @@
 import React from "react";
 import { Image } from "expo-image";
 import renderer, { act } from "react-test-renderer";
-import { FeedIcon } from "../components/FeedIcon";
+import { FeedIcon, resetFeedIconOutcomes } from "../components/FeedIcon";
 
 describe("FeedIcon", () => {
+  beforeEach(() => {
+    resetFeedIconOutcomes();
+  });
+
   it("renders the feed's favicon derived from its URL", () => {
     // Arrange & Act
     let tree: renderer.ReactTestRenderer;
@@ -89,5 +93,48 @@ describe("FeedIcon", () => {
     );
     const secondInstance = tree!.root.findByType(Image).instance;
     expect(secondInstance).not.toBe(firstInstance);
+  });
+
+  it("renders nothing from the first frame for an icon already known to fail", () => {
+    // Arrange — the feed's favicon failed on an earlier post.
+    let first!: renderer.ReactTestRenderer;
+    act(() => {
+      first = renderer.create(<FeedIcon feedUrl="https://dead.example/rss" />);
+    });
+    act(() => {
+      first.root.findByType(Image).props.onError();
+    });
+
+    // Act — the reader moves on to another post from the same feed.
+    let next!: renderer.ReactTestRenderer;
+    act(() => {
+      next = renderer.create(<FeedIcon feedUrl="https://dead.example/rss" />);
+    });
+
+    // Assert — no placeholder reserves a slot that would then disappear.
+    expect(next.toJSON()).toBeNull();
+  });
+
+  it("skips the placeholder for an icon already known to load", () => {
+    // Arrange
+    let first!: renderer.ReactTestRenderer;
+    act(() => {
+      first = renderer.create(<FeedIcon feedUrl="https://good.example/rss" />);
+    });
+    act(() => {
+      first.root.findByType(Image).props.onLoad();
+    });
+
+    // Act
+    let next!: renderer.ReactTestRenderer;
+    act(() => {
+      next = renderer.create(<FeedIcon feedUrl="https://good.example/rss" />);
+    });
+
+    // Assert
+    expect(next.root.findAllByProps({ name: "rss" })).toHaveLength(0);
+    expect(next.root.findByType(Image).props.source).toEqual({
+      uri: "https://good.example/favicon.ico",
+    });
   });
 });

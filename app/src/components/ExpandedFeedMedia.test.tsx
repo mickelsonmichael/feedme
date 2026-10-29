@@ -1,6 +1,8 @@
 import React from "react";
-import { Image as RNImage, Platform, StyleSheet, View } from "react-native";
+import { mockImageSize } from "../testUtils/mockImageSize";
+import { Platform, StyleSheet, View } from "react-native";
 import renderer, { act } from "react-test-renderer";
+import { Image } from "expo-image";
 import { NSFW_BLUR_RADIUS } from "../theme";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 
@@ -55,7 +57,7 @@ jest.mock("../context/ThemeContext", () => ({
   }),
 }));
 
-jest.mock("@expo/vector-icons", () => ({
+jest.mock("@react-native-vector-icons/feather", () => ({
   Feather: ({ name }: { name: string }) => {
     const React = require("react");
     const { View } = require("react-native");
@@ -93,8 +95,8 @@ describe("ExpandedFeedMedia", () => {
       configurable: true,
       value: "web",
     });
-    jest.spyOn(RNImage, "getSize").mockImplementation((_uri, success) => {
-      success(1080, 1080);
+    mockImageSize((_uri, success) => {
+      success?.(1080, 1080);
     });
     mockExtractGifEmbedUrl.mockReturnValue(null);
     mockExtractGifEmbedUrlFromContent.mockReturnValue(null);
@@ -143,7 +145,7 @@ describe("ExpandedFeedMedia", () => {
       await Promise.resolve();
     });
 
-    // Flush the Image.getSize effect that runs after gallery URLs are set.
+    // Flush the size measurement that runs after gallery URLs are set.
     await act(async () => {
       await Promise.resolve();
     });
@@ -207,6 +209,54 @@ describe("ExpandedFeedMedia", () => {
         tree!.root.findByProps({ testID: "expanded-media-dot-1" }).props.style
       ).backgroundColor
     ).toBe("#1e1a3a");
+  });
+
+  it("never shows the previous post's gallery when the view is reused for another post", async () => {
+    // Arrange — the view has loaded post A's gallery.
+    mockExtractRedditGalleryUrl.mockImplementation((_url, content: string) =>
+      content.includes("aaa111")
+        ? "https://www.reddit.com/gallery/aaa111"
+        : "https://www.reddit.com/gallery/bbb222"
+    );
+    mockFetchRedditPostMedia.mockResolvedValueOnce({
+      video: null,
+      images: ["https://preview.redd.it/a-1.jpg"],
+    });
+    const media = (id: string) => (
+      <ExpandedFeedMedia
+        content={`<a href="https://www.reddit.com/gallery/${id}">[link]</a>`}
+        testID="expanded-media"
+        deferGalleryLoad={false}
+      />
+    );
+    let tree!: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(media("aaa111"));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    // Record every image render, not just the settled tree: the bug was a
+    // single committed frame of the old gallery before an effect cleared it.
+    const renderedUris: string[] = [];
+    const originalRender = Image.prototype.render;
+    jest.spyOn(Image.prototype, "render").mockImplementation(function (
+      this: Image
+    ) {
+      const uri = (this.props.source as { uri?: string } | null)?.uri;
+      if (uri) renderedUris.push(uri);
+      return originalRender.call(this);
+    });
+    // Post B's gallery lookup is still in flight.
+    mockFetchRedditPostMedia.mockReturnValueOnce(new Promise(() => {}));
+
+    // Act — a list recycles this view onto post B.
+    await act(async () => {
+      tree.update(media("bbb222"));
+    });
+
+    // Assert
+    expect(renderedUris).not.toContain("https://preview.redd.it/a-1.jpg");
   });
 
   it("renders an inline error and the preview image when gallery loading fails", async () => {

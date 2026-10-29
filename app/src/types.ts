@@ -1,3 +1,4 @@
+import type { NavigatorScreenParams } from "@react-navigation/native";
 export type Feed = {
   id: number;
   title: string;
@@ -217,14 +218,19 @@ export type FeedItemViewItem = {
   nsfw?: boolean;
 };
 
+/** Routes pushed over the tabs on the root native stack. They slide in over
+ *  the whole app — tab bar included — and unmount when popped. */
 export type RootStackParamList = {
-  Tabs: undefined;
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
+  /** `from` names the tab to land on when there is no history to pop back
+   *  to (e.g. the screen was opened from a notification). */
   AddFeed: { from?: string; customFeedId?: number } | undefined;
   CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
   CustomFeedManage: { customFeedId: number; from?: string };
   FeedItems: { feed: Feed };
   FeedItemView: { item: FeedItemViewItem };
-  FeedDetail: { feedId: number; returnToItem?: FeedItemViewItem };
+  FeedDetail: { feedId: number };
+  FeedSearch: { initialUrl?: string } | undefined;
   TagDetail: { tagId?: number; from?: string } | undefined;
   ImportExport: undefined;
   InAppBrowser: { url: string; title?: string };
@@ -247,18 +253,7 @@ export type TabParamList = {
   ReadLater: undefined;
   Feeds: undefined;
   Discover: undefined;
-  FeedSearch: { initialUrl?: string } | undefined;
   Settings: undefined;
-  AddFeed: { from?: string; customFeedId?: number } | undefined;
-  CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
-  CustomFeedManage: { customFeedId: number; from?: string };
-  FeedItems: { feed: Feed };
-  FeedItemView: { item: FeedItemViewItem };
-  FeedDetail: { feedId: number; returnToItem?: FeedItemViewItem };
-  TagDetail: { tagId?: number; from?: string } | undefined;
-  ImportExport: undefined;
-  InAppBrowser: { url: string; title?: string };
-  FeedError: { error: string; feedTitle?: string };
 };
 
 export const THEME_MODES = ["light", "dark", "system"] as const;

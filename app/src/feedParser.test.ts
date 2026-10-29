@@ -764,6 +764,19 @@ describe("fetchFeedWithMeta", () => {
     );
   });
 
+  it("reports just the status code when the server sends no reason phrase", async () => {
+    // Arrange — HTTP/2 responses carry no status text.
+    mockXhr.status = 404;
+    mockXhr.statusText = undefined as unknown as string;
+
+    // Act
+    const promise = fetchFeedWithMeta("https://example.com/feed.xml");
+    mockXhr.onload?.();
+
+    // Assert
+    await expect(promise).rejects.toThrow(/^Failed to fetch feed: 404$/);
+  });
+
   it("sends If-None-Match header when an etag is supplied", async () => {
     // Arrange
     mockXhr.responseText = RSS_FEED;

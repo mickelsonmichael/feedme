@@ -48,7 +48,7 @@ export async function persistCrash(
     if (Platform.OS === "web") {
       localStorage.setItem(CRASH_STORAGE_KEY, json);
     } else {
-      getCrashFile().write(json);
+      getCrashFile().writeSync(json);
     }
   } catch {
     // nothing we can do if the write fails during a crash

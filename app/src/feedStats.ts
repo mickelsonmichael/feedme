@@ -23,11 +23,7 @@ const MIN_SAMPLES_FOR_WINDOW = 3;
 const MIN_ATTEMPTS_FOR_STABILITY_BADGE = 4;
 
 export type FeedBadge =
-  | "Invalid"
-  | "Dead"
-  | "Unstable"
-  | "Spammy"
-  | "FrequentlySkipped";
+  "Invalid" | "Dead" | "Unstable" | "Spammy" | "FrequentlySkipped";
 
 export type FrequencyStat = {
   /** Posts per day averaged across the selected window. `null` when there

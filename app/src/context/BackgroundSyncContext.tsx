@@ -2,18 +2,32 @@ import React from "react";
 
 import type { FeedRefreshProgress } from "../feedRefresher";
 
-type BackgroundSyncContextValue = {
-  /** True while a deferred refresh is running behind the cached posts. */
-  syncing: boolean;
+type BackgroundSyncActions = {
   setSyncing: (value: boolean) => void;
-  /** Per-feed completed/total counts, or null when no refresh is running. */
-  progress: FeedRefreshProgress | null;
   setProgress: (value: FeedRefreshProgress | null) => void;
 };
 
-const BackgroundSyncContext = React.createContext<
-  BackgroundSyncContextValue | undefined
->(undefined);
+type BackgroundSyncContextValue = BackgroundSyncActions & {
+  /** True while a deferred refresh is running behind the cached posts. */
+  syncing: boolean;
+  /** Per-feed completed/total counts, or null when no refresh is running. */
+  progress: FeedRefreshProgress | null;
+};
+
+const NOOP_ACTIONS: BackgroundSyncActions = {
+  setSyncing: () => {},
+  setProgress: () => {},
+};
+
+// Three contexts rather than one, so each consumer re-renders only for what it
+// reads. Progress ticks once per feed during a sync; with a single context
+// every one of those ticks re-rendered FeedListScreen — the whole feed — even
+// though it only writes progress and reads `syncing`. The defaults are no-ops
+// so screens rendered outside the provider (unit tests mounting FeedListScreen
+// directly) report "not syncing" instead of crashing.
+const ActionsContext = React.createContext<BackgroundSyncActions>(NOOP_ACTIONS);
+const SyncingContext = React.createContext(false);
+const ProgressContext = React.createContext<FeedRefreshProgress | null>(null);
 
 /**
  * Holds background-sync state above the tab navigator.
@@ -33,50 +47,60 @@ export function BackgroundSyncProvider({
   const [progress, setProgressState] =
     React.useState<FeedRefreshProgress | null>(null);
 
-  const setSyncing = React.useCallback((value: boolean) => {
-    setSyncingState((prev) => (prev === value ? prev : value));
-  }, []);
-
-  const setProgress = React.useCallback((value: FeedRefreshProgress | null) => {
-    setProgressState((prev) => {
-      if (prev === value) return prev;
-      // onProgress fires once per feed, so bail out on equal counts rather than
-      // re-rendering every tab 44 times for a banner whose text didn't change.
-      if (
-        prev &&
-        value &&
-        prev.completed === value.completed &&
-        prev.total === value.total
-      ) {
-        return prev;
-      }
-      return value;
-    });
-  }, []);
-
-  const value = React.useMemo(
-    () => ({ syncing, setSyncing, progress, setProgress }),
-    [syncing, setSyncing, progress, setProgress]
+  const actions = React.useMemo<BackgroundSyncActions>(
+    () => ({
+      setSyncing: (value) =>
+        setSyncingState((prev) => (prev === value ? prev : value)),
+      setProgress: (value) =>
+        setProgressState((prev) => {
+          if (prev === value) return prev;
+          // onProgress fires once per feed, so bail out on equal counts rather
+          // than re-rendering the banner for text that didn't change.
+          if (
+            prev &&
+            value &&
+            prev.completed === value.completed &&
+            prev.total === value.total
+          ) {
+            return prev;
+          }
+          return value;
+        }),
+    }),
+    []
   );
 
   return (
-    <BackgroundSyncContext.Provider value={value}>
-      {children}
-    </BackgroundSyncContext.Provider>
+    <ActionsContext.Provider value={actions}>
+      <SyncingContext.Provider value={syncing}>
+        <ProgressContext.Provider value={progress}>
+          {children}
+        </ProgressContext.Provider>
+      </SyncingContext.Provider>
+    </ActionsContext.Provider>
   );
 }
 
+/** The stable setters. Never causes a re-render on its own. */
+export function useBackgroundSyncActions(): BackgroundSyncActions {
+  return React.useContext(ActionsContext);
+}
+
+/** Whether a deferred refresh is running. Re-renders only when it flips. */
+export function useBackgroundSyncing(): boolean {
+  return React.useContext(SyncingContext);
+}
+
+/** Per-feed progress. Re-renders on every completed feed — read it only in
+ *  the small components that display it. */
+export function useBackgroundSyncProgress(): FeedRefreshProgress | null {
+  return React.useContext(ProgressContext);
+}
+
+/** Everything at once, for components that show the whole sync state. */
 export function useBackgroundSync(): BackgroundSyncContextValue {
-  const context = React.useContext(BackgroundSyncContext);
-  if (!context) {
-    // Default no-op so screens rendered outside the provider (e.g. unit tests
-    // mounting FeedListScreen directly) don't crash. Reports "not syncing".
-    return {
-      syncing: false,
-      setSyncing: () => {},
-      progress: null,
-      setProgress: () => {},
-    };
-  }
-  return context;
+  const actions = useBackgroundSyncActions();
+  const syncing = useBackgroundSyncing();
+  const progress = useBackgroundSyncProgress();
+  return { ...actions, syncing, progress };
 }

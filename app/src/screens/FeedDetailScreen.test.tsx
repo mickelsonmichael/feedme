@@ -1,11 +1,9 @@
 import React from "react";
 import { Platform } from "react-native";
 import renderer, { act } from "react-test-renderer";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import FeedDetailScreen from "./FeedDetailScreen";
-import { RootStackParamList, TabParamList } from "../types";
+import { RootStackParamList } from "../types";
 import { getFeeds, getTags, getTagsForFeed } from "../database";
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -48,7 +46,7 @@ jest.mock("@react-navigation/native", () => ({
   },
 }));
 
-jest.mock("@expo/vector-icons", () => {
+jest.mock("@react-native-vector-icons/feather", () => {
   const React = require("react");
   const { Text } = require("react-native");
   return {
@@ -93,33 +91,23 @@ jest.mock("../components/FeedStatsSection", () => {
   };
 });
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "FeedDetail">,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, "FeedDetail">;
 
-const RETURN_ITEM = {
-  itemId: 22,
-  title: "Test title",
-  url: "https://example.com/item",
-  content: "<p>Test content</p>",
-  imageUrl: null,
-  publishedAt: 1_700_000_000_000,
-  feedTitle: "Test Feed",
-  read: 1,
-};
-
-function buildProps(returnToItem?: typeof RETURN_ITEM): Props {
+// `canGoBack` is false when the screen was the first thing opened (e.g. from
+// a notification), so there is nothing on the stack to pop back to.
+function buildProps(canGoBack = true): Props {
   return {
     navigation: {
+      canGoBack: jest.fn(() => canGoBack),
       goBack: jest.fn(),
+      popTo: jest.fn(),
       navigate: jest.fn(),
       setOptions: jest.fn(),
     } as unknown as Props["navigation"],
     route: {
       key: "FeedDetail-test",
       name: "FeedDetail",
-      params: { feedId: 5, returnToItem },
+      params: { feedId: 5 },
     } as Props["route"],
   };
 }
@@ -147,7 +135,37 @@ describe("FeedDetailScreen", () => {
     jest.clearAllMocks();
   });
 
-  it("returns to the Feeds tab when opened without a post to return to", async () => {
+  it("lands on the Feeds tab when there is nothing to go back to", async () => {
+    // Arrange
+    const props = buildProps(false);
+    let tree: renderer.ReactTestRenderer;
+
+    await act(async () => {
+      tree = renderer.create(<FeedDetailScreen {...props} />);
+      await Promise.resolve();
+    });
+
+    const backButton = tree!.root.findByProps({
+      accessibilityLabel: "Go back",
+    });
+
+    // Act
+    await act(async () => {
+      backButton.props.onPress();
+    });
+
+    // Assert
+    expect(props.navigation.popTo).toHaveBeenCalledWith("Tabs", {
+      screen: "Feeds",
+      params: undefined,
+    });
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("goes back to whatever opened it, such as the post being read", async () => {
     // Arrange
     const props = buildProps();
     let tree: renderer.ReactTestRenderer;
@@ -167,43 +185,15 @@ describe("FeedDetailScreen", () => {
     });
 
     // Assert
-    expect(props.navigation.navigate).toHaveBeenCalledWith("Feeds");
+    expect(props.navigation.goBack).toHaveBeenCalledTimes(1);
+    expect(props.navigation.navigate).not.toHaveBeenCalled();
 
     await act(async () => {
       tree!.unmount();
     });
   });
 
-  it("returns to the originating post when opened from View Post", async () => {
-    // Arrange
-    const props = buildProps(RETURN_ITEM);
-    let tree: renderer.ReactTestRenderer;
-
-    await act(async () => {
-      tree = renderer.create(<FeedDetailScreen {...props} />);
-      await Promise.resolve();
-    });
-
-    const backButton = tree!.root.findByProps({
-      accessibilityLabel: "Go back",
-    });
-
-    // Act
-    await act(async () => {
-      backButton.props.onPress();
-    });
-
-    // Assert
-    expect(props.navigation.navigate).toHaveBeenCalledWith("FeedItemView", {
-      item: RETURN_ITEM,
-    });
-
-    await act(async () => {
-      tree!.unmount();
-    });
-  });
-
-  it("returns to the originating post after deleting the feed from within the post scenario", async () => {
+  it("goes back to the originating screen after deleting the feed from within the post scenario", async () => {
     // Arrange
     (getFeeds as jest.Mock)
       .mockResolvedValueOnce([
@@ -224,7 +214,7 @@ describe("FeedDetailScreen", () => {
     (window as unknown as { confirm: () => boolean }).confirm = jest.fn(
       () => true
     );
-    const props = buildProps(RETURN_ITEM);
+    const props = buildProps();
     let tree: renderer.ReactTestRenderer;
 
     try {
@@ -244,9 +234,7 @@ describe("FeedDetailScreen", () => {
 
       // Assert
       expect(deleteFeed).toHaveBeenCalledWith(5);
-      expect(props.navigation.navigate).toHaveBeenCalledWith("FeedItemView", {
-        item: RETURN_ITEM,
-      });
+      expect(props.navigation.goBack).toHaveBeenCalledTimes(1);
 
       await act(async () => {
         tree!.unmount();
@@ -256,14 +244,14 @@ describe("FeedDetailScreen", () => {
     }
   });
 
-  it("returns to the originating post via the desktop-web back button", async () => {
+  it("goes back via the desktop-web back button", async () => {
     // Arrange
     const originalPlatformOS = Platform.OS;
     Platform.OS = "web";
     const windowDimensionsSpy = jest
       .spyOn(RN, "useWindowDimensions")
       .mockReturnValue({ width: 1024, height: 768, scale: 1, fontScale: 1 });
-    const props = buildProps(RETURN_ITEM);
+    const props = buildProps();
     let tree: renderer.ReactTestRenderer;
 
     try {
@@ -280,9 +268,7 @@ describe("FeedDetailScreen", () => {
       });
 
       // Assert
-      expect(props.navigation.navigate).toHaveBeenCalledWith("FeedItemView", {
-        item: RETURN_ITEM,
-      });
+      expect(props.navigation.goBack).toHaveBeenCalledTimes(1);
 
       await act(async () => {
         tree!.unmount();

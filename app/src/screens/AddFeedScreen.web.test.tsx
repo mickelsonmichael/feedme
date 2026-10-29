@@ -1,11 +1,9 @@
 import React from "react";
 import renderer, { act } from "react-test-renderer";
 import { Alert, Switch, Text, TextInput, TouchableOpacity } from "react-native";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import AddFeedScreen from "./AddFeedScreen";
-import { RootStackParamList, TabParamList } from "../types";
+import { RootStackParamList } from "../types";
 import { addFeed } from "../database";
 
 jest.mock("../feedParser", () => ({
@@ -30,7 +28,7 @@ jest.mock("../database", () => ({
   setFeedTags: jest.fn(() => Promise.resolve()),
 }));
 
-jest.mock("@expo/vector-icons", () => {
+jest.mock("@react-native-vector-icons/feather", () => {
   const React = require("react");
   const { Text } = require("react-native");
   return {
@@ -56,10 +54,7 @@ jest.mock("../context/ThemeContext", () => ({
   }),
 }));
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "AddFeed">,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, "AddFeed">;
 
 function buildProps(): Props {
   return {

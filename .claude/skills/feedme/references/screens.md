@@ -8,36 +8,43 @@ This file describes every screen in the app. Update this file whenever a new scr
 
 ## Navigation Structure
 
-### Bottom Tab Navigator
+`App.tsx` renders a **root native stack**. Its first route, `Tabs`, holds the bottom tab navigator; every other screen is pushed onto the stack above it. A pushed screen slides in with the platform transition, covers the tab bar, and is unmounted when popped. Back returns to whatever opened it — screens use `goBackOr` / `toTab` from `app/src/navigation.ts`, falling back to a tab only when there is nothing to pop (e.g. opened from a notification).
 
-The set of bottom tabs depends on screen size:
+### Bottom tabs (`Tabs` route)
 
-- **Small screens (mobile / narrow web < 768 px):** Feed, Feeds, Discover, Settings. `Saved` and `ReadLater` are accessible from the `FeedsScreen` quick-links instead of from the tab bar.
+The tabs shown depend on screen size:
+
+- **Small screens (mobile / narrow web < 768 px):** Feed, Feeds, Discover, Settings. `Saved` and `ReadLater` are tabs with hidden buttons, reached from the `FeedsScreen` quick-links.
 - **Wide web (≥ 768 px):** the bottom tab bar is replaced by the left web sidebar, which lists Feed, Saved, Read Later, Manage Feeds, Discover, and Settings.
 
-| Tab        | Screen                              |
-| ---------- | ----------------------------------- |
-| Feed       | `FeedListScreen`                    |
-| Saved      | `SavedScreen` _(wide web only)_     |
-| ReadLater  | `ReadLaterScreen` _(wide web only)_ |
-| Feeds      | `FeedsScreen`                       |
-| Discover   | `DiscoverScreen`                    |
-| Settings   | `SettingsScreen`                    |
-| AddFeed    | `AddFeedScreen` _(hidden route)_    |
-| FeedSearch | `FeedSearchScreen` _(hidden route)_ |
+| Tab       | Screen                                        |
+| --------- | --------------------------------------------- |
+| Feed      | `FeedListScreen`                              |
+| Saved     | `SavedScreen` _(button only on wide web)_     |
+| ReadLater | `ReadLaterScreen` _(button only on wide web)_ |
+| Feeds     | `FeedsScreen`                                 |
+| Discover  | `DiscoverScreen`                              |
+| Settings  | `SettingsScreen`                              |
 
-### Root Stack Navigator (modal/push over tabs)
+The background-sync status pill floats above the tab bar on every tab (it is rendered in the tab navigator's layout, not by a screen).
 
-| Route                  | Screen                       |
-| ---------------------- | ---------------------------- |
-| `FeedItems`            | `FeedItemsScreen`            |
-| `FeedItemView`         | `FeedItemScreen`             |
-| `FeedDetail`           | `FeedDetailScreen`           |
-| `FeedError`            | `FeedErrorScreen`            |
-| `TagDetail`            | `TagDetailScreen`            |
-| `NotificationSettings` | `NotificationSettingsScreen` |
-| `ImportExport`         | `ImportExportScreen`         |
-| `InAppBrowser`         | `InAppBrowserScreen`         |
+### Root stack (pushed over the tabs)
+
+| Route              | Screen                   |
+| ------------------ | ------------------------ |
+| `FeedItemView`     | `FeedItemScreen`         |
+| `FeedDetail`       | `FeedDetailScreen`       |
+| `FeedError`        | `FeedErrorScreen`        |
+| `FeedItems`        | `FeedItemsScreen`        |
+| `FeedSearch`       | `FeedSearchScreen`       |
+| `AddFeed`          | `AddFeedScreen`          |
+| `TagDetail`        | `TagDetailScreen`        |
+| `CustomFeedEdit`   | `CustomFeedEditScreen`   |
+| `CustomFeedManage` | `CustomFeedManageScreen` |
+| `ImportExport`     | `ImportExportScreen`     |
+| `InAppBrowser`     | `InAppBrowserScreen`     |
+
+Notification settings are a section inside `FeedDetailScreen` / `TagDetailScreen` (`NotificationSettingsSection`), not a route of their own.
 
 ---
 
@@ -85,7 +92,7 @@ The set of bottom tabs depends on screen size:
 ### FeedItemsScreen
 
 **File:** `app/src/screens/FeedItemsScreen.tsx`  
-**Route:** `FeedItems` (stack)  
+**Route:** `FeedItems` (root stack)  
 **Purpose:** Shows all posts for a single feed, loaded by `feedId`.
 
 **Primary features:**
@@ -100,7 +107,7 @@ The set of bottom tabs depends on screen size:
 ### FeedItemScreen
 
 **File:** `app/src/screens/FeedItemScreen.tsx`  
-**Route:** `FeedItemView` (stack)  
+**Route:** `FeedItemView` (root stack)  
 **Purpose:** Full detail view for a single feed item/post.
 
 **Primary features:**
@@ -119,7 +126,7 @@ The set of bottom tabs depends on screen size:
 ### FeedDetailScreen
 
 **File:** `app/src/screens/FeedDetailScreen.tsx`  
-**Route:** `FeedDetail` (stack)  
+**Route:** `FeedDetail` (root stack)  
 **Purpose:** Edit an existing feed's metadata and settings.
 
 **Primary features:**
@@ -137,7 +144,7 @@ The set of bottom tabs depends on screen size:
 ### FeedErrorScreen
 
 **File:** `app/src/screens/FeedErrorScreen.tsx`  
-**Route:** `FeedError` (stack)  
+**Route:** `FeedError` (root stack)  
 **Purpose:** Displays the full raw error message for the most recent fetch failure of a feed.
 
 **Primary features:**
@@ -151,7 +158,7 @@ The set of bottom tabs depends on screen size:
 ### AddFeedScreen
 
 **File:** `app/src/screens/AddFeedScreen.tsx`  
-**Tab:** AddFeed  
+**Route:** `AddFeed` (root stack)  
 **Purpose:** Subscribe to a new feed by URL, Reddit subreddit/user, YouTube channel, GitHub repository releases, or Substack publication.
 
 **Primary features:**
@@ -169,7 +176,7 @@ The set of bottom tabs depends on screen size:
 ### TagDetailScreen
 
 **File:** `app/src/screens/TagDetailScreen.tsx`  
-**Route:** `TagDetail` (stack)  
+**Route:** `TagDetail` (root stack)  
 **Purpose:** Add or edit a user-defined tag and its associated feeds.
 
 **Primary features:**
@@ -235,7 +242,7 @@ The set of bottom tabs depends on screen size:
 ### ImportExportScreen
 
 **File:** `app/src/screens/ImportExportScreen.tsx`  
-**Route:** `ImportExport` (stack)  
+**Route:** `ImportExport` (root stack)  
 **Purpose:** Bulk migrate subscriptions via OPML files.
 
 **Primary features:**
@@ -250,7 +257,7 @@ The set of bottom tabs depends on screen size:
 ### InAppBrowserScreen
 
 **File:** `app/src/screens/InAppBrowserScreen.tsx`  
-**Route:** `InAppBrowser` (stack)  
+**Route:** `InAppBrowser` (root stack)  
 **Purpose:** Embedded web browser for opening article links without leaving the app.
 
 **Primary features:**
@@ -280,7 +287,7 @@ The set of bottom tabs depends on screen size:
 ### FeedSearchScreen
 
 **File:** `app/src/screens/FeedSearchScreen.tsx`  
-**Route:** `FeedSearch` (hidden tab route)  
+**Route:** `FeedSearch` (root stack)  
 **Purpose:** Find RSS/Atom feeds for an arbitrary website URL.
 
 **Primary features:**

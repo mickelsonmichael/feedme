@@ -10,8 +10,12 @@ import {
   TouchableOpacity,
 } from "react-native";
 import type { AppStateStatus } from "react-native";
-import { GestureDetector } from "react-native-gesture-handler";
+import {
+  GestureDetector,
+  GestureHandlerRootView,
+} from "react-native-gesture-handler";
 import { Image } from "expo-image";
+import { animatedTranslateX } from "../testUtils/animatedTranslateX";
 import { FlashList } from "@shopify/flash-list";
 import { CompositeScreenProps, useFocusEffect } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
@@ -101,7 +105,7 @@ jest.mock("../components/ui", () => {
   };
 });
 
-jest.mock("@expo/vector-icons", () => {
+jest.mock("@react-native-vector-icons/feather", () => {
   const React = require("react");
   const { Text } = require("react-native");
 
@@ -160,17 +164,31 @@ type FeedScreenProps = CompositeScreenProps<
 // both read the same provider.
 function renderFeedListScreen(props: FeedScreenProps) {
   return renderer.create(
-    <HeaderContentProvider>
-      <BackgroundSyncProvider>
-        <BackgroundSyncBannerHost />
-        <FeedListScreen {...props} />
-      </BackgroundSyncProvider>
-    </HeaderContentProvider>
+    <GestureHandlerRootView>
+      <HeaderContentProvider>
+        <BackgroundSyncProvider>
+          <BackgroundSyncBannerHost />
+          <FeedListScreen {...props} />
+        </BackgroundSyncProvider>
+      </HeaderContentProvider>
+    </GestureHandlerRootView>
   );
 }
 
 // Mirrors FeedListScreen's internal PAGE_SIZE constant.
 const PAGE_SIZE = 50;
+
+// Scrolls the list to its end the way the user would, by firing FlashList's
+// onEndReached. Whether FlashList also fires it on its own at mount in a test
+// renderer is a library detail that changed between releases.
+async function scrollListToEnd(tree: renderer.ReactTestRenderer) {
+  const list = tree.root.findByType(FlashList);
+  await act(async () => {
+    await list.props.onEndReached();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+}
 
 function makeItems(
   count: number,
@@ -1550,7 +1568,8 @@ describe("FeedListScreen", () => {
   });
 
   it("slides the post card with the finger while dragging in single layout on native", async () => {
-    // Arrange
+    // Arrange — fake timers, so each animation frame can be stepped.
+    jest.useFakeTimers();
     (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
     (getFeeds as jest.Mock).mockResolvedValue([
       {
@@ -1593,13 +1612,13 @@ describe("FeedListScreen", () => {
         onUpdate: (event: unknown) => void;
       };
     };
+    // The drag moves the track on the UI thread; Reanimated reports the
+    // live style on the host view it renders, one animation frame later.
     const getTranslateX = () => {
-      const style = gestureDetector.findByType(Animated.View).props
-        .style as Array<{
-        transform?: Array<{ translateX: { __getValue: () => number } }>;
-      }>;
-      const withTransform = style.find((s) => s?.transform);
-      return withTransform!.transform![0].translateX.__getValue();
+      act(() => {
+        jest.advanceTimersByTime(16);
+      });
+      return animatedTranslateX(gestureDetector);
     };
 
     // Assert — every post has a permanent absolute position (post i at
@@ -2088,7 +2107,7 @@ describe("FeedListScreen", () => {
       .map((node: renderer.ReactTestInstance) => node.props.children);
     expect(duringRefresh).toContain("Initially selected");
     expect(duringRefresh).not.toContain("Unread after refresh");
-    expect(duringRefresh).toContain("New posts available. Tap to reload");
+    expect(duringRefresh).toContain("New posts available");
 
     // Act - the user accepts the new posts.
     await act(async () => {
@@ -2170,17 +2189,9 @@ describe("FeedListScreen", () => {
     });
 
     // Assert
-    expect(navigation.navigate).toHaveBeenCalledWith(
-      "FeedDetail",
-      expect.objectContaining({
-        feedId: 1,
-        returnToItem: expect.objectContaining({
-          itemId: 701,
-          title: "Post 701",
-          feedTitle: "Alpha",
-        }),
-      })
-    );
+    expect(navigation.navigate).toHaveBeenCalledWith("FeedDetail", {
+      feedId: 1,
+    });
 
     await act(async () => {
       tree!.unmount();
@@ -2759,14 +2770,16 @@ describe("FeedListScreen", () => {
       // provider here changes FeedListScreen's position and remounts it,
       // which would reset the very state this test is checking survives.
       tree!.update(
-        <HeaderContentProvider>
-          <BackgroundSyncProvider>
-            <BackgroundSyncBannerHost />
-            <FeedListScreen
-              {...({ navigation, route: returnRoute } as FeedScreenProps)}
-            />
-          </BackgroundSyncProvider>
-        </HeaderContentProvider>
+        <GestureHandlerRootView>
+          <HeaderContentProvider>
+            <BackgroundSyncProvider>
+              <BackgroundSyncBannerHost />
+              <FeedListScreen
+                {...({ navigation, route: returnRoute } as FeedScreenProps)}
+              />
+            </BackgroundSyncProvider>
+          </HeaderContentProvider>
+        </GestureHandlerRootView>
       );
       await Promise.resolve();
       await Promise.resolve();
@@ -2880,13 +2893,15 @@ describe("FeedListScreen", () => {
     let tree: renderer.ReactTestRenderer;
 
     // Act: a full first page (PAGE_SIZE items) leaves hasMore=true, so
-    // FlashList's onEndReached fires once on mount and fetches page two.
+    // reaching the end of the list fetches page two.
     await act(async () => {
       tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
       await Promise.resolve();
       await Promise.resolve();
       await Promise.resolve();
     });
+
+    await scrollListToEnd(tree!);
 
     // Assert
     expect(getItemsPage).toHaveBeenLastCalledWith(
@@ -2958,6 +2973,8 @@ describe("FeedListScreen", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+
+    await scrollListToEnd(tree!);
 
     // Act — a background refresh re-queries page 0 and commits the result
     // over the top of the whole list.
@@ -3077,7 +3094,7 @@ describe("FeedListScreen", () => {
     } as FeedScreenProps["route"];
     let tree: renderer.ReactTestRenderer;
 
-    // Act: FlashList's onEndReached drains both pages on mount, leaving
+    // Act: reaching the end of the list drains both pages, leaving
     // hasMore=false once the short second page comes back.
     await act(async () => {
       tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
@@ -3085,6 +3102,8 @@ describe("FeedListScreen", () => {
       await Promise.resolve();
       await Promise.resolve();
     });
+
+    await scrollListToEnd(tree!);
 
     const callCountAfterMount = (getItemsPage as jest.Mock).mock.calls.length;
 
@@ -3230,7 +3249,7 @@ describe("FeedListScreen", () => {
       // the new post is still held back.
       expect(hasBanner(tree!)).toBe(false);
       const afterSync = textContents(tree!);
-      expect(afterSync).toContain("New posts available. Tap to reload");
+      expect(afterSync).toContain("New posts available");
       expect(afterSync).toContain("Already cached");
       expect(afterSync).not.toContain("Arrived during sync");
 
@@ -3245,7 +3264,7 @@ describe("FeedListScreen", () => {
       // Assert - the feed resets onto the freshly synced posts.
       const afterReset = textContents(tree!);
       expect(afterReset).toContain("Arrived during sync");
-      expect(afterReset).not.toContain("New posts available. Tap to reload");
+      expect(afterReset).not.toContain("New posts available");
 
       await act(async () => {
         tree!.unmount();
@@ -3344,7 +3363,7 @@ describe("FeedListScreen", () => {
       // still gets the tap-to-reset banner, with the new post held back.
       expect(hasBanner(tree!)).toBe(false);
       const afterSync = textContents(tree!);
-      expect(afterSync).toContain("New posts available. Tap to reload");
+      expect(afterSync).toContain("New posts available");
       expect(afterSync).toContain("Cached while away");
       expect(afterSync).not.toContain("Synced while away");
 
@@ -3428,7 +3447,7 @@ describe("FeedListScreen", () => {
 
       // Assert - the reader is not moved off the post they were on.
       const afterSync = textContents(tree!);
-      expect(afterSync).toContain("New posts available. Tap to reload");
+      expect(afterSync).toContain("New posts available");
       expect(afterSync).toContain("Being read now");
       expect(afterSync).not.toContain("Newest synced post");
 
@@ -4123,5 +4142,189 @@ describe("FeedListScreen", () => {
         tree!.unmount();
       });
     });
+  });
+});
+
+describe("FeedListScreen mark as read on scroll", () => {
+  beforeEach(() => {
+    (loadConfig as jest.Mock).mockReturnValue({ markAsReadOnScroll: true });
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/feed.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockResolvedValue(makeItems(3, 1));
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+  });
+
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  async function renderList() {
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-mark-on-scroll",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree!: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    return tree;
+  }
+
+  // Reports every row currently in the list as visible, the way FlashList's
+  // viewability tracker does after a scroll.
+  async function reportAllRowsVisible(tree: renderer.ReactTestRenderer) {
+    const list = tree.root.findByType(FlashList);
+    const rows = list.props.data as Array<{ id: number }>;
+    await act(async () => {
+      list.props.onViewableItemsChanged({
+        viewableItems: rows.map((item, index) => ({
+          item,
+          index,
+          key: String(item.id),
+          isViewable: true,
+          timestamp: 0,
+        })),
+        changed: [],
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  }
+
+  it("marks every post scrolled into view as read, in storage and on screen", async () => {
+    // Arrange
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+    const tree = await renderList();
+
+    // Act
+    await reportAllRowsVisible(tree);
+
+    // Assert
+    expect((markItemRead as jest.Mock).mock.calls.map(([id]) => id)).toEqual([
+      1, 2, 3,
+    ]);
+    const rows = tree.root.findByType(FlashList).props.data as Array<{
+      read: number;
+    }>;
+    expect(rows.map((row) => row.read)).toEqual([1, 1, 1]);
+  });
+
+  it("writes each post once while it stays visible before its write lands", async () => {
+    // Arrange — the writes are slow, so the rows are still unread on screen
+    // when FlashList reports them visible a second time.
+    (markItemRead as jest.Mock).mockReturnValue(new Promise(() => {}));
+    const tree = await renderList();
+
+    // Act
+    await reportAllRowsVisible(tree);
+    await reportAllRowsVisible(tree);
+
+    // Assert
+    expect(markItemRead).toHaveBeenCalledTimes(3);
+  });
+
+  it("leaves a post unread on screen when its write fails", async () => {
+    // Arrange
+    (markItemRead as jest.Mock).mockImplementation((id: number) =>
+      id === 2 ? Promise.reject(new Error("disk full")) : Promise.resolve()
+    );
+    const tree = await renderList();
+
+    // Act
+    await reportAllRowsVisible(tree);
+
+    // Assert
+    const rows = tree.root.findByType(FlashList).props.data as Array<{
+      id: number;
+      read: number;
+    }>;
+    expect(rows.find((row) => row.id === 2)?.read).toBe(0);
+    expect(rows.find((row) => row.id === 1)?.read).toBe(1);
+  });
+});
+
+describe("FeedListScreen empty state", () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("shows an empty filter inside the list, keeping the list itself mounted", async () => {
+    // Arrange — every post is read, so the Unread filter has nothing.
+    (loadConfig as jest.Mock).mockReturnValue({});
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/feed.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockImplementation(
+      ({ unreadOnly }: { unreadOnly: boolean }) =>
+        Promise.resolve(
+          unreadOnly ? [] : makeItems(3, 1).map((i) => ({ ...i, read: 1 }))
+        )
+    );
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-empty-filter",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree!: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    const listBefore = tree.root.findByType(FlashList).instance;
+
+    // Act
+    await act(async () => {
+      tree.root
+        .find(
+          (node) =>
+            node.props.accessibilityLabel === "Filter posts" &&
+            typeof node.props.onChange === "function"
+        )
+        .props.onChange("unread");
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Assert
+    expect(tree.root.findByType(FlashList).instance).toBe(listBefore);
+    const texts = tree.root
+      .findAllByType(Text)
+      .map((node) => [node.props.children].flat().join(""));
+    expect(texts).toContain("All caught up!");
   });
 });

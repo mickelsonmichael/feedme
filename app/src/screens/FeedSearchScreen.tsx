@@ -15,20 +15,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { Feather } from "@react-native-vector-icons/feather";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { addFeed } from "../database";
 import { DiscoveredFeed, discoverFeeds } from "../feedDiscovery";
-import { RootStackParamList, TabParamList } from "../types";
+import { RootStackParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "FeedSearch">,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, "FeedSearch">;
 
 type FeedRowState = "idle" | "adding" | "added" | "duplicate" | "error";
 

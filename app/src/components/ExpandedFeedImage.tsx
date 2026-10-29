@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Image as RNImage,
   LayoutChangeEvent,
   StyleSheet,
   TouchableOpacity,
@@ -13,49 +12,23 @@ import {
   MAX_EXPANDED_IMAGE_EDGE,
 } from "../expandedImageSize";
 import { proxiedImageUrl } from "../proxyFetch";
+import { getKnownImageSize, measureImage } from "../imageSize";
 import { NSFW_BLUR_FILTER_STYLE, NSFW_BLUR_RADIUS, radii } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { FullscreenImageModal } from "./FullscreenImageModal";
 
+// Before the column has been measured. After that the placeholder is 16:9 of
+// its width — the shape most feed images actually are — so the common case
+// swaps placeholder for image with little or no change in height, where a
+// fixed 200px box made every image jump the content below it.
 const PLACEHOLDER_HEIGHT = 200;
+const PLACEHOLDER_ASPECT = 16 / 9;
 
-// Module-level memoization for `Image.getSize` so revisiting an item or
-// re-rendering a row in the list doesn't re-issue a network HEAD per image.
-type CachedSize = { width: number; height: number } | "failed";
-const imageSizeCache = new Map<string, CachedSize>();
-const inflightImageSizes = new Map<string, Promise<CachedSize>>();
-
-// Warms imageSizeCache for a URL that isn't rendered yet (see mediaPrefetch),
+// Warms the size cache for a URL that isn't rendered yet (see mediaPrefetch),
 // so ExpandedFeedImage finds a cache hit and skips its loading placeholder
 // once the item is actually swiped into view.
 export function primeImageSizeCache(url: string): void {
-  void getCachedImageSize(url);
-}
-
-function getCachedImageSize(url: string): Promise<CachedSize> {
-  const cached = imageSizeCache.get(url);
-  if (cached) return Promise.resolve(cached);
-  const inflight = inflightImageSizes.get(url);
-  if (inflight) return inflight;
-  const promise = new Promise<CachedSize>((resolve) => {
-    RNImage.getSize(
-      url,
-      (width, height) => {
-        const result: CachedSize =
-          width > 0 && height > 0 ? { width, height } : "failed";
-        imageSizeCache.set(url, result);
-        inflightImageSizes.delete(url);
-        resolve(result);
-      },
-      () => {
-        imageSizeCache.set(url, "failed");
-        inflightImageSizes.delete(url);
-        resolve("failed");
-      }
-    );
-  });
-  inflightImageSizes.set(url, promise);
-  return promise;
+  void measureImage(url);
 }
 
 type Props = {
@@ -92,7 +65,7 @@ function ExpandedFeedImageImpl({
   useEffect(() => {
     let active = true;
 
-    const cached = imageSizeCache.get(resolvedImageUrl);
+    const cached = getKnownImageSize(resolvedImageUrl);
     if (cached) {
       if (cached === "failed") {
         setSourceSize(null);
@@ -111,7 +84,7 @@ function ExpandedFeedImageImpl({
     setSourceSize(null);
     setDidMetadataLookupFail(false);
     setIsLoadingMetadata(true);
-    getCachedImageSize(resolvedImageUrl).then((result) => {
+    measureImage(resolvedImageUrl).then((result) => {
       if (!active) return;
       if (result === "failed") {
         setDidMetadataLookupFail(true);
@@ -170,7 +143,16 @@ function ExpandedFeedImageImpl({
     >
       {showPlaceholder ? (
         <View
-          style={[styles.placeholder, { backgroundColor: colors.inkFaint }]}
+          style={[
+            styles.placeholder,
+            {
+              backgroundColor: colors.inkFaint,
+              height:
+                fallbackBoxSize === null
+                  ? PLACEHOLDER_HEIGHT
+                  : Math.round(fallbackBoxSize / PLACEHOLDER_ASPECT),
+            },
+          ]}
           testID={testID ? `${testID}-placeholder` : undefined}
         >
           <ActivityIndicator color={colors.inkSoft} />
@@ -240,7 +222,6 @@ const styles = StyleSheet.create({
   },
   placeholder: {
     alignSelf: "stretch",
-    height: PLACEHOLDER_HEIGHT,
     borderRadius: radii.sm,
     alignItems: "center",
     justifyContent: "center",

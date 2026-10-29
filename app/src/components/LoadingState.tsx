@@ -12,10 +12,11 @@ import {
   Text,
   View,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import type { FeedRefreshProgress } from "../feedRefresher";
+import { FloatingPill } from "./FloatingPill";
 
 // react-native-web does not support the native animation driver.
 const USE_NATIVE_DRIVER = Platform.OS !== "web";
@@ -346,42 +347,47 @@ export function FunFeedLoader({
   );
 }
 
-/** Slim banner for a refresh that runs *behind* already-visible content: the
- *  posts on screen stay readable and swipeable while new ones are fetched, so
- *  a sync never takes the screen away from the user. */
+/** Status for a refresh that runs *behind* already-visible content: the posts
+ *  on screen stay readable and swipeable while new ones are fetched, so a sync
+ *  never takes the screen away from the user. Floats over the content (see
+ *  FloatingPill) rather than taking a row of the layout, so starting,
+ *  progressing and finishing a sync never moves the posts underneath it. */
 export function BackgroundSyncBanner({
-  label = "Fetching new posts in the background…",
+  label = "Fetching new posts",
   progress,
+  bottom = spacing.md,
 }: {
   label?: string;
   progress?: FeedRefreshProgress | null;
+  /** Distance from the bottom of the parent to float at. */
+  bottom?: number;
 }) {
   const { colors } = useTheme();
   const total = progress?.total ?? 0;
+  const counter = total > 0 ? `${progress?.completed ?? 0}/${total}` : null;
   return (
-    <View
-      style={[
-        styles.syncBanner,
-        {
-          borderBottomColor: colors.inkFaint,
-          backgroundColor: colors.paperWarm,
-        },
-      ]}
+    <FloatingPill
+      tone="neutral"
+      bottom={bottom}
       testID="background-sync-banner"
+      accessibilityLabel={counter ? `${label}, ${counter}` : label}
     >
       <ChompingLoader />
-      <Text style={[styles.syncBannerText, { color: colors.inkSoft }]}>
+      <Text
+        style={[styles.syncBannerText, { color: colors.inkSoft }]}
+        numberOfLines={1}
+      >
         {label}
       </Text>
-      {/* Counts rather than a bar: the banner sits in a tight single-line
-          strip above live content, and RefreshProgressBar's track is a fixed
-          200px that would overflow it on narrow screens. */}
-      {total > 0 ? (
+      {/* Counts rather than a bar: the pill is a single short line, and
+          RefreshProgressBar's track is a fixed 200px. Tabular figures keep
+          the pill's width steady as the count climbs. */}
+      {counter ? (
         <Text style={[styles.syncBannerCount, { color: colors.inkSoft }]}>
-          {progress?.completed ?? 0}/{total}
+          {counter}
         </Text>
       ) : null}
-    </View>
+    </FloatingPill>
   );
 }
 
@@ -558,14 +564,6 @@ const styles = StyleSheet.create({
   chompWrap: {
     position: "relative",
   },
-  syncBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.sm,
-    borderBottomWidth: 1,
-  },
   syncBannerText: {
     fontFamily: fonts.sans,
     fontSize: fontSize.meta,
@@ -574,7 +572,7 @@ const styles = StyleSheet.create({
   syncBannerCount: {
     fontFamily: fonts.sans,
     fontSize: fontSize.meta,
-    marginLeft: "auto",
+    fontVariant: ["tabular-nums"],
   },
   progressTrack: {
     width: 200,

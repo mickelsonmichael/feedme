@@ -69,6 +69,15 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   return dbPromise;
 }
 
+// Stored in SQLite's `PRAGMA user_version`. Every migration below is
+// idempotent, so the whole chain is gated on this one number: a database
+// already at SCHEMA_VERSION skips it entirely. Running it unconditionally used
+// to cost every cold start roughly a second — two dozen ALTER TABLEs, each
+// throwing "duplicate column" back across the native bridge before the first
+// feed could even be read. When adding a migration, append it to
+// runMigrations and bump this; existing installs then re-run the chain once.
+export const SCHEMA_VERSION = 1;
+
 async function initializeSchema(
   database: SQLite.SQLiteDatabase
 ): Promise<void> {
@@ -82,6 +91,27 @@ async function initializeSchema(
   await database.execAsync("PRAGMA busy_timeout = 5000");
   await database.execAsync("PRAGMA foreign_keys = ON");
 
+  const versionRow = await database.getFirstAsync<{ user_version: number }>(
+    "PRAGMA user_version"
+  );
+  if ((versionRow?.user_version ?? 0) < SCHEMA_VERSION) {
+    await runMigrations(database);
+    await database.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+  }
+
+  // On every startup, discard any in-progress view sessions that were
+  // interrupted by a crash or force-quit. Without this, a post left "open"
+  // overnight would contribute a multi-hour view time to the average.
+  try {
+    await database.execAsync(
+      "DELETE FROM item_view_times WHERE view_end_at IS NULL"
+    );
+  } catch {
+    // Non-critical — silently ignore if the table doesn't exist yet.
+  }
+}
+
+async function runMigrations(database: SQLite.SQLiteDatabase): Promise<void> {
   await database.execAsync(`
     CREATE TABLE IF NOT EXISTS feeds (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -401,17 +431,6 @@ async function initializeSchema(
     // Column already exists — ignore
   }
 
-  // On every startup, discard any in-progress view sessions that were
-  // interrupted by a crash or force-quit. Without this, a post left "open"
-  // overnight would contribute a multi-hour view time to the average.
-  try {
-    await database.execAsync(
-      "DELETE FROM item_view_times WHERE view_end_at IS NULL"
-    );
-  } catch {
-    // Non-critical — silently ignore if the table doesn't exist yet.
-  }
-
   // Indexes: ensure efficient sort/filter for the list screens.
   // These are optional for correctness — wrap in try/catch so a transient
   // failure here doesn't permanently poison dbPromise.
@@ -421,6 +440,10 @@ async function initializeSchema(
     CREATE INDEX IF NOT EXISTS idx_items_feed_id ON items(feed_id);
     CREATE INDEX IF NOT EXISTS idx_items_read ON items(read);
     CREATE INDEX IF NOT EXISTS idx_items_feed_id_read ON items(feed_id, read);
+    -- Matches the stacked sort's ROW_NUMBER() OVER (PARTITION BY feed_id
+    -- ORDER BY published_at DESC, id DESC), so ranking each feed's posts is
+    -- an index walk instead of a sort over the whole table on every page.
+    CREATE INDEX IF NOT EXISTS idx_items_feed_published ON items(feed_id, published_at DESC, id DESC);
     CREATE INDEX IF NOT EXISTS idx_saved_posts_item_id ON saved_posts(item_id);
     CREATE INDEX IF NOT EXISTS idx_read_later_posts_item_id ON read_later_posts(item_id);
     CREATE INDEX IF NOT EXISTS idx_feed_tags_tag_id ON feed_tags(tag_id);

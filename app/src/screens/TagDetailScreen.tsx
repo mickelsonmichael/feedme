@@ -13,9 +13,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { Image } from "expo-image";
-import { Feather } from "@expo/vector-icons";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { Feather } from "@react-native-vector-icons/feather";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -27,16 +25,14 @@ import {
   setTagFeeds,
   updateTag,
 } from "../database";
-import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
+import { Feed, RootStackParamList, Tag } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { getFeedIconUrl } from "../feedIcon";
 import NotificationSettingsSection from "../components/NotificationSettingsSection";
+import { goBackOr } from "../navigation";
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "TagDetail">,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, "TagDetail">;
 
 export default function TagDetailScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
@@ -93,11 +89,7 @@ export default function TagDetailScreen({ route, navigation }: Props) {
   }, [navigation]);
 
   const goBack = () => {
-    if (route.params?.from === "Feeds") {
-      navigation.navigate("Feeds");
-    } else {
-      navigation.navigate("Feed", {});
-    }
+    goBackOr(navigation, route.params?.from === "Feeds" ? "Feeds" : "Feed");
   };
 
   const toggleFeed = (feedId: number) => {

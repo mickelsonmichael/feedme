@@ -1,35 +1,24 @@
-# App Instructions
+# App
 
-This app is an RSS feeder app that targets Android. It is written using React Native and TypeScript, and every feature uses a local SQLite database for long-term data.
+An Android RSS reader in React Native + TypeScript (Expo). All long-term data lives in a local SQLite database. Touch-screen UX on Android is the only UX that has to work; the web build is deprecated (see the root `AGENTS.md`).
 
-The app also has a web build, but **the web version is deprecated**: it is no longer used and is no longer verified. Android is the only environment a change has to be valid for, and touch-screen UX is the only UX that has to work.
+## Core behaviour
 
-Existing web-specific code (including its Local Storage usage) stays as-is — don't rip it out as a drive-by change. But don't write a second web implementation for new work, don't add web-only behaviour, and don't spend time confirming a change on web.
+Users add RSS feeds by URL, with an optional title. Items from every feed are aggregated into one list on the main Feed screen, like Reddit: `Subreddits : Posts :: Feeds : Items`. This is the app's contract — only change this description when a change to it was explicitly requested.
 
-## Basic Functionality
+## Terminology
 
-Users add a list of RSS feeds by URL and can provide an optional title.
-Items are fetched from all configured RSS feeds and displayed on the main "Feeds" page as an aggregated list,
-similar to Reddit's mechanism. `Subreddits : Posts :: Feeds : Items`.
+| Term in requests                        | Meaning                                                                                  |
+| --------------------------------------- | ---------------------------------------------------------------------------------------- |
+| "single view"                           | `FeedListScreen` with `feedLayout === "single"`: one post at a time, swipe or Prev/Next. |
+| "compact view"                          | The `compact` layout: condensed rows with an optional inline expand panel.               |
+| "card view"                             | The `card` layout: large media-first cards.                                              |
+| "view post screen" / "single post view" | `FeedItemScreen`, the detail screen opened from compact/card rows and other screens.     |
 
-Each time the above functionality is modified as part of a change, update this description only when the change was explicitly requested.
-Otherwise, this behavior is the contract for the app and all changes should stay consistent with it.
+## Images
 
-Use this file together with the shared repository rules in the root `AGENTS.md`.
+Render images at actual size, capped at 1024×1024. Ask before exceeding that. Thumbnails, icons and small previews are exempt.
 
-## Domain Terminology
+## Tests
 
-Use this glossary when interpreting user requests to avoid ambiguity.
-
-| Term used in requests                           | Meaning                                                                                                                                                              |
-| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **"single view"**                               | The `single` feed layout mode in `FeedListScreen` — one post is shown at a time, full-screen, with Prev/Next navigation. Controlled by `feedLayout === "single"`.    |
-| **"compact view"**                              | The `compact` feed layout mode — posts shown as a scrollable list of condensed rows with an optional expand panel.                                                   |
-| **"card view"**                                 | The `card` feed layout mode — posts shown as large media-first cards in a scrollable list.                                                                           |
-| **"view post screen"** / **"single post view"** | The `FeedItemScreen` — the dedicated full-screen detail view for a single post, navigated to from compact/card layout rows and from other non-single-layout screens. |
-
-### Images
-
-For most scenarios, when an image is being rendered on screen, it should be actual size but have a maximum height of 1024 and a maximum width of 1024.
-If there are scenarios where this limitation needs to be exceeded, then you can ask for clarification or ask a follow-up question.
-This rule does not apply when the image is a thumbnail, icon, or small preview.
+Jest (`npm test`). Run a single file with `npm test -- <path>` — a bare `npx jest` can pick up a stale global install that fails to parse TSX.

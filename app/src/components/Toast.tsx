@@ -19,10 +19,14 @@ export function Toast({
   message,
   onHide,
   duration = DEFAULT_DURATION_MS,
+  bottom = spacing.xl,
 }: {
   message: string | null;
   onHide: () => void;
   duration?: number;
+  /** Distance from the bottom of the container, for lifting the toast clear
+   *  of anything else floating there. */
+  bottom?: number;
 }) {
   const { colors } = useTheme();
   const opacity = useRef(new Animated.Value(0)).current;
@@ -57,7 +61,10 @@ export function Toast({
   return (
     <Animated.View
       pointerEvents="none"
-      style={[styles.container, { backgroundColor: colors.ink, opacity }]}
+      style={[
+        styles.container,
+        { backgroundColor: colors.ink, opacity, bottom },
+      ]}
       testID="toast"
     >
       <Text style={[styles.text, { color: colors.paper }]}>{message}</Text>
@@ -70,7 +77,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     left: spacing.lg,
     right: spacing.lg,
-    bottom: spacing.xl,
     borderRadius: radii.md,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,

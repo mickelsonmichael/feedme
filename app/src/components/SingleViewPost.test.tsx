@@ -1,5 +1,6 @@
 import React from "react";
 import { Image } from "expo-image";
+import { Text } from "react-native";
 import renderer, { act } from "react-test-renderer";
 import {
   SingleViewPost,
@@ -32,7 +33,7 @@ jest.mock("../context/ThemeContext", () => ({
   }),
 }));
 
-jest.mock("@expo/vector-icons", () => ({
+jest.mock("@react-native-vector-icons/feather", () => ({
   Feather: "Feather",
 }));
 
@@ -80,6 +81,32 @@ describe("SingleViewPost", () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  it("shows the feed name alone when the post has no publish date", async () => {
+    // Arrange
+    const item = buildItem({ publishedAt: null });
+
+    // Act
+    let tree!: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <SingleViewPost
+          item={item}
+          feedId={7}
+          isActive
+          isLive
+          bionicReading={false}
+        />
+      );
+    });
+
+    // Assert — no dangling separator after the feed name.
+    const byline = tree.root
+      .findAllByType(Text)
+      .map((node) => [node.props.children].flat().join(""))
+      .find((text) => text.startsWith("Example Feed"));
+    expect(byline).toBe("Example Feed");
   });
 
   it("does not remount the feed icon or body when promoted from inactive to active", async () => {

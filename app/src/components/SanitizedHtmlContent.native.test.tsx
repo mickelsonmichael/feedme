@@ -147,6 +147,42 @@ describe("SanitizedHtmlContent.native", () => {
     expect(style.lineHeight).toBe(articleLineHeight(fontSize.bodyLg));
   });
 
+  it("renders article text as selectable so a passage can be copied", async () => {
+    // Arrange
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <SanitizedHtmlContent html='<p>Body <a href="https://example.com">link</a></p>' />
+      );
+    });
+
+    // Assert
+    const body = findTextContaining(tree!.root, "Body");
+    expect(body!.props.selectable).toBe(true);
+  });
+
+  it("renders article text as inert when selection is turned off", async () => {
+    // Arrange — turning this off is how a caller dismisses a live selection:
+    // Android drops the highlight and its handles once the text stops being
+    // selectable.
+    let tree: renderer.ReactTestRenderer;
+
+    // Act
+    await act(async () => {
+      tree = renderer.create(
+        <SanitizedHtmlContent html="<p>Body</p>" selectable={false} />
+      );
+    });
+
+    // Assert
+    const selectableNodes = tree!.root
+      .findAllByType(Text)
+      .filter((node) => node.props.selectable);
+    expect(selectableNodes).toHaveLength(0);
+  });
+
   it("opens anchor links via Linking.openURL when pressed", async () => {
     // Arrange
     jest.spyOn(Linking, "openURL").mockResolvedValue(true as never);

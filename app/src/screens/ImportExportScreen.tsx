@@ -13,7 +13,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import * as DocumentPicker from "expo-document-picker";
 import { File as ExpoFile, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -91,7 +91,7 @@ export default function ImportExportScreen({ navigation }: Props) {
       return;
     }
     const file = new ExpoFile(Paths.cache, filename);
-    file.write(opmlContent);
+    await file.write(opmlContent);
     const canShare = await Sharing.isAvailableAsync();
     if (canShare) {
       await Sharing.shareAsync(file.uri, {

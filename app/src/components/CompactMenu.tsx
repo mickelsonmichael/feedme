@@ -6,7 +6,8 @@ import {
   Pressable,
   StyleSheet,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
+import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
+import { Feather } from "@react-native-vector-icons/feather";
 import { useTheme } from "../context/ThemeContext";
 import { fonts, fontSize, radii, spacing } from "../theme";
 
@@ -62,7 +63,11 @@ export function CompactMenu<T extends string>({
             onPress={() => setOpen(false)}
             accessibilityLabel="Dismiss menu"
           />
-          <View
+          <Animated.View
+            // Fades rather than popping in and out; short enough that the
+            // menu never feels slower than it did.
+            entering={FadeIn.duration(120)}
+            exiting={FadeOut.duration(90)}
             style={[
               styles.menu,
               {
@@ -102,7 +107,7 @@ export function CompactMenu<T extends string>({
                 </TouchableOpacity>
               );
             })}
-          </View>
+          </Animated.View>
         </>
       ) : null}
     </View>

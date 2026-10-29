@@ -13,9 +13,7 @@ import {
   Switch,
   useWindowDimensions,
 } from "react-native";
-import { Feather } from "@expo/vector-icons";
-import { CompositeScreenProps } from "@react-navigation/native";
-import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
+import { Feather } from "@react-native-vector-icons/feather";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { useFocusEffect } from "@react-navigation/native";
 import {
@@ -35,7 +33,7 @@ import {
   getAverageViewTimeForFeed,
 } from "../database";
 import { fetchFeedWithMeta } from "../feedParser";
-import { Feed, RootStackParamList, Tag, TabParamList } from "../types";
+import { Feed, RootStackParamList, Tag } from "../types";
 import {
   filterExcludedRedditComments,
   isRedditUserFeedUrl,
@@ -50,11 +48,9 @@ import FeedStatsSection, {
   FeedStatusBadge,
 } from "../components/FeedStatsSection";
 import { computeFeedStats } from "../feedStats";
+import { goBackOr } from "../navigation";
 
-type Props = CompositeScreenProps<
-  BottomTabScreenProps<TabParamList, "FeedDetail">,
-  NativeStackScreenProps<RootStackParamList>
->;
+type Props = NativeStackScreenProps<RootStackParamList, "FeedDetail">;
 
 const PROXY_ALERT_TITLE = "Using Feed Proxy";
 const PROXY_ALERT_MESSAGE =
@@ -75,15 +71,13 @@ export default function FeedDetailScreen({ route, navigation }: Props) {
   const { colors } = useTheme();
   const { width } = useWindowDimensions();
   const isDesktopWeb = Platform.OS === "web" && width >= 768;
-  const { feedId, returnToItem } = route.params;
+  const { feedId } = route.params;
 
+  // Pops back to whatever opened this — the Feeds list, a post, or the
+  // single-post reader — rather than guessing a destination.
   const handleBack = useCallback(() => {
-    if (returnToItem) {
-      navigation.navigate("FeedItemView", { item: returnToItem });
-    } else {
-      navigation.navigate("Feeds");
-    }
-  }, [navigation, returnToItem]);
+    goBackOr(navigation, "Feeds");
+  }, [navigation]);
 
   const [feed, setFeed] = useState<Feed | null>(null);
   const [publishedAts, setPublishedAts] = useState<number[]>([]);

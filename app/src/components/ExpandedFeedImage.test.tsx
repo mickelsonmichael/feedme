@@ -1,5 +1,6 @@
 import React from "react";
-import { Image as RNImage, StyleSheet } from "react-native";
+import { mockImageSize } from "../testUtils/mockImageSize";
+import { StyleSheet } from "react-native";
 import { Image } from "expo-image";
 import renderer, { act } from "react-test-renderer";
 import {
@@ -23,7 +24,7 @@ jest.mock("../context/ThemeContext", () => ({
   }),
 }));
 
-jest.mock("@expo/vector-icons", () => ({
+jest.mock("@react-native-vector-icons/feather", () => ({
   Feather: "Feather",
 }));
 
@@ -41,11 +42,9 @@ describe("ExpandedFeedImage", () => {
 
   it("left-aligns the image and constrains it to the available width while preserving aspect ratio", async () => {
     // Arrange
-    const getSizeSpy = jest
-      .spyOn(RNImage, "getSize")
-      .mockImplementation((uri, success) => {
-        success?.(1600, 800);
-      });
+    const measureSpy = mockImageSize((uri, success) => {
+      success?.(1600, 800);
+    });
 
     let tree: renderer.ReactTestRenderer;
 
@@ -82,10 +81,9 @@ describe("ExpandedFeedImage", () => {
     const style = StyleSheet.flatten(image.props.style);
 
     // Assert
-    expect(getSizeSpy).toHaveBeenCalledWith(
-      "https://example.com/hero.jpg",
-      expect.any(Function),
-      expect.any(Function)
+    expect(measureSpy).toHaveBeenCalledWith(
+      { uri: "https://example.com/hero.jpg" },
+      expect.anything()
     );
     expect(style.alignSelf).toBe("flex-start");
     expect(style.width).toBe(500);
@@ -94,11 +92,9 @@ describe("ExpandedFeedImage", () => {
 
   it("falls back to a bounded square box when image metadata cannot be read", async () => {
     // Arrange
-    jest
-      .spyOn(RNImage, "getSize")
-      .mockImplementation((uri, success, failure) => {
-        failure?.(new Error("metadata failed"));
-      });
+    mockImageSize((uri, success, failure) => {
+      failure?.(new Error("metadata failed"));
+    });
 
     let tree: renderer.ReactTestRenderer;
 
@@ -140,7 +136,7 @@ describe("ExpandedFeedImage", () => {
 
   it("falls back when image metadata resolves to non-positive dimensions", async () => {
     // Arrange
-    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+    mockImageSize((uri, success) => {
       success?.(0, 0);
     });
 
@@ -186,12 +182,10 @@ describe("ExpandedFeedImage", () => {
     // Arrange
     let resolveSize: ((width: number, height: number) => void) | null = null;
     let rejectSize: ((error: Error) => void) | null = null;
-    jest
-      .spyOn(RNImage, "getSize")
-      .mockImplementation((uri, success, failure) => {
-        resolveSize = success ?? null;
-        rejectSize = failure ?? null;
-      });
+    mockImageSize((uri, success, failure) => {
+      resolveSize = success ?? null;
+      rejectSize = failure ?? null;
+    });
 
     let tree: renderer.ReactTestRenderer;
 
@@ -215,12 +209,13 @@ describe("ExpandedFeedImage", () => {
       });
     });
 
-    // Assert – placeholder visible with reserved height
+    // Assert – placeholder visible, reserving a 16:9 box of the column width
+    // so the typical landscape image replaces it without a jump.
     const placeholder = tree!.root.findByProps({
       testID: "expanded-image-placeholder",
     });
     const placeholderStyle = StyleSheet.flatten(placeholder.props.style);
-    expect(placeholderStyle.height).toBe(200);
+    expect(placeholderStyle.height).toBe(225);
 
     // Act – resolve metadata
     await act(async () => {
@@ -243,11 +238,9 @@ describe("ExpandedFeedImage", () => {
   it("replaces placeholder with fallback box when metadata fetch fails", async () => {
     // Arrange
     let rejectSize: ((error: Error) => void) | null = null;
-    jest
-      .spyOn(RNImage, "getSize")
-      .mockImplementation((uri, _success, failure) => {
-        rejectSize = failure ?? null;
-      });
+    mockImageSize((uri, _success, failure) => {
+      rejectSize = failure ?? null;
+    });
 
     let tree: renderer.ReactTestRenderer;
 
@@ -293,7 +286,7 @@ describe("ExpandedFeedImage", () => {
 
   it("centers the image when card mode requests centered alignment", async () => {
     // Arrange
-    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+    mockImageSize((uri, success) => {
       success?.(1200, 600);
     });
 
@@ -338,7 +331,7 @@ describe("ExpandedFeedImage", () => {
 
   it("opens the fullscreen modal when the image is tapped", async () => {
     // Arrange
-    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+    mockImageSize((uri, success) => {
       success?.(800, 400);
     });
 
@@ -384,7 +377,7 @@ describe("ExpandedFeedImage", () => {
 
   it("closes the fullscreen modal when onClose is triggered", async () => {
     // Arrange
-    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+    mockImageSize((uri, success) => {
       success?.(800, 400);
     });
 
@@ -436,7 +429,7 @@ describe("ExpandedFeedImage", () => {
   it("keeps the same image source across a re-render, so it does not re-fade", async () => {
     // Arrange — metadata already cached, as it is for a post the reader has
     // had mounted since before the swipe.
-    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+    mockImageSize((uri, success) => {
       success?.(1200, 600);
     });
     let tree: renderer.ReactTestRenderer;
@@ -478,7 +471,7 @@ describe("ExpandedFeedImage", () => {
     // Arrange — metadata resolves immediately, as it does for any post whose
     // size mediaPrefetch already warmed. Layout has not run yet, so the width
     // the image must fit into is still unknown.
-    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+    mockImageSize((uri, success) => {
       success?.(2000, 1125);
     });
 
@@ -520,7 +513,7 @@ describe("ExpandedFeedImage", () => {
 
   it("discards the previous native image instance when swapping to an already-cached URL", async () => {
     // Arrange
-    jest.spyOn(RNImage, "getSize").mockImplementation((uri, success) => {
+    mockImageSize((uri, success) => {
       success?.(1600, 800);
     });
 

@@ -172,7 +172,11 @@ export async function fetchFeedWithMeta(
           });
         } else {
           reject(
-            new Error(`Failed to fetch feed: ${xhr.status} ${xhr.statusText}`)
+            // HTTP/2 has no reason phrase, so statusText is often empty or
+            // missing — don't print "404 undefined".
+            new Error(
+              `Failed to fetch feed: ${xhr.status}${xhr.statusText ? ` ${xhr.statusText}` : ""}`
+            )
           );
         }
       };

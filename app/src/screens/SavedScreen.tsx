@@ -11,7 +11,7 @@ import {
 import { CompositeScreenProps, useFocusEffect } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
-import { Feather } from "@expo/vector-icons";
+import { Feather } from "@react-native-vector-icons/feather";
 import { getSavedPosts, unsavePost } from "../database";
 import { RootStackParamList, SavedPost, TabParamList } from "../types";
 import { MetaText } from "../components/ui";
