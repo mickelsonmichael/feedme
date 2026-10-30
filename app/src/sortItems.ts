@@ -14,234 +14,184 @@ export function sortNewest(items: FeedItemWithFeed[]): FeedItemWithFeed[] {
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
- * Bounds on a feed's "freshness unit" — the yardstick used to measure how
- * stale an item is *relative to its own feed's cadence*.
+ * Tuning for the "stacked" order. The database's page query
+ * (`getItemsPage` in database.ts) implements the same algorithm in SQL, so a
+ * change here must be made there too — database.stacked.test.ts checks the
+ * two agree.
  *
- * - `MIN` (1 day): a feed that posts every few minutes still measures
- *   staleness in days, so its newest post doesn't decay within the day.
- * - `MAX` (90 days): a feed that posts yearly still ages out eventually;
- *   without this cap its posts would sit in the top band for years, which
- *   is how "ancient posts from dead feeds" end up pinned to the top.
+ * A post is *recent* when it is at most `RECENT_DAYS` old, or when it is its
+ * feed's newest post and at most `NEWEST_RECENT_DAYS` old (so a feed posting
+ * every few weeks still gets its latest post into the main stream). Every
+ * other dated post is *older*.
  */
-const FRESHNESS_UNIT_MIN_MS = 1 * DAY_MS;
-const FRESHNESS_UNIT_MAX_MS = 90 * DAY_MS;
+export const STACKED_RECENT_DAYS = 14;
+export const STACKED_NEWEST_RECENT_DAYS = 30;
+/** Days of age that weigh the same as one more post ahead in the same feed. */
+export const STACKED_DAYS_PER_RANK = 2;
+/** On average one older post ("throwback") per this many slots. */
+export const STACKED_THROWBACK_EVERY = 10;
+/** Each throwback lands up to this many slots either side of its even
+ *  spacing, so they don't arrive like clockwork. */
+export const STACKED_THROWBACK_JITTER = 2.5;
+/** Added to an older post's age when weighting it, so posts a few weeks old
+ *  are favoured over ancient ones without crowding them out entirely. */
+export const STACKED_THROWBACK_AGE_OFFSET_DAYS = 30;
+/** Untimestamped posts go after every dated one. */
+export const STACKED_UNDATED_BASE = 1e15;
 
-/**
- * Freshness unit for feeds whose cadence cannot be derived (fewer than 2
- * timestamped items). One week: generous enough that a just-subscribed
- * feed's only post isn't instantly buried, short enough that it doesn't
- * camp in the top band.
- */
-const UNKNOWN_CADENCE_UNIT_MS = 7 * DAY_MS;
-
-/**
- * Number of freshness units an item may age through before it starts being
- * demoted one rank band per unit. With a grace of 2, an item is demoted for
- * the first time when it is 3+ units old:
- *
- * - a feed posting many times a day (unit = 1 day floor) keeps its newest
- *   post in the top band for 3 days before it slides;
- * - a weekly feed keeps its newest post up top for ~3 weeks;
- * - a quarterly/yearly feed (unit capped at 90 days) for ~9 months.
- */
-const GRACE_CYCLES = 2;
-
-/**
- * Bounds on the raw derived posting interval. The 15-minute floor guards
- * against burst feeds (e.g. a liveblog) producing a near-zero cadence; the
- * 365-day ceiling keeps dormant archives from reporting a multi-year one.
- */
-const MIN_POSTING_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
-const MAX_POSTING_INTERVAL_MS = 365 * DAY_MS;
-const DEFAULT_POSTING_INTERVAL_MS = 1 * DAY_MS;
-
-/**
- * Derive a feed's posting cadence as the median gap between its items'
- * `published_at` timestamps. Returns the 1-day default when fewer than 2
- * usable timestamps are available, and clamps the result to
- * [15 minutes, 365 days].
- *
- * Unlike `computeBaseInterval` in feedSchedule.ts, this function does NOT
- * apply a 24-hour polling cap — we want the actual editorial cadence, not a
- * fetch-scheduling interval.
- */
-export function computeFeedPostingInterval(publishedAts: number[]): number {
-  if (publishedAts.length < 2) return DEFAULT_POSTING_INTERVAL_MS;
-
-  const sorted = [...publishedAts].sort((a, b) => b - a); // newest first
-  const gaps: number[] = [];
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const gap = sorted[i] - sorted[i + 1];
-    if (gap > 0) gaps.push(gap);
-  }
-
-  if (gaps.length === 0) return DEFAULT_POSTING_INTERVAL_MS;
-
-  gaps.sort((a, b) => a - b);
-  const mid = Math.floor(gaps.length / 2);
-  const median =
-    gaps.length % 2 === 0 ? (gaps[mid - 1] + gaps[mid]) / 2 : gaps[mid];
-
-  return Math.max(
-    MIN_POSTING_INTERVAL_MS,
-    Math.min(MAX_POSTING_INTERVAL_MS, median)
-  );
-}
-
-/**
- * Deterministic hash of (feedId, dayNumber) mapped to [0, 1).
- *
- * Used as the within-band ordering key so that the feed order inside each
- * rank band reshuffles once per calendar day — never mid-session, never on
- * refresh — and every feed gets its turn near the top over the course of a
- * week. Standard 32-bit avalanche mix (murmur3 finalizer constants).
- */
-export function feedDayShuffle(feedId: number, dayNumber: number): number {
-  let h = Math.imul(feedId, 0x9e3779b1) ^ Math.imul(dayNumber, 0x85ebca77);
-  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
-  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
-  h ^= h >>> 16;
-  return (h >>> 0) / 0x100000000;
-}
+export const HASH_MASK = 0xffffffff;
+// Both < 2^28, so SQLite's products with a 32-bit value stay below 2^63.
+export const HASH_ID_MULTIPLIER = 0x9e3779b;
+export const HASH_MIX = 0x45d9f3b;
+const HASH_DAY_MULTIPLIER = 0x7f4a7c15;
 
 /** Local-time day number for a Unix-ms timestamp (days since epoch, shifted
  *  so the shuffle rotates at local midnight rather than UTC midnight). */
-function localDayNumber(t: number): number {
+export function localDayNumber(t: number): number {
   return Math.floor((t - new Date(t).getTimezoneOffset() * 60000) / DAY_MS);
 }
 
+/** Per-day salt for {@link stackHash}; passed to the SQL query as-is. */
+export function stackDaySalt(dayNumber: number): number {
+  return (dayNumber * HASH_DAY_MULTIPLIER) % 0x100000000;
+}
+
 /**
- * Sort items using the "stacked" algorithm: a rank-major interleave across
- * feeds, so the list reads as "everyone's newest post, then everyone's
- * second-newest post, …" — no high-volume feed can bury quieter feeds.
+ * Deterministic 32-bit hash of (item id, day). Written with operations SQLite
+ * can reproduce exactly (it has no XOR, so the SQL spells `a ^ b` as
+ * `(a | b) - (a & b)`), so the native query and this function agree bit for
+ * bit. Reshuffles once per local calendar day — never mid-session, never on
+ * refresh.
+ */
+export function stackHash(id: number, daySalt: number): number {
+  let x = ((Math.imul(id, HASH_ID_MULTIPLIER) >>> 0) + daySalt) % 0x100000000;
+  x = Math.imul((x >>> 16) ^ x, HASH_MIX) >>> 0;
+  x = Math.imul((x >>> 16) ^ x, HASH_MIX) >>> 0;
+  return ((x >>> 16) ^ x) >>> 0;
+}
+
+type Stream = "recent" | "older" | "undated";
+type StackInput = Pick<FeedItemWithFeed, "id" | "feed_id" | "published_at">;
+
+/**
+ * Compute every item's position key for the "stacked" order (lower = earlier).
  *
- * Score formula (lower score → higher in the list):
+ * The list reads as recent posts first, interleaved across feeds, with an
+ * older post sprinkled in roughly every {@link STACKED_THROWBACK_EVERY} slots
+ * as a throwback; once the recent posts run out the older ones follow, and
+ * undated posts come last.
  *
- *     score = feed_rank + staleness_demotion + daily_shuffle
+ * - **Recent stream.** Score = the post's position among its feed's recent
+ *   posts (0 = newest) + age / {@link STACKED_DAYS_PER_RANK} days + a
+ *   per-post jitter in [0, 1). The position term interleaves feeds — a feed
+ *   posting fifty times a day can't bury a feed that posted once this week —
+ *   and the age term keeps it roughly chronological. The jitter varies which
+ *   feed leads from day to day.
+ * - **Older stream.** Score = u × (age + {@link STACKED_THROWBACK_AGE_OFFSET_DAYS})
+ *   × (position among the feed's older posts + 1), with u a per-post value in
+ *   (0, 1) that changes daily. Lower scores surface first, so a feed's
+ *   most recent older posts are favoured and every feed gets a turn, but the
+ *   wide random factor lets a months-old post turn up now and then.
+ * - **Merge.** The i-th recent post takes key i. The j-th older post takes
+ *   key (j + 1) × EVERY − 0.5, shifted by up to ± JITTER slots.
  *
- * Where:
+ * Future-dated timestamps count as published `now`. Ties break by id, higher
+ * first, so the result never depends on input order.
+ */
+export function computeStackKeys(
+  items: readonly StackInput[],
+  now: number
+): Map<number, number> {
+  const daySalt = stackDaySalt(localDayNumber(now));
+  const byFeed = new Map<number, StackInput[]>();
+  for (const item of items) {
+    const list = byFeed.get(item.feed_id);
+    if (list) list.push(item);
+    else byFeed.set(item.feed_id, [item]);
+  }
+  const cappedAt = (item: StackInput) =>
+    item.published_at == null ? -Infinity : Math.min(item.published_at, now);
+
+  const scored: { id: number; stream: Stream; score: number; h: number }[] = [];
+  for (const feedItems of byFeed.values()) {
+    feedItems.sort((a, b) => cappedAt(b) - cappedAt(a) || b.id - a.id);
+    let recentRank = 0;
+    let olderRank = 0;
+    feedItems.forEach((item, feedRank) => {
+      const h = stackHash(item.id, daySalt);
+      if (item.published_at == null) {
+        scored.push({ id: item.id, stream: "undated", score: 0, h });
+        return;
+      }
+      const ageDays = (now - cappedAt(item)) / DAY_MS;
+      if (
+        ageDays <= STACKED_RECENT_DAYS ||
+        (feedRank === 0 && ageDays <= STACKED_NEWEST_RECENT_DAYS)
+      ) {
+        const jitter = (h & 2047) / 2048;
+        scored.push({
+          id: item.id,
+          stream: "recent",
+          score: recentRank + ageDays / STACKED_DAYS_PER_RANK + jitter,
+          h,
+        });
+        recentRank++;
+      } else {
+        const u = (((h >>> 11) & 2047) + 0.5) / 2048;
+        scored.push({
+          id: item.id,
+          stream: "older",
+          score:
+            u * (ageDays + STACKED_THROWBACK_AGE_OFFSET_DAYS) * (olderRank + 1),
+          h,
+        });
+        olderRank++;
+      }
+    });
+  }
+
+  scored.sort((a, b) => a.score - b.score || b.id - a.id);
+  const keys = new Map<number, number>();
+  const position: Record<Stream, number> = { recent: 0, older: 0, undated: 0 };
+  for (const entry of scored) {
+    const pos = position[entry.stream]++;
+    let key: number;
+    if (entry.stream === "recent") {
+      key = pos;
+    } else if (entry.stream === "older") {
+      const slot = (entry.h >>> 22) / 1024;
+      key =
+        (pos + 1) * STACKED_THROWBACK_EVERY -
+        0.5 +
+        (slot * 2 - 1) * STACKED_THROWBACK_JITTER;
+    } else {
+      key = STACKED_UNDATED_BASE + pos;
+    }
+    keys.set(entry.id, key);
+  }
+  return keys;
+}
+
+/**
+ * Sort items into the "stacked" order — see {@link computeStackKeys}.
  *
- * - `feed_rank` — the item's 0-based position within its own feed, newest
- *   first. This is the major term: rank bands are only crossed via demotion.
+ * Rows from a stacked page query already carry the database's `stack_key`,
+ * computed over the whole library, so a loaded window keeps exactly the
+ * order it was paged in. Items without keys (any missing) are ordered by
+ * computing keys over just the given items.
  *
- * - `staleness_demotion` — an integer number of bands the item slides down
- *   as it ages *relative to its feed's cadence*:
- *
- *       unit     = clamp(median inter-post gap, 1 day, 90 days)
- *                  (7 days when the cadence is unknown)
- *       demotion = max(0, floor(age / unit) - GRACE_CYCLES)
- *
- *   A quarterly blog's 2-day-old post has age ≈ 0.02 units → no demotion:
- *   old-but-newest posts from quiet feeds stay in the top band. A dead
- *   feed's 2-year-old post is dozens of units old → demoted far down the
- *   list. Because demotion is measured in whole bands, it composes cleanly
- *   with rank: one missed posting cycle ≈ one extra post ahead of you.
- *
- * - `daily_shuffle` — a deterministic per-feed value in [0, 1) keyed on the
- *   local calendar day. Within a band, feeds appear in an order that is
- *   stable for the whole day (re-renders, refreshes, and pagination never
- *   reshuffle it) but rotates overnight, so no single feed monopolises the
- *   first slot. Strictly less than 1, so it can never cross band boundaries.
- *
- * Future-dated timestamps are capped to `now` for ranking and tie-breaking,
- * so a mis-dated post can't outrank genuinely new content. Items with no
- * `published_at` sink to the very end. Ties break by recency (newer first),
- * then by id (higher first) for full determinism.
- *
- * @param items - The items to sort.
- * @param now - Optional clock function (defaults to Date.now) to allow
- *   deterministic testing. Also determines the shuffle's calendar day.
+ * @param now - Clock used when keys have to be computed here.
  */
 export function sortStacked(
   items: FeedItemWithFeed[],
   now: () => number = Date.now
 ): FeedItemWithFeed[] {
-  const currentTime = now();
-  const dayNumber = localDayNumber(currentTime);
-
-  // Cap future timestamps to currentTime once, up front.
-  const cappedAt = new Map<number, number>();
-  for (const item of items) {
-    if (item.published_at != null) {
-      cappedAt.set(item.id, Math.min(item.published_at, currentTime));
-    }
-  }
-
-  // Step 1: group by feed and assign each item its within-feed rank
-  // (0 = newest from that feed; untimestamped items last).
-  const rankById = new Map<number, number>();
-  const byFeed = new Map<number, FeedItemWithFeed[]>();
-
-  for (const item of items) {
-    let list = byFeed.get(item.feed_id);
-    if (!list) {
-      list = [];
-      byFeed.set(item.feed_id, list);
-    }
-    list.push(item);
-  }
-
-  for (const feedItems of byFeed.values()) {
-    // Tie-break identical timestamps by id descending so ranks (and thus the
-    // final order) never depend on input order. Matches the SQL rank-major
-    // paging order in database.ts.
-    feedItems.sort(
-      (a, b) =>
-        (cappedAt.get(b.id) ?? -Infinity) - (cappedAt.get(a.id) ?? -Infinity) ||
-        b.id - a.id
-    );
-    feedItems.forEach((item, i) => rankById.set(item.id, i));
-  }
-
-  // Step 2: per-feed freshness unit (cadence yardstick) and daily shuffle.
-  const feedUnit = new Map<number, number>();
-  const feedShuffle = new Map<number, number>();
-  for (const [feedId, feedItems] of byFeed) {
-    const publishedAts = feedItems
-      .map((i) => cappedAt.get(i.id))
-      .filter((t): t is number => t !== undefined);
-    const unit =
-      publishedAts.length < 2
-        ? UNKNOWN_CADENCE_UNIT_MS
-        : Math.max(
-            FRESHNESS_UNIT_MIN_MS,
-            Math.min(
-              FRESHNESS_UNIT_MAX_MS,
-              computeFeedPostingInterval(publishedAts)
-            )
-          );
-    feedUnit.set(feedId, unit);
-    feedShuffle.set(feedId, feedDayShuffle(feedId, dayNumber));
-  }
-
-  // Step 3: score every item.
-  const scored = items.map((item) => {
-    const capped = cappedAt.get(item.id);
-    if (capped == null) {
-      return { item, score: Infinity };
-    }
-
-    const rank = rankById.get(item.id) ?? 0;
-    const unit = feedUnit.get(item.feed_id) ?? UNKNOWN_CADENCE_UNIT_MS;
-    const age = Math.max(0, currentTime - capped);
-    const demotion = Math.max(0, Math.floor(age / unit) - GRACE_CYCLES);
-    const shuffle = feedShuffle.get(item.feed_id) ?? 0;
-
-    return { item, score: rank + demotion + shuffle };
-  });
-
-  // Step 4: sort by score ascending; ties break by capped recency (newer
-  // first), then id descending, so the order is fully deterministic.
-  scored.sort((a, b) => {
-    if (a.score !== b.score) return a.score - b.score;
-    const recency =
-      (cappedAt.get(b.item.id) ?? -Infinity) -
-      (cappedAt.get(a.item.id) ?? -Infinity);
-    if (recency !== 0) return recency;
-    return b.item.id - a.item.id;
-  });
-
-  return scored.map((s) => s.item);
+  const computed = items.every((item) => item.stack_key != null)
+    ? null
+    : computeStackKeys(items, now());
+  const keyOf = (item: FeedItemWithFeed) =>
+    (computed ? computed.get(item.id) : item.stack_key) ?? Infinity;
+  return [...items].sort((a, b) => keyOf(a) - keyOf(b) || b.id - a.id);
 }
 
 /**

@@ -271,6 +271,54 @@ describe("runBackgroundNotificationSync — wifi-only", () => {
   });
 });
 
+describe("runBackgroundNotificationSync — last sync time", () => {
+  const mockSaveConfig = storage.saveConfig as jest.MockedFunction<
+    typeof storage.saveConfig
+  >;
+
+  it("records when it finished refreshing feeds", async () => {
+    // Arrange
+    mockGetFeeds.mockResolvedValue([
+      makeFeed({ notify_last_seen_item_id: 10 }),
+    ]);
+    const before = Date.now();
+
+    // Act
+    await runBackgroundNotificationSync();
+
+    // Assert
+    const stamp = mockSaveConfig.mock.calls
+      .map(([patch]) => patch.lastBackgroundSyncAt)
+      .find((value) => value !== undefined);
+    expect(stamp).toBeGreaterThanOrEqual(before);
+    expect(stamp).toBeLessThanOrEqual(Date.now());
+  });
+
+  it("records nothing when wifi-only skipped the refresh", async () => {
+    // Arrange — the posts on the device are no fresher than before, so a
+    // launch shouldn't treat them as just synced.
+    mockLoadConfig.mockReturnValue({ backgroundSyncWifiOnly: true });
+    mockGetNetworkState.mockResolvedValue({
+      isConnected: true,
+      type: "CELLULAR" as unknown as Network.NetworkStateType,
+      isInternetReachable: true,
+    });
+    mockGetFeeds.mockResolvedValue([
+      makeFeed({ notify_last_seen_item_id: 10 }),
+    ]);
+
+    // Act
+    await runBackgroundNotificationSync();
+
+    // Assert
+    expect(
+      mockSaveConfig.mock.calls.some(
+        ([patch]) => patch.lastBackgroundSyncAt !== undefined
+      )
+    ).toBe(false);
+  });
+});
+
 // NOTE: these tests share the notifications module's in-memory record of the
 // currently-registered interval, so they are order-sensitive by design: each
 // test documents the module state it expects to inherit.

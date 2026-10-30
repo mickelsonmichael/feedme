@@ -308,6 +308,11 @@ export async function runBackgroundNotificationSync(): Promise<void> {
     // Lower concurrency than the foreground default: nobody is watching a
     // progress bar here, so be gentle on the radio, battery and rate limits.
     await refreshFeeds(feeds, { concurrency: 3 });
+    try {
+      saveConfig({ lastBackgroundSyncAt: Date.now() });
+    } catch {
+      // Best-effort; worst case the next launch refreshes again.
+    }
   }
 
   const tags = await getTags();

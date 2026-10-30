@@ -85,6 +85,7 @@ import {
 } from "../collapseRepeated";
 import { FeedPostCard } from "../components/FeedPostCard";
 import { loadConfig, saveConfig } from "../storage";
+import { backgroundSyncedRecently } from "../backgroundSyncWindow";
 import { openUrlWithPreference } from "../linkOpening";
 import { resolveCustomFeedIcon } from "../customFeedIcons";
 import {
@@ -215,6 +216,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
     items: FeedItemWithFeed[];
     hasMore: boolean;
     pagedCount: number;
+    pageClock: number;
   } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(true);
@@ -487,6 +489,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // so every deferred path is covered: cold start, app resume, pull-to-refresh.
   const backgroundSyncInFlightRef = useRef(false);
 
+  // Clock the current list was paged against. The stacked order depends on
+  // post age, so every page of one list — including those loaded on scroll —
+  // has to be queried with the same `now` to line up with the pages before it.
+  const pageClockRef = useRef(Date.now());
+
   const loadData = useCallback(
     async (
       refreshRemote: boolean,
@@ -501,6 +508,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       forceRemote = false
     ) => {
       const generation = ++loadGenerationRef.current;
+      const pageClock = Date.now();
       // Tracked for every deferred refresh, not just the app-resume one, so
       // that re-focusing the Feed tab mid-sync can tell a sync is still running
       // and leave it alone.
@@ -591,6 +599,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
               limit: pageLimit,
               order: sortRef.current,
               unreadOnly,
+              now: pageClock,
             }),
             getSavedItemIds(),
             getReadLaterItemIds(),
@@ -626,6 +635,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 items: itemData,
                 hasMore: morePages,
                 pagedCount,
+                pageClock,
               };
               setNewPostsAvailable(true);
               return itemData.length;
@@ -634,6 +644,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
             // read-state / content edits from the refresh are still picked up
             // without bothering the user with a reload button.
           }
+          pageClockRef.current = pageClock;
           pagedCountRef.current = pagedCount;
           setItems(itemData);
           setHasMore(morePages);
@@ -784,10 +795,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
         limit: PAGE_SIZE,
         order: sortRef.current,
         unreadOnly: filterRef.current === "unread",
+        now: pageClockRef.current,
       });
       if (loadGenerationRef.current !== generation) return; // scope changed mid-flight
       pagedCountRef.current += nextPage.length;
-      setItems((prev) => [...prev, ...nextPage]);
+      // Posts written since the list was paged (a background sync) shift the
+      // offsets, so a page can repeat rows already loaded — drop those.
+      setItems((prev) => {
+        const loaded = new Set(prev.map((item) => item.id));
+        return [...prev, ...nextPage.filter((item) => !loaded.has(item.id))];
+      });
       setHasMore(nextPage.length === PAGE_SIZE);
     } catch {
       // onEndReached can fire repeatedly; an alert here would be noisy.
@@ -808,7 +825,12 @@ export default function FeedListScreen({ navigation, route }: Props) {
       markAsReadOnScrollRef.current = config.markAsReadOnScroll ?? false;
       const isAppStart = isInitialFocusRef.current;
       isInitialFocusRef.current = false;
-      const refreshRemote = shouldRefreshOnFocus || isAppStart;
+      // A launch within one interval of the scheduled background sync shows
+      // what that sync fetched instead of starting another refresh. An empty
+      // cache still forces one (see forceRefreshEmptyCache in loadData).
+      const refreshRemote =
+        shouldRefreshOnFocus ||
+        (isAppStart && !backgroundSyncedRecently(config, Date.now()));
       // Mobile cold start: render the cached posts right away and pull new
       // ones in behind a background banner, then offer a "New posts available"
       // button. This applies to every layout, single-post reader included —
@@ -879,6 +901,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       // reasoning as the pull-to-refresh scroll — see pendingScrollToTopRef).
       pendingScrollToTopRef.current = true;
       pagedCountRef.current = pending.pagedCount;
+      pageClockRef.current = pending.pageClock;
       setItems(pending.items);
       setHasMore(pending.hasMore);
     }
@@ -917,7 +940,10 @@ export default function FeedListScreen({ navigation, route }: Props) {
       // refreshFeeds still honours per-feed adaptive scheduling (force:false),
       // so a quick app-switch round trip costs nothing on the wire.
       // loadData owns backgroundSyncInFlightRef for the whole deferred run.
-      loadData(true, true);
+      // If the scheduled background sync ran within its interval, its posts
+      // are already in the database: re-read locally, so they surface behind
+      // "New posts available", rather than fetching again.
+      loadData(!backgroundSyncedRecently(loadConfig(), Date.now()), true);
     });
 
     return () => subscription.remove();

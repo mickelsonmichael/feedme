@@ -32,6 +32,10 @@ export type WebConfig = {
    *  re-registering periodic work on every launch resets the OS scheduler's
    *  timer and is exactly what made background sync fire inconsistently. */
   backgroundSyncRegisteredIntervalMinutes?: number;
+  /** Wall-clock ms at which the scheduled background sync last finished
+   *  refreshing feeds. Opening the app within one sync interval of it skips
+   *  the launch refresh — see `backgroundSyncedRecently`. */
+  lastBackgroundSyncAt?: number;
   /** Item ids that the user has individually uncollapsed in the main feed
    *  for feeds marked "collapse repeated entries". Persists across
    *  navigation and app restarts. Capped to a bounded length so it cannot
@@ -138,6 +142,15 @@ function validateConfig(raw: unknown): WebConfig {
     ) {
       config.backgroundSyncRegisteredIntervalMinutes =
         backgroundSyncRegisteredIntervalMinutes;
+    }
+
+    const lastBackgroundSyncAt = (raw as Record<string, unknown>)
+      .lastBackgroundSyncAt;
+    if (
+      typeof lastBackgroundSyncAt === "number" &&
+      Number.isFinite(lastBackgroundSyncAt)
+    ) {
+      config.lastBackgroundSyncAt = lastBackgroundSyncAt;
     }
 
     const uncollapsedItemIds = (raw as Record<string, unknown>)

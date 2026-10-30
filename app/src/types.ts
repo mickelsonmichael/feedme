@@ -104,7 +104,13 @@ export type FeedItem = {
   read: number;
 };
 
-export type FeedItemWithFeed = FeedItem & { feed_title: string };
+export type FeedItemWithFeed = FeedItem & {
+  feed_title: string;
+  /** Position key from a "stacked" page query (lower = earlier), so the
+   *  client can keep the database's order across pages without recomputing
+   *  it from the loaded window. Absent on every other query. */
+  stack_key?: number;
+};
 
 export type ItemsPageOptions = {
   /** Restrict to these feed_ids. null/undefined = no restriction.
@@ -117,11 +123,14 @@ export type ItemsPageOptions = {
   limit: number;
   /** Row ordering for pagination.
    *  - "newest" (default): global reverse-chronological.
-   *  - "stacked": per-feed rank-major — every feed's newest item pages out
-   *    before any feed's second-newest. Guarantees quiet feeds appear in the
-   *    first page instead of being crowded out by high-volume feeds, so the
-   *    client-side stacked sort always has every feed represented. */
+   *  - "stacked": recent posts interleaved across feeds, with older posts
+   *    sprinkled in as occasional throwbacks — see `computeStackKeys` in
+   *    sortItems.ts. Rows carry `stack_key`. */
   order?: "newest" | "stacked";
+  /** Clock for "stacked" ordering, which depends on post age. Pin it across
+   *  the pages of one list so a later page is ordered against the same clock
+   *  as the first. Defaults to the current time. */
+  now?: number;
   /** Restrict to unread items. Paging has to know about the unread filter:
    *  filtering a read-agnostic page client-side means a page whose items the
    *  user has already read collapses to nothing, and the empty state has no

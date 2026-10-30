@@ -14,6 +14,20 @@ import {
   TagWithFeedCount,
 } from "./types";
 import {
+  HASH_ID_MULTIPLIER,
+  HASH_MASK,
+  HASH_MIX,
+  STACKED_DAYS_PER_RANK,
+  STACKED_NEWEST_RECENT_DAYS,
+  STACKED_RECENT_DAYS,
+  STACKED_THROWBACK_AGE_OFFSET_DAYS,
+  STACKED_THROWBACK_EVERY,
+  STACKED_THROWBACK_JITTER,
+  STACKED_UNDATED_BASE,
+  localDayNumber,
+  stackDaySalt,
+} from "./sortItems";
+import {
   buildItemInsertSql,
   buildItemInsertValues,
   chunkForInsert,
@@ -892,6 +906,101 @@ export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
   );
 }
 
+// The "stacked" order, computed over the whole scope in one query so every
+// page agrees with every other. Only ids and dates go through the ranking
+// passes — carrying post bodies through them made the query several times
+// slower — and the page's full rows are joined back at the end. Mirrors `computeStackKeys` in sortItems.ts
+// step for step — see there for the algorithm, and database.stacked.test.ts
+// for the check that the two agree. Bound parameters: now, day salt, the
+// scope's WHERE parameters, limit, offset.
+//
+// SQLite has no XOR, so the hash spells `a ^ b` as `(a | b) - (a & b)`; every
+// product stays below 2^63 so integer arithmetic never spills into floats.
+function stackedPageSql(whereClause: string): string {
+  const xorShift16 = (x: string) =>
+    `(((${x} >> 16) | ${x}) - ((${x} >> 16) & ${x}))`;
+  return `
+    WITH clock(now, salt) AS (SELECT ?, ?),
+    scoped AS (
+      SELECT items.id, items.feed_id,
+             MIN(items.published_at, clock.now) AS t,
+             (clock.now - MIN(items.published_at, clock.now)) / 86400000.0
+               AS age_days,
+             (items.id * ${HASH_ID_MULTIPLIER} + clock.salt) & ${HASH_MASK} AS h0
+      FROM items
+      JOIN feeds ON items.feed_id = feeds.id
+      CROSS JOIN clock
+      ${whereClause}
+    ),
+    ranked AS (
+      SELECT *,
+             ROW_NUMBER() OVER (PARTITION BY feed_id ORDER BY t DESC, id DESC)
+               - 1 AS feed_rank,
+             (${xorShift16("h0")} * ${HASH_MIX}) & ${HASH_MASK} AS h1
+      FROM scoped
+    ),
+    hashed AS (
+      SELECT *, (${xorShift16("h1")} * ${HASH_MIX}) & ${HASH_MASK} AS h2
+      FROM ranked
+    ),
+    classed AS (
+      SELECT *,
+             ${xorShift16("h2")} AS h,
+             CASE
+               WHEN t IS NULL THEN 2
+               WHEN age_days <= ${STACKED_RECENT_DAYS}
+                 OR (feed_rank = 0 AND age_days <= ${STACKED_NEWEST_RECENT_DAYS})
+                 THEN 0
+               ELSE 1
+             END AS stream
+      FROM hashed
+    ),
+    streamed AS (
+      SELECT *,
+             ROW_NUMBER() OVER (
+               PARTITION BY feed_id, stream ORDER BY t DESC, id DESC
+             ) - 1 AS stream_rank
+      FROM classed
+    ),
+    scored AS (
+      SELECT *,
+             CASE stream
+               WHEN 0 THEN stream_rank + age_days / ${STACKED_DAYS_PER_RANK}
+                 + (h & 2047) / 2048.0
+               WHEN 1 THEN (((h >> 11) & 2047) + 0.5) / 2048.0
+                 * (age_days + ${STACKED_THROWBACK_AGE_OFFSET_DAYS})
+                 * (stream_rank + 1)
+               ELSE 0
+             END AS score
+      FROM streamed
+    ),
+    placed AS (
+      SELECT *,
+             ROW_NUMBER() OVER (PARTITION BY stream ORDER BY score, id DESC)
+               - 1 AS pos
+      FROM scored
+    ),
+    page AS (
+      SELECT id,
+             CASE stream
+               WHEN 0 THEN pos
+               WHEN 1 THEN (pos + 1) * ${STACKED_THROWBACK_EVERY} - 0.5
+                 + ((h >> 22) / 1024.0 * 2 - 1) * ${STACKED_THROWBACK_JITTER}
+               ELSE ${STACKED_UNDATED_BASE} + pos
+             END AS stack_key
+      FROM placed
+      ORDER BY stack_key, id DESC
+      LIMIT ? OFFSET ?
+    )
+    SELECT items.id, items.feed_id, items.title, items.url, items.content,
+           items.image_url, items.published_at, items.read,
+           feeds.title AS feed_title, page.stack_key
+    FROM page
+    JOIN items ON items.id = page.id
+    JOIN feeds ON items.feed_id = feeds.id
+    ORDER BY page.stack_key, items.id DESC`;
+}
+
 export async function getItemsPage(
   options: ItemsPageOptions
 ): Promise<FeedItemWithFeed[]> {
@@ -902,6 +1011,7 @@ export async function getItemsPage(
     limit,
     order = "newest",
     unreadOnly = false,
+    now = Date.now(),
   } = options;
 
   // Empty feedIds means the scope contains zero feeds (e.g. a tag with no
@@ -933,39 +1043,26 @@ export async function getItemsPage(
   const whereClause =
     conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
-  // "stacked" pages rank-major: all rank-0 items (each feed's newest), then
-  // all rank-1 items, etc. — so page 1 contains every feed's newest content
-  // regardless of how prolific other feeds are. The client-side stacked sort
-  // then reorders the loaded window (staleness demotion, daily shuffle); those
-  // adjustments only ever push items later, so rank-major paging never leaves
-  // an item unloaded that should have displayed earlier.
+  if (order === "stacked") {
+    return database.getAllAsync<FeedItemWithFeed>(stackedPageSql(whereClause), [
+      now,
+      stackDaySalt(localDayNumber(now)),
+      ...params,
+      limit,
+      offset,
+    ]);
+  }
+
   // Note: SQLite sorts NULLs last under DESC, matching the client sort.
   const rows = await database.getAllAsync<FeedItemWithFeed>(
-    order === "stacked"
-      ? `SELECT id, feed_id, title, url, content, image_url, published_at,
-                read, feed_title
-         FROM (
-           SELECT items.id, items.feed_id, items.title, items.url,
-                  items.content, items.image_url, items.published_at,
-                  items.read, feeds.title AS feed_title,
-                  ROW_NUMBER() OVER (
-                    PARTITION BY items.feed_id
-                    ORDER BY items.published_at DESC, items.id DESC
-                  ) AS feed_rank
-           FROM items
-           JOIN feeds ON items.feed_id = feeds.id
-           ${whereClause}
-         )
-         ORDER BY feed_rank ASC, published_at DESC, id DESC
-         LIMIT ? OFFSET ?`
-      : `SELECT items.id, items.feed_id, items.title, items.url, items.content,
-                items.image_url, items.published_at, items.read,
-                feeds.title AS feed_title
-         FROM items
-         JOIN feeds ON items.feed_id = feeds.id
-         ${whereClause}
-         ORDER BY items.published_at DESC, items.id DESC
-         LIMIT ? OFFSET ?`,
+    `SELECT items.id, items.feed_id, items.title, items.url, items.content,
+            items.image_url, items.published_at, items.read,
+            feeds.title AS feed_title
+     FROM items
+     JOIN feeds ON items.feed_id = feeds.id
+     ${whereClause}
+     ORDER BY items.published_at DESC, items.id DESC
+     LIMIT ? OFFSET ?`,
     [...params, limit, offset]
   );
   return rows;

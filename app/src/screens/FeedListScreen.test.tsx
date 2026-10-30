@@ -2933,6 +2933,79 @@ describe("FeedListScreen", () => {
     });
   });
 
+  it("pages further into the same list: one clock, and no post shown twice", async () => {
+    // Arrange — a background sync wrote two posts after page one was read,
+    // shifting the offsets, so page two starts with page one's last posts.
+    (getFeeds as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        title: "Alpha",
+        url: "https://alpha.example/rss.xml",
+        description: null,
+        last_fetched: Date.now(),
+        error: null,
+      },
+    ]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getItemsPage as jest.Mock).mockImplementation(
+      ({ offset }: { offset: number }) =>
+        Promise.resolve(
+          offset === 0 ? makeItems(PAGE_SIZE, 1) : makeItems(5, PAGE_SIZE - 1)
+        )
+    );
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const route = {
+      key: "Feed-load-more-dedupe",
+      name: "Feed",
+      params: undefined,
+    } as FeedScreenProps["route"];
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderFeedListScreen({ navigation, route } as FeedScreenProps);
+      for (let i = 0; i < 8; i += 1) await Promise.resolve();
+    });
+    const realDateNow = Date.now;
+    const dateNowSpy = jest
+      .spyOn(Date, "now")
+      .mockImplementation(() => realDateNow() + 60 * 60 * 1_000);
+
+    try {
+      // Act — scroll on an hour later.
+      await scrollListToEnd(tree!);
+
+      // Assert — the next page is ordered against the first page's clock,
+      // and the two repeated posts appear once each.
+      const calls = (getItemsPage as jest.Mock).mock.calls.map(
+        ([options]) => options as { offset: number; now?: number }
+      );
+      const firstPage = calls.filter((options) => options.offset === 0).pop()!;
+      const nextPage = calls.find((options) => options.offset === PAGE_SIZE)!;
+      expect(nextPage.now).toBeDefined();
+      expect(nextPage.now).toBe(firstPage.now);
+
+      // The list's rows, not its rendered text: the test renderer's FlashList
+      // quietly collapses duplicate keys that a device renders twice.
+      const rowIds = (
+        tree!.root.findByType(FlashList).props.data as { id: number }[]
+      ).map((row) => row.id);
+      expect(new Set(rowIds).size).toBe(rowIds.length);
+      expect(rowIds).toContain(PAGE_SIZE);
+      expect(rowIds).toContain(PAGE_SIZE + 3);
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    } finally {
+      dateNowSpy.mockRestore();
+    }
+  });
+
   it("re-queries every page it already has on a background refresh, not just the first", async () => {
     // Arrange — a full first page plus a short second page, so the screen
     // ends up holding more items than a single page's worth.
@@ -3726,6 +3799,221 @@ describe("FeedListScreen", () => {
           tree!.root.findAllByProps({ testID: "feed-loading-screen" })
         ).toHaveLength(0);
         expect(textContents(tree!)).toContain("Synced on resume");
+
+        await act(async () => {
+          tree!.unmount();
+        });
+      } finally {
+        addEventListenerSpy.mockRestore();
+        dateNowSpy.mockRestore();
+      }
+    });
+
+    it("shows what a recent background sync fetched at launch instead of syncing again", async () => {
+      // Arrange - the scheduled sync ran five minutes ago on an hourly
+      // schedule, so the cache is as fresh as the user asked for.
+      const cached = [
+        {
+          id: 1401,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Fetched in the background",
+          url: "https://alpha.example/background",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ];
+      (loadConfig as jest.Mock).mockReturnValue({
+        backgroundSyncFrequency: "1h",
+        lastBackgroundSyncAt: Date.now() - 5 * 60 * 1_000,
+      });
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock).mockResolvedValue(cached);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+
+      const route = {
+        key: "Feed-recent-bg-sync",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      // Earlier tests' spies leave the preset's AppState mock returning
+      // nothing; the screen needs a subscription to remove on unmount.
+      jest
+        .spyOn(AppState, "addEventListener")
+        .mockReturnValue({ remove: jest.fn() } as never);
+
+      // Act
+      await act(async () => {
+        tree = renderFeedListScreen({
+          navigation: makeNavigation(),
+          route,
+        } as FeedScreenProps);
+        await flush();
+      });
+
+      // Assert
+      expect(refreshFeeds).not.toHaveBeenCalled();
+      expect(hasBanner(tree!)).toBe(false);
+      expect(textContents(tree!)).toContain("Fetched in the background");
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    });
+
+    it("syncs at launch when the last background sync is older than its interval", async () => {
+      // Arrange
+      (loadConfig as jest.Mock).mockReturnValue({
+        backgroundSyncFrequency: "1h",
+        lastBackgroundSyncAt: Date.now() - 2 * 60 * 60 * 1_000,
+      });
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock).mockResolvedValue([
+        {
+          id: 1402,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "Stale",
+          url: "https://alpha.example/stale",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ]);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+
+      const route = {
+        key: "Feed-stale-bg-sync",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      // Earlier tests' spies leave the preset's AppState mock returning
+      // nothing; the screen needs a subscription to remove on unmount.
+      jest
+        .spyOn(AppState, "addEventListener")
+        .mockReturnValue({ remove: jest.fn() } as never);
+
+      // Act
+      await act(async () => {
+        tree = renderFeedListScreen({
+          navigation: makeNavigation(),
+          route,
+        } as FeedScreenProps);
+        await flush();
+      });
+
+      // Assert
+      expect(refreshFeeds).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        tree!.unmount();
+      });
+    });
+
+    it("on resume after a recent background sync, offers its posts without fetching again", async () => {
+      // Arrange - launch and sync as usual, then the scheduled sync runs
+      // while the app is in the background and writes a new post.
+      const cached = [
+        {
+          id: 1501,
+          feed_id: 1,
+          feed_title: "Alpha",
+          title: "From before backgrounding",
+          url: "https://alpha.example/before",
+          content: "body",
+          image_url: null,
+          published_at: 1_000,
+          read: 0,
+        },
+      ];
+      const afterBackgroundSync = [
+        {
+          ...cached[0],
+          id: 1502,
+          title: "Written by the background sync",
+          url: "https://alpha.example/bg",
+          published_at: 2_000,
+        },
+        ...cached,
+      ];
+      (getFeeds as jest.Mock).mockResolvedValue([feed]);
+      (getItemsPage as jest.Mock).mockResolvedValue(cached);
+      (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+      (refreshFeeds as jest.Mock).mockResolvedValue(0);
+
+      const appStateHandlers: Array<(state: AppStateStatus) => void> = [];
+      const addEventListenerSpy = jest
+        .spyOn(AppState, "addEventListener")
+        .mockImplementation((_event, handler) => {
+          appStateHandlers.push(handler as (state: AppStateStatus) => void);
+          return { remove: jest.fn() } as never;
+        });
+      const realDateNow = Date.now;
+      let mockNow = realDateNow();
+      const dateNowSpy = jest
+        .spyOn(Date, "now")
+        .mockImplementation(() => mockNow);
+
+      const route = {
+        key: "Feed-resume-after-bg-sync",
+        name: "Feed",
+        params: undefined,
+      } as FeedScreenProps["route"];
+      let tree: renderer.ReactTestRenderer;
+
+      try {
+        await act(async () => {
+          tree = renderFeedListScreen({
+            navigation: makeNavigation(),
+            route,
+          } as FeedScreenProps);
+          await flush();
+        });
+        const refreshCallsAfterStart = (refreshFeeds as jest.Mock).mock.calls
+          .length;
+
+        await act(async () => {
+          appStateHandlers.forEach((handler) => handler("background"));
+          await flush();
+        });
+        mockNow += 16 * 60 * 1_000;
+        (loadConfig as jest.Mock).mockReturnValue({
+          backgroundSyncFrequency: "1h",
+          lastBackgroundSyncAt: mockNow - 60 * 1_000,
+        });
+        (getItemsPage as jest.Mock).mockResolvedValue(afterBackgroundSync);
+
+        // Act
+        await act(async () => {
+          appStateHandlers.forEach((handler) => handler("active"));
+          await flush();
+        });
+
+        // Assert - nothing fetched, no sync banner, and the new post waits
+        // behind the button rather than landing under the reader.
+        expect((refreshFeeds as jest.Mock).mock.calls.length).toBe(
+          refreshCallsAfterStart
+        );
+        expect(hasBanner(tree!)).toBe(false);
+        expect(textContents(tree!)).not.toContain(
+          "Written by the background sync"
+        );
+        await act(async () => {
+          await tree!.root
+            .findByProps({ accessibilityLabel: "Show new posts" })
+            .props.onPress();
+          await flush();
+        });
+        expect(textContents(tree!)).toContain("Written by the background sync");
 
         await act(async () => {
           tree!.unmount();

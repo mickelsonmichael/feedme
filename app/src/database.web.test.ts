@@ -665,9 +665,9 @@ describe("database.web — getItemsPage", () => {
     expect(all.map((i) => i.id).sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("order: 'stacked' pages rank-major: every feed's newest item before any feed's second-newest", async () => {
-    // Arrange: a prolific feed with 4 items and a quiet feed whose only item
-    // is older than ALL of the prolific feed's items.
+  it("order: 'stacked' gives every feed's newest recent post a first-page slot", async () => {
+    // Arrange: a prolific feed with 4 recent items and a quiet feed whose
+    // only item is older than ALL of the prolific feed's items.
     await upsertItems(feedId, [
       { title: "Busy1", url: "https://x/1", content: null, publishedAt: 400 },
       { title: "Busy2", url: "https://x/2", content: null, publishedAt: 300 },
@@ -677,16 +677,27 @@ describe("database.web — getItemsPage", () => {
     await upsertItems(otherFeedId, [
       { title: "Quiet", url: "https://y/1", content: null, publishedAt: 50 },
     ]);
+    const now = 1_000;
 
     // Act
-    const page1 = await getItemsPage({ offset: 0, limit: 2, order: "stacked" });
-    const page2 = await getItemsPage({ offset: 2, limit: 3, order: "stacked" });
+    const page1 = await getItemsPage({
+      offset: 0,
+      limit: 2,
+      order: "stacked",
+      now,
+    });
+    const page2 = await getItemsPage({
+      offset: 2,
+      limit: 3,
+      order: "stacked",
+      now,
+    });
 
-    // Assert: rank 0 pages out first (newest per feed, recency-ordered within
-    // the rank), so the quiet feed's item makes page 1 despite being the
-    // oldest item overall. Ranks 1+ follow in recency order.
-    expect(page1.map((i) => i.title)).toEqual(["Busy1", "Quiet"]);
+    // Assert: each feed's newest post makes page 1 despite the quiet one
+    // being the oldest item overall; the busy feed's others follow in order.
+    expect(page1.map((i) => i.title).sort()).toEqual(["Busy1", "Quiet"]);
     expect(page2.map((i) => i.title)).toEqual(["Busy2", "Busy3", "Busy4"]);
+    expect([...page1, ...page2].every((i) => i.stack_key != null)).toBe(true);
   });
 
   it("unreadOnly: skips read items so a fully-read newest page doesn't consume the window", async () => {
@@ -734,10 +745,11 @@ describe("database.web — getItemsPage", () => {
       limit: 2,
       order: "stacked",
       unreadOnly: true,
+      now: 1_000,
     });
 
     // Assert
-    expect(page1.map((i) => i.title)).toEqual(["Busy2", "Quiet"]);
+    expect(page1.map((i) => i.title).sort()).toEqual(["Busy2", "Quiet"]);
   });
 });
 

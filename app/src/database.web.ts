@@ -25,6 +25,7 @@ import {
   TagWithFeedCount,
 } from "./types";
 import { isRedditCommentRawXml } from "./redditUtils";
+import { computeStackKeys } from "./sortItems";
 
 const STORAGE_KEY = "feedme_db_v1";
 
@@ -613,6 +614,7 @@ export async function getItemsPage(
     limit,
     order = "newest",
     unreadOnly = false,
+    now = Date.now(),
   } = options;
 
   if (feedIds != null && feedIds.length === 0) {
@@ -634,28 +636,20 @@ export async function getItemsPage(
     // Applied before ranking below, so stacked rank 0 is each feed's newest
     // *unread* item — mirrors the `items.read = 0` condition in database.ts.
     .filter((i) => !unreadOnly || !i.read)
-    .map((i) => ({ ...i, feed_title: titleByFeedId.get(i.feed_id) ?? "" }))
+    .map((i): FeedItemWithFeed => ({
+      ...i,
+      feed_title: titleByFeedId.get(i.feed_id) ?? "",
+    }))
     .sort(
       (a, b) => (b.published_at ?? 0) - (a.published_at ?? 0) || b.id - a.id
     );
 
   if (order === "stacked") {
-    // Rank-major paging (mirrors the SQL window-function query in
-    // database.ts): all rank-0 items (each feed's newest) page out before
-    // any feed's rank-1 item, so quiet feeds always make the first page.
-    // `scoped` is already newest-first, so per-feed encounter order = rank.
-    const rankByItemId = new Map<number, number>();
-    const seenPerFeed = new Map<number, number>();
-    for (const item of scoped) {
-      const rank = seenPerFeed.get(item.feed_id) ?? 0;
-      rankByItemId.set(item.id, rank);
-      seenPerFeed.set(item.feed_id, rank + 1);
-    }
+    // Same order as the SQL query in database.ts, over the whole scope.
+    const keys = computeStackKeys(scoped, now);
+    for (const item of scoped) item.stack_key = keys.get(item.id);
     scoped.sort(
-      (a, b) =>
-        (rankByItemId.get(a.id) ?? 0) - (rankByItemId.get(b.id) ?? 0) ||
-        (b.published_at ?? 0) - (a.published_at ?? 0) ||
-        b.id - a.id
+      (a, b) => (a.stack_key ?? 0) - (b.stack_key ?? 0) || b.id - a.id
     );
   }
 
