@@ -167,7 +167,7 @@ function decodeHtmlEntities(value: string): string {
   return decoded;
 }
 
-function stripHtml(html: string): string {
+export function stripHtml(html: string): string {
   return html
     .replace(/<[^>]+>/g, " ")
     .replace(/\s+/g, " ")

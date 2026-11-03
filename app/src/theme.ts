@@ -147,13 +147,3 @@ export const NSFW_BLUR_FILTER_STYLE = Platform.select<object>({
   web: { filter: "blur(40px)" },
   default: { filter: [{ blur: 40 }] },
 }) as object;
-
-export type Theme = {
-  colors: typeof colors;
-  spacing: typeof spacing;
-  radii: typeof radii;
-  fonts: typeof fonts;
-  fontSize: typeof fontSize;
-};
-
-export const theme: Theme = { colors, spacing, radii, fonts, fontSize };

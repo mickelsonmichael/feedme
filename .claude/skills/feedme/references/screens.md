@@ -35,7 +35,6 @@ The background-sync status pill floats above the tab bar on every tab (it is ren
 | `FeedItemView`     | `FeedItemScreen`         |
 | `FeedDetail`       | `FeedDetailScreen`       |
 | `FeedError`        | `FeedErrorScreen`        |
-| `FeedItems`        | `FeedItemsScreen`        |
 | `FeedSearch`       | `FeedSearchScreen`       |
 | `AddFeed`          | `AddFeedScreen`          |
 | `TagDetail`        | `TagDetailScreen`        |
@@ -82,25 +81,10 @@ Notification settings are a section inside `FeedDetailScreen` / `TagDetailScreen
 
 - `FlatList` of feeds with icon, title, and URL
 - Live fuzzy-match search bar (substring matching)
-- Tap a feed → navigates to `FeedItemsScreen` for that feed
+- Tap a feed → navigates to the Feed view scoped to that feed (`selectedFeedId`)
 - Long-press or detail button → navigates to `FeedDetailScreen` to edit
 - Link to `ImportExportScreen`
 - Tags section listing all user-defined tags with feed counts. Tapping a tag navigates to the Feed view scoped to that tag; an edit (pencil) icon opens `TagDetailScreen` for that tag. A "+" button opens `TagDetailScreen` in add mode.
-
----
-
-### FeedItemsScreen
-
-**File:** `app/src/screens/FeedItemsScreen.tsx`  
-**Route:** `FeedItems` (root stack)  
-**Purpose:** Shows all posts for a single feed, loaded by `feedId`.
-
-**Primary features:**
-
-- `FlashList` of `FeedPostCard` items, pull-to-refresh (re-fetches the RSS feed live)
-- Inline expand of items (images, video, Reddit gallery support)
-- Save/unsave and read/unread toggling per item
-- Header title set to the feed's title
 
 ---
 

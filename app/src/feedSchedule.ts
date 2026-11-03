@@ -27,7 +27,7 @@ export const PUBLISHED_AT_SAMPLE_SIZE = 20;
 /** Cap on the exponent so persistent failures don't overflow before the
  *  24h ceiling clamps them. 2^6 = 64 — combined with a 1h base that's
  *  already well past the 24h cap. */
-export const MAX_BACKOFF_EXPONENT = 6;
+const MAX_BACKOFF_EXPONENT = 6;
 
 /** Response headers the freshness floor is derived from. */
 export type FreshnessHeaders = {
@@ -54,7 +54,7 @@ const clamp = (value: number, min: number, max: number): number =>
  *   are considered.
  */
 export function computeBaseInterval(
-  publishedAt: ReadonlyArray<number | null | undefined>
+  publishedAt: readonly (number | null | undefined)[]
 ): number {
   const cleaned = publishedAt
     .filter((t): t is number => typeof t === "number" && Number.isFinite(t))

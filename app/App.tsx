@@ -32,7 +32,6 @@ import {
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import FeedListScreen from "./src/screens/FeedListScreen";
 import AddFeedScreen from "./src/screens/AddFeedScreen";
-import FeedItemsScreen from "./src/screens/FeedItemsScreen";
 import FeedItemScreen from "./src/screens/FeedItemScreen";
 import SavedScreen from "./src/screens/SavedScreen";
 import ReadLaterScreen from "./src/screens/ReadLaterScreen";
@@ -60,7 +59,8 @@ import { AppHeader } from "./src/components/AppHeader";
 import { HeaderContentProvider } from "./src/context/HeaderContentContext";
 import {
   FeedScrollProvider,
-  useFeedScroll,
+  useFeedScrollActions,
+  useIsFeedScrolled,
 } from "./src/context/FeedScrollContext";
 import { BackgroundSyncProvider } from "./src/context/BackgroundSyncContext";
 import { BackgroundSyncBannerHost } from "./src/components/BackgroundSyncBannerHost";
@@ -129,7 +129,7 @@ function FeatherTabIcon({
 }
 
 function FeedTabIcon({ focused }: { focused: boolean }): React.ReactElement {
-  const { isFeedScrolled } = useFeedScroll();
+  const isFeedScrolled = useIsFeedScrolled();
   // When the user is already on the Feed tab and has scrolled down, the tab
   // button acts as a "scroll to top" shortcut — surface that affordance with
   // an up-arrow icon.
@@ -144,7 +144,7 @@ function FeedTabLabel({
   focused: boolean;
   color: string;
 }): React.ReactElement {
-  const { isFeedScrolled } = useFeedScroll();
+  const isFeedScrolled = useIsFeedScrolled();
   return (
     <Text style={[styles.tabLabel, { color }]}>
       {focused && isFeedScrolled ? "To Top" : "Feed"}
@@ -167,7 +167,7 @@ const HIDDEN_TAB_OPTIONS = {
 
 function WebSideNav({ state, navigation }: BottomTabBarProps) {
   const { colors } = useTheme();
-  const { isFeedScrolled } = useFeedScroll();
+  const isFeedScrolled = useIsFeedScrolled();
   const [feeds, setFeeds] = React.useState<Feed[]>([]);
   const [tags, setTags] = React.useState<Tag[]>([]);
   const [customFeeds, setCustomFeeds] = React.useState<
@@ -516,11 +516,9 @@ function Tabs() {
   const insets = useSafeAreaInsets();
   const isWeb = Platform.OS === "web";
   const useSidebar = isWeb && width >= WEB_BREAKPOINT;
-  const { isFeedScrolled } = useFeedScroll();
-  // The tabPress listener below is created outside of React's render scope,
-  // so it reads scroll state via a ref kept in sync on every render.
-  const isFeedScrolledRef = React.useRef(isFeedScrolled);
-  isFeedScrolledRef.current = isFeedScrolled;
+  // Read at tabPress time rather than subscribed to: the navigator itself
+  // shouldn't re-render every time the feed crosses the "To Top" threshold.
+  const { getIsFeedScrolled } = useFeedScrollActions();
 
   return (
     <Tab.Navigator
@@ -598,7 +596,7 @@ function Tabs() {
             }
             // Already on the Feed tab — suppress the default re-jump either way.
             event.preventDefault();
-            if (isFeedScrolledRef.current) {
+            if (getIsFeedScrolled()) {
               // Acting as "To Top" — let FeedListScreen's own tabPress
               // listener scroll the current (possibly scoped) view to the
               // top without touching the active feed/tag/custom-feed scope.
@@ -720,7 +718,6 @@ function RootStack() {
       <Stack.Screen name="FeedItemView" component={FeedItemScreen} />
       <Stack.Screen name="FeedDetail" component={FeedDetailScreen} />
       <Stack.Screen name="FeedError" component={FeedErrorScreen} />
-      <Stack.Screen name="FeedItems" component={FeedItemsScreen} />
       <Stack.Screen name="FeedSearch" component={FeedSearchScreen} />
       <Stack.Screen name="AddFeed" component={AddFeedScreen} />
       <Stack.Screen name="TagDetail" component={TagDetailScreen} />
@@ -820,11 +817,6 @@ export default function App() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   tabsRoot: { flex: 1 },
-  headerTitle: {
-    fontFamily: fonts.sans,
-    fontWeight: "600",
-    fontSize: fontSize.h2,
-  },
   tabLabel: {
     fontSize: 11,
     fontFamily: fonts.sans,

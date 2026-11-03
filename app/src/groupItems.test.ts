@@ -109,7 +109,6 @@ describe("getTimeBucketLabel", () => {
   });
 
   it('returns "Yesterday" for an item published yesterday (daily)', () => {
-    const yesterday = NOW - 24 * 60 * 60 * 1000;
     // Ensure the date actually rolled to "yesterday" in local time.
     const ts = new Date(NOW);
     ts.setDate(ts.getDate() - 1);

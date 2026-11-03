@@ -1,7 +1,7 @@
 import { Image } from "expo-image";
 import { MAX_EXPANDED_IMAGE_EDGE } from "./expandedImageSize";
 
-export type ImageSize = { width: number; height: number };
+type ImageSize = { width: number; height: number };
 /** A measured size, or "failed" when the image couldn't be decoded. */
 export type CachedImageSize = ImageSize | "failed";
 

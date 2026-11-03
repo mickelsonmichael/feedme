@@ -31,7 +31,7 @@ import { resolveSingleSwipeDirection } from "../singleSwipeDirection";
 import { SingleViewPost, SingleViewPostHandle } from "./SingleViewPost";
 import { FeedItemContentItem } from "./FeedItemContent";
 
-export const SINGLE_SWIPE_ENTER_DURATION_MS = 240;
+const SINGLE_SWIPE_ENTER_DURATION_MS = 240;
 
 // How many posts either side of the active one stay mounted.
 //

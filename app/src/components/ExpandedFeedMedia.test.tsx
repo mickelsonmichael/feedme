@@ -1,6 +1,6 @@
 import React from "react";
 import { mockImageSize } from "../testUtils/mockImageSize";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet } from "react-native";
 import renderer, { act } from "react-test-renderer";
 import { Image } from "expo-image";
 import { NSFW_BLUR_RADIUS } from "../theme";

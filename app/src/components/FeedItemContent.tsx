@@ -10,6 +10,7 @@ import { ArticleText } from "./ArticleText";
 import { SanitizedHtmlContent } from "./SanitizedHtmlContent";
 import { prepareArticleHtml } from "../utils/articleHtml";
 import { hasRenderableHtml } from "../utils/sanitizeHtml";
+import { isRedditCommentsUrl } from "../redditUtils";
 
 export type FeedItemContentItem = RootStackParamList["FeedItemView"]["item"];
 
@@ -115,21 +116,6 @@ function FeedItemContentImpl({
 }
 
 export const FeedItemContent = React.memo(FeedItemContentImpl);
-
-export function isRedditCommentsUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname.toLowerCase();
-    if (!(hostname === "reddit.com" || hostname.endsWith(".reddit.com"))) {
-      return false;
-    }
-    return parsed.pathname.toLowerCase().includes("/comments/");
-  } catch {
-    return /(?:https?:\/\/)?(?:(?:www|old)\.)?reddit\.com\/.*\/comments\//i.test(
-      url
-    );
-  }
-}
 
 export function formatDate(ts: number | null): string {
   if (!ts) return "unknown";

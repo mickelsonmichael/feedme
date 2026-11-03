@@ -1,5 +1,5 @@
 import React from "react";
-import { Modal, TouchableOpacity } from "react-native";
+import { Modal } from "react-native";
 import renderer, { act } from "react-test-renderer";
 import * as ScreenOrientation from "expo-screen-orientation";
 import { FullscreenImageModal } from "../components/FullscreenImageModal";

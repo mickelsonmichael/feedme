@@ -68,7 +68,7 @@ This file tracks functional requirements for each screen and feature area. Updat
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | REQ-FEEDS-001 | The feeds screen shall list all subscribed feeds with their icon, title, and URL.                                                                                     |
 | REQ-FEEDS-002 | The user shall be able to search/filter feeds by name using a live search bar.                                                                                        |
-| REQ-FEEDS-003 | Tapping a feed shall navigate to FeedItemsScreen for that feed.                                                                                                       |
+| REQ-FEEDS-003 | [modified] Tapping a feed shall open the Feed view scoped to that feed.                                                                                               |
 | REQ-FEEDS-004 | The user shall be able to access feed detail/edit via long-press or a detail button.                                                                                  |
 | REQ-FEEDS-005 | The feeds screen shall provide a navigation entry point to ImportExportScreen.                                                                                        |
 | REQ-FEEDS-006 | The feeds screen shall display a list of user-defined tags. Tapping a tag opens the tag-scoped feed view; an edit (pencil) icon opens `TagDetailScreen` for that tag. |
@@ -77,6 +77,8 @@ This file tracks functional requirements for each screen and feature area. Updat
 ---
 
 ## FeedItemsScreen
+
+[removed] `FeedItemsScreen` was deleted: nothing navigated to it, and tapping a feed opens the scoped Feed view instead (REQ-FEEDS-003). Its requirements are kept for history.
 
 | ID                | Requirement                                                                                                                                                                                                                                                                                                                                      |
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

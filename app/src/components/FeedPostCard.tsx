@@ -19,7 +19,8 @@ import {
   fetchRedditGalleryImageUrlsCached,
 } from "../redditGallery";
 import { extractGifEmbedUrl, extractGifEmbedUrlFromContent } from "../gifUtils";
-import { extractRedditAuthor } from "../redditUtils";
+import { extractRedditAuthor, isRedditCommentsUrl } from "../redditUtils";
+import { formatRelativeAge } from "../utils/relativeAge";
 import { ExpandedFeedMedia } from "./ExpandedFeedMedia";
 import { ArticleText } from "./ArticleText";
 import { SanitizedHtmlContent } from "./SanitizedHtmlContent";
@@ -175,6 +176,61 @@ function FeedPostCardComponent({
     useProxy
   );
 
+  // The actions both layouts share; compact puts its expand toggle first.
+  const postActions = (
+    <>
+      <ReadToggleButton
+        read={item.read}
+        onPress={() => onToggleRead(item.id)}
+      />
+      <SaveButton saved={saved} onPress={() => onToggleSave(item.id)} />
+      {onToggleReadLater ? (
+        <ReadLaterButton
+          readLater={readLater}
+          onPress={() => onToggleReadLater(item.id)}
+        />
+      ) : null}
+      <IconButton
+        style={styles.iconActionBtn}
+        onPress={() => onOpenOriginalLink(item.id)}
+        disabled={!item.url}
+        accessibilityLabel="Open original link"
+      >
+        <Feather
+          name="external-link"
+          size={18}
+          color={item.url ? colors.inkSoft : colors.inkFaint}
+        />
+      </IconButton>
+      {redditCommentsLink ? (
+        <IconButton
+          style={styles.iconActionBtn}
+          onPress={() => onOpenContentLink(redditCommentsLink.url)}
+          accessibilityLabel="Open Reddit comments"
+        >
+          <Feather name="message-circle" size={18} color={colors.inkSoft} />
+        </IconButton>
+      ) : null}
+      {redditAuthor && onFollowAuthor ? (
+        <IconButton
+          style={styles.iconActionBtn}
+          onPress={() => onFollowAuthor(item.id)}
+          accessibilityLabel={
+            authorFollowed
+              ? `Unfollow u/${redditAuthor}`
+              : `Follow u/${redditAuthor}`
+          }
+        >
+          <Feather
+            name={authorFollowed ? "user-minus" : "user-plus"}
+            size={18}
+            color={authorFollowed ? colors.accent : colors.inkSoft}
+          />
+        </IconButton>
+      ) : null}
+    </>
+  );
+
   if (layout === "card") {
     return (
       <View
@@ -261,59 +317,7 @@ function FeedPostCardComponent({
             />
           ) : null}
           <View style={[styles.actionRow, { borderTopColor: colors.inkFaint }]}>
-            <ReadToggleButton
-              read={item.read}
-              onPress={() => onToggleRead(item.id)}
-            />
-            <SaveButton saved={saved} onPress={() => onToggleSave(item.id)} />
-            {onToggleReadLater ? (
-              <ReadLaterButton
-                readLater={readLater}
-                onPress={() => onToggleReadLater(item.id)}
-              />
-            ) : null}
-            <IconButton
-              style={styles.iconActionBtn}
-              onPress={() => onOpenOriginalLink(item.id)}
-              accessibilityLabel="Open original link"
-              disabled={!item.url}
-            >
-              <Feather
-                name="external-link"
-                size={18}
-                color={item.url ? colors.inkSoft : colors.inkFaint}
-              />
-            </IconButton>
-            {redditCommentsLink ? (
-              <IconButton
-                style={styles.iconActionBtn}
-                onPress={() => onOpenContentLink(redditCommentsLink.url)}
-                accessibilityLabel="Open Reddit comments"
-              >
-                <Feather
-                  name="message-circle"
-                  size={18}
-                  color={colors.inkSoft}
-                />
-              </IconButton>
-            ) : null}
-            {redditAuthor && onFollowAuthor ? (
-              <IconButton
-                style={styles.iconActionBtn}
-                onPress={() => onFollowAuthor(item.id)}
-                accessibilityLabel={
-                  authorFollowed
-                    ? `Unfollow u/${redditAuthor}`
-                    : `Follow u/${redditAuthor}`
-                }
-              >
-                <Feather
-                  name={authorFollowed ? "user-minus" : "user-plus"}
-                  size={18}
-                  color={authorFollowed ? colors.accent : colors.inkSoft}
-                />
-              </IconButton>
-            ) : null}
+            {postActions}
           </View>
         </View>
       </View>
@@ -418,55 +422,7 @@ function FeedPostCardComponent({
             />
           </IconButton>
         ) : null}
-        <ReadToggleButton
-          read={item.read}
-          onPress={() => onToggleRead(item.id)}
-        />
-        <SaveButton saved={saved} onPress={() => onToggleSave(item.id)} />
-        {onToggleReadLater ? (
-          <ReadLaterButton
-            readLater={readLater}
-            onPress={() => onToggleReadLater(item.id)}
-          />
-        ) : null}
-        <IconButton
-          style={styles.iconActionBtn}
-          onPress={() => onOpenOriginalLink(item.id)}
-          disabled={!item.url}
-          accessibilityLabel="Open original link"
-        >
-          <Feather
-            name="external-link"
-            size={18}
-            color={item.url ? colors.inkSoft : colors.inkFaint}
-          />
-        </IconButton>
-        {redditCommentsLink ? (
-          <IconButton
-            style={styles.iconActionBtn}
-            onPress={() => onOpenContentLink(redditCommentsLink.url)}
-            accessibilityLabel="Open Reddit comments"
-          >
-            <Feather name="message-circle" size={18} color={colors.inkSoft} />
-          </IconButton>
-        ) : null}
-        {redditAuthor && onFollowAuthor ? (
-          <IconButton
-            style={styles.iconActionBtn}
-            onPress={() => onFollowAuthor(item.id)}
-            accessibilityLabel={
-              authorFollowed
-                ? `Unfollow u/${redditAuthor}`
-                : `Follow u/${redditAuthor}`
-            }
-          >
-            <Feather
-              name={authorFollowed ? "user-minus" : "user-plus"}
-              size={18}
-              color={authorFollowed ? colors.accent : colors.inkSoft}
-            />
-          </IconButton>
-        ) : null}
+        {postActions}
       </View>
       {showExpand && expanded ? (
         <Animated.View
@@ -531,7 +487,7 @@ function FeedPostMeta({
         {feedTitle}
       </Text>
       <Text style={[styles.metaDot, { color: colors.inkSoft }]}>·</Text>
-      <MetaText>{formatDate(publishedAt)}</MetaText>
+      <MetaText>{formatRelativeAge(publishedAt)}</MetaText>
       {!read ? (
         <View style={[styles.unreadDot, { backgroundColor: colors.accent }]} />
       ) : null}
@@ -543,7 +499,7 @@ function ContentLinkRow({
   links,
   onOpenContentLink,
 }: {
-  links: Array<{ label: "Link" | "Comments"; url: string }>;
+  links: { label: "Link" | "Comments"; url: string }[];
   onOpenContentLink: (url: string) => void;
 }) {
   const { colors } = useTheme();
@@ -689,35 +645,6 @@ function useRedditGalleryThumbnail(
   return galleryUrl && resolved?.galleryUrl === galleryUrl
     ? resolved.thumbnailUrl
     : null;
-}
-
-function formatDate(ts: number | null): string {
-  if (!ts) return "";
-  const diff = Date.now() - ts;
-  const hours = Math.floor(diff / 3_600_000);
-  if (hours < 1) return "just now";
-  if (hours < 24) return `${hours}h`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return `${days}d`;
-  return new Date(ts).toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function isRedditCommentsUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    const hostname = parsed.hostname.toLowerCase();
-    if (!(hostname === "reddit.com" || hostname.endsWith(".reddit.com"))) {
-      return false;
-    }
-    return parsed.pathname.toLowerCase().includes("/comments/");
-  } catch {
-    return /(?:https?:\/\/)?(?:(?:www|old)\.)?reddit\.com\/.*\/comments\//i.test(
-      url
-    );
-  }
 }
 
 export const FeedPostCard = React.memo(FeedPostCardComponent, arePropsEqual);

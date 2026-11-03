@@ -48,9 +48,12 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x android/gradlew
 
+      # 64-bit ARM only: every phone from the last several years. The default
+      # also bundles armeabi-v7a and the x86/x86_64 emulator ABIs, which made
+      # the APK ~110MB when a phone only uses ~40MB of it.
       - name: Build release APK
         working-directory: app/android
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=arm64-v8a
 
       - name: Upload APK to release
         uses: softprops/action-gh-release@v2

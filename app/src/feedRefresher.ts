@@ -338,7 +338,7 @@ export async function refreshFeeds(
   // radio / DB on accounts with many subscriptions, and never burst multiple
   // simultaneous requests at a single origin (rate limiters count bursts).
   const hostInFlight = new Map<string, number>();
-  const waiters: Array<() => void> = [];
+  const waiters: (() => void)[] = [];
 
   const hostLimit = (h: string): number =>
     strictHosts.has(h) ? STRICT_HOST_CONCURRENCY : MAX_PER_HOST_CONCURRENCY;

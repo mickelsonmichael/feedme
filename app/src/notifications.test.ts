@@ -4,6 +4,13 @@ import {
 } from "./notifications";
 import * as database from "./database";
 import * as feedRefresher from "./feedRefresher";
+import * as Notifications from "expo-notifications";
+import * as Network from "expo-network";
+import * as TaskManager from "expo-task-manager";
+import * as BackgroundTask from "expo-background-task";
+import * as storage from "./storage";
+
+import type { Feed, FeedItem, Tag } from "./types";
 
 // ── Module mocks ──────────────────────────────────────────────────────────────
 
@@ -89,11 +96,6 @@ const mockSetFeedNotificationCheckpoint =
 const mockRefreshFeeds = feedRefresher.refreshFeeds as jest.MockedFunction<
   typeof feedRefresher.refreshFeeds
 >;
-import * as Notifications from "expo-notifications";
-import * as Network from "expo-network";
-import * as TaskManager from "expo-task-manager";
-import * as BackgroundTask from "expo-background-task";
-import * as storage from "./storage";
 const mockSchedule =
   Notifications.scheduleNotificationAsync as jest.MockedFunction<
     typeof Notifications.scheduleNotificationAsync
@@ -104,8 +106,6 @@ const mockGetNetworkState = Network.getNetworkStateAsync as jest.MockedFunction<
 const mockLoadConfig = storage.loadConfig as jest.MockedFunction<
   typeof storage.loadConfig
 >;
-
-import type { Feed, FeedItem, Tag } from "./types";
 
 function makeFeed(overrides: Partial<Feed> = {}): Feed {
   return {

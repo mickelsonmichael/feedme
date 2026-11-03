@@ -43,13 +43,30 @@ function FeedIconImpl({ feedUrl, size = 16 }: Props) {
     () => (iconUri ? { uri: iconUri } : null),
     [iconUri]
   );
-  // Bumped when this instance learns an outcome, to re-read the sets above.
-  const [, setOutcomeVersion] = React.useState(0);
+  // What this instance has seen its icon do, tagged with the URL it was for.
+  // Held as state rather than re-read from the sets above on a forced
+  // re-render: the render has to depend on it, or the React Compiler (which
+  // treats module-level values as constant) replays the pre-load output.
+  const [learned, setLearned] = React.useState<{
+    uri: string;
+    status: "loaded" | "failed";
+  } | null>(null);
 
-  if (!iconUri || !source || failedIconUris.has(iconUri)) {
+  if (!iconUri || !source) {
     return null;
   }
-  const loaded = loadedIconUris.has(iconUri);
+  const status =
+    learned?.uri === iconUri
+      ? learned.status
+      : failedIconUris.has(iconUri)
+        ? "failed"
+        : loadedIconUris.has(iconUri)
+          ? "loaded"
+          : "pending";
+  if (status === "failed") {
+    return null;
+  }
+  const loaded = status === "loaded";
 
   return (
     <View style={[styles.container, { width: size, height: size }]}>
@@ -71,13 +88,13 @@ function FeedIconImpl({ feedUrl, size = 16 }: Props) {
         cachePolicy="memory-disk"
         transition={loaded ? null : 80}
         onLoad={() => {
-          if (loadedIconUris.has(iconUri)) return;
+          if (loaded) return;
           loadedIconUris.add(iconUri);
-          setOutcomeVersion((v) => v + 1);
+          setLearned({ uri: iconUri, status: "loaded" });
         }}
         onError={() => {
           failedIconUris.add(iconUri);
-          setOutcomeVersion((v) => v + 1);
+          setLearned({ uri: iconUri, status: "failed" });
         }}
       />
     </View>

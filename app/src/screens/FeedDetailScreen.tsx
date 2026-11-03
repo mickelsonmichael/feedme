@@ -847,8 +847,4 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: fontSize.meta,
   },
-  notificationButton: {
-    marginTop: spacing.xl,
-    justifyContent: "center",
-  },
 });

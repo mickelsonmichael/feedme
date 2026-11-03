@@ -51,19 +51,24 @@ export default function NotificationSettingsSection(props: Props) {
   const [tag, setTag] = useState<Tag | null>(null);
   const [permissionGranted, setPermissionGranted] = useState(false);
 
+  // Keyed on the id, not the props object: the parent screens re-render on
+  // every keystroke in their forms, and a fresh props object each time
+  // re-ran this load and flashed the spinner over the switches.
+  const { source } = props;
+  const id = props.source === "feed" ? props.feedId : props.tagId;
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      if (props.source === "feed") {
-        setFeed(await getFeedById(props.feedId));
+      if (source === "feed") {
+        setFeed(await getFeedById(id));
       } else {
-        setTag(await getTagById(props.tagId));
+        setTag(await getTagById(id));
       }
       setPermissionGranted(await getNotificationPermissionGranted());
     } finally {
       setLoading(false);
     }
-  }, [props]);
+  }, [source, id]);
 
   useEffect(() => {
     loadData();

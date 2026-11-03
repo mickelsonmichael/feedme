@@ -25,7 +25,7 @@ import {
   setTagFeeds,
   updateTag,
 } from "../database";
-import { Feed, RootStackParamList, Tag } from "../types";
+import { Feed, RootStackParamList } from "../types";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { getFeedIconUrl } from "../feedIcon";
@@ -511,10 +511,6 @@ const styles = StyleSheet.create({
     fontFamily: fonts.sans,
     fontWeight: "600",
     fontSize: fontSize.meta,
-  },
-  notificationButton: {
-    marginTop: spacing.lg,
-    justifyContent: "center",
   },
   heading: {
     fontFamily: fonts.heading,

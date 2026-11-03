@@ -236,7 +236,6 @@ export type RootStackParamList = {
   AddFeed: { from?: string; customFeedId?: number } | undefined;
   CustomFeedEdit: { customFeedId?: number; from?: string } | undefined;
   CustomFeedManage: { customFeedId: number; from?: string };
-  FeedItems: { feed: Feed };
   FeedItemView: { item: FeedItemViewItem };
   FeedDetail: { feedId: number };
   FeedSearch: { initialUrl?: string } | undefined;

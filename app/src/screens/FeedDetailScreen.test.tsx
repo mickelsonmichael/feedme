@@ -6,7 +6,6 @@ import FeedDetailScreen from "./FeedDetailScreen";
 import { RootStackParamList } from "../types";
 import { getFeeds, getTags, getTagsForFeed } from "../database";
 
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const RN = require("react-native");
 
 jest.mock("../database", () => ({

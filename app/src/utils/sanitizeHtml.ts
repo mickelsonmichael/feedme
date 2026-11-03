@@ -91,7 +91,7 @@ function sanitizeTag(tag: string): string {
   return `<${tagName}${attrsPart}${close}>`;
 }
 
-function escapeHtmlAttribute(value: string): string {
+export function escapeHtmlAttribute(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/"/g, "&quot;")

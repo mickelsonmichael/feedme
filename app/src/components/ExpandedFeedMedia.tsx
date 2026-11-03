@@ -45,6 +45,7 @@ import {
   radii,
   spacing,
 } from "../theme";
+import { escapeHtmlAttribute } from "../utils/sanitizeHtml";
 import { ExpandedFeedImage } from "./ExpandedFeedImage";
 import { FullscreenImageModal } from "./FullscreenImageModal";
 
@@ -956,14 +957,6 @@ function ExpandedFeedMediaImpl({
 // every time the screen above re-renders. See SingleViewPager.
 export const ExpandedFeedMedia = React.memo(ExpandedFeedMediaImpl);
 
-function escapeHtmlAttribute(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/"/g, "&quot;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
-
 function formatRedditLoadError(error: unknown): string {
   if (error instanceof RedditFetchError) {
     return `HTTP ${error.status}`;
@@ -1081,11 +1074,6 @@ const styles = StyleSheet.create({
   mobileGalleryControlRight: {
     right: 0,
   },
-  galleryRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-  },
   galleryImage: {
     flex: 1,
   },
@@ -1100,14 +1088,6 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: radii.pill,
-  },
-  galleryControlButton: {
-    width: 36,
-    height: 36,
-    borderRadius: radii.pill,
-    borderWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
   },
   galleryLoadingState: {
     alignSelf: "center",
@@ -1128,16 +1108,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: spacing.md,
     gap: spacing.xs,
-  },
-  galleryPlaceholderTitle: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.body,
-    fontWeight: "600",
-  },
-  galleryPlaceholderSubtle: {
-    fontFamily: fonts.sans,
-    fontSize: fontSize.meta,
-    textAlign: "center",
   },
   previewWrap: {
     alignSelf: "stretch",

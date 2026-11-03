@@ -223,9 +223,3 @@ export function saveConfig(patch: Partial<WebConfig>): void {
     console.warn("[feedme] Failed to persist config:", e);
   }
 }
-
-// Kept for backwards compatibility — no longer needed since loadConfig() is
-// now fully synchronous on native. Safe to call but does nothing.
-export async function initConfig(): Promise<void> {
-  loadConfig();
-}

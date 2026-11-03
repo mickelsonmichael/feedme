@@ -11,7 +11,7 @@ import { Feather } from "@react-native-vector-icons/feather";
 import { useTheme } from "../context/ThemeContext";
 import { fonts, fontSize, radii, spacing } from "../theme";
 
-export type CompactMenuOption<T extends string> = {
+type CompactMenuOption<T extends string> = {
   value: T;
   label: string;
 };

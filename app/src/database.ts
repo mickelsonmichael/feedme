@@ -62,6 +62,7 @@ let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 // is not reliably available in browsers (especially when the page is not
 // Cross-Origin-Isolated, e.g. on GitHub Pages). On native we always have a
 // real SQLite engine, so no fallback is needed here.
+/** @public Exported for tests. */
 export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
   if (!dbPromise) {
     const attempt = (async () => {
@@ -90,6 +91,7 @@ export async function getDatabase(): Promise<SQLite.SQLiteDatabase> {
 // throwing "duplicate column" back across the native bridge before the first
 // feed could even be read. When adding a migration, append it to
 // runMigrations and bump this; existing installs then re-run the chain once.
+/** @public Exported for tests. */
 export const SCHEMA_VERSION = 1;
 
 async function initializeSchema(
@@ -885,27 +887,6 @@ export async function getAverageViewTimeForFeed(
 
 // ── Items ──────────────────────────────────────────────────────────────────
 
-export async function getAllItems(): Promise<FeedItemWithFeed[]> {
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<FeedItemWithFeed>(
-    `SELECT items.id, items.feed_id, items.title, items.url, items.content,
-            items.image_url, items.published_at, items.read,
-            feeds.title AS feed_title
-     FROM items
-     JOIN feeds ON items.feed_id = feeds.id
-     ORDER BY items.published_at DESC`
-  );
-  return rows;
-}
-
-export async function getItemsForFeed(feedId: number): Promise<FeedItem[]> {
-  const database = await getDatabase();
-  return database.getAllAsync<FeedItem>(
-    "SELECT * FROM items WHERE feed_id = ? ORDER BY published_at DESC",
-    [feedId]
-  );
-}
-
 // The "stacked" order, computed over the whole scope in one query so every
 // page agrees with every other. Only ids and dates go through the ranking
 // passes — carrying post bodies through them made the query several times
@@ -1139,15 +1120,6 @@ export async function markItemUnread(itemId: number): Promise<void> {
   );
 }
 
-export async function getUnreadCount(feedId: number): Promise<number> {
-  const database = await getDatabase();
-  const row = await database.getFirstAsync<{ count: number }>(
-    "SELECT COUNT(*) as count FROM items WHERE feed_id = ? AND read = 0",
-    [feedId]
-  );
-  return row?.count ?? 0;
-}
-
 // ── Saved Posts ────────────────────────────────────────────────────────────
 
 export async function savePost(
@@ -1191,19 +1163,6 @@ export async function getSavedItemIds(): Promise<Set<number>> {
   const database = await getDatabase();
   const rows = await database.getAllAsync<{ item_id: number }>(
     "SELECT item_id FROM saved_posts WHERE item_id IS NOT NULL"
-  );
-  return new Set(rows.map((r) => r.item_id));
-}
-
-export async function getSavedItemIdsForFeed(
-  feedId: number
-): Promise<Set<number>> {
-  const database = await getDatabase();
-  const rows = await database.getAllAsync<{ item_id: number }>(
-    `SELECT sp.item_id FROM saved_posts sp
-     JOIN items ON items.id = sp.item_id
-     WHERE items.feed_id = ? AND sp.item_id IS NOT NULL`,
-    [feedId]
   );
   return new Set(rows.map((r) => r.item_id));
 }
@@ -1424,13 +1383,6 @@ export async function setTagFeeds(
 }
 
 // ── Custom Feeds ──────────────────────────────────────────────────────────
-
-export async function getCustomFeeds(): Promise<CustomFeed[]> {
-  const database = await getDatabase();
-  return database.getAllAsync<CustomFeed>(
-    "SELECT id, name, icon, nsfw FROM custom_feeds ORDER BY name COLLATE NOCASE ASC"
-  );
-}
 
 export async function getCustomFeedsWithMemberCounts(): Promise<
   CustomFeedWithMemberCount[]

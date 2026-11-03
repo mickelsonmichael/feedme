@@ -20,8 +20,11 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { FlashList, FlashListRef, ViewToken } from "@shopify/flash-list";
-import { useFocusEffect, useIsFocused } from "@react-navigation/native";
-import { CompositeScreenProps } from "@react-navigation/native";
+import {
+  useFocusEffect,
+  useIsFocused,
+  CompositeScreenProps,
+} from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import {
@@ -38,17 +41,14 @@ import {
   addToReadLater,
   removeFromReadLater,
   getReadLaterItemIds,
-  addFeed,
-  deleteFeed,
-  getFeedByUrl,
 } from "../database";
 import { Feather } from "@react-native-vector-icons/feather";
 import { refreshFeeds } from "../feedRefresher";
-import type { FeedRefreshProgress } from "../feedRefresher";
 import {
   FeedLayoutMode,
   Feed,
   FeedItemWithFeed,
+  FeedItemViewItem,
   RootStackParamList,
   TabParamList,
 } from "../types";
@@ -62,7 +62,7 @@ import { CompactMenu } from "../components/CompactMenu";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
 import { useHeaderContent } from "../context/HeaderContentContext";
-import { useFeedScroll } from "../context/FeedScrollContext";
+import { useFeedScrollActions } from "../context/FeedScrollContext";
 import {
   useBackgroundSyncActions,
   useBackgroundSyncing,
@@ -97,7 +97,8 @@ import {
   SingleViewPagerHandle,
   SINGLE_VIEW_WINDOW,
 } from "../components/SingleViewPager";
-import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
+import { extractRedditAuthor } from "../redditUtils";
+import { toggleRedditAuthorFollow } from "../redditFollow";
 import {
   prefetchItemMedia,
   SINGLE_VIEW_PREFETCH_AHEAD,
@@ -108,9 +109,20 @@ type Props = CompositeScreenProps<
   NativeStackScreenProps<RootStackParamList>
 >;
 
-const CARD_IMAGE_WIDTH = 100;
 const CARD_LAYOUT_WIDTH = 760;
 const PAGE_SIZE = 50;
+
+const FILTER_OPTIONS: { value: FilterMode; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "unread", label: "Unread" },
+];
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "newest", label: "Newest" },
+  { value: "stacked", label: "Stacked" },
+];
+const SCOPED_SORT_OPTIONS = SORT_OPTIONS.filter(
+  ({ value }) => value === "newest"
+);
 
 // Room the toast leaves for the floating "New posts available" pill below it,
 // so a refresh that ends with failures doesn't cover the button to reload.
@@ -144,7 +156,7 @@ const RESUME_REFRESH_IDLE_MS = 15 * 60 * 1_000;
 export default function FeedListScreen({ navigation, route }: Props) {
   const { colors } = useTheme();
   const { setHeaderContent, clearHeaderContent } = useHeaderContent();
-  const { setIsFeedScrolled } = useFeedScroll();
+  const { setIsFeedScrolled } = useFeedScrollActions();
   const { width: viewportWidth } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
   const isDesktopWeb = isWeb && viewportWidth >= 768;
@@ -368,6 +380,35 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // write lands is marked read over and over.
   const markingReadIdsRef = useRef<Set<number>>(new Set());
 
+  // Under the Unread filter, keeps a post the user is reading on screen after
+  // it's marked read, so the row under their thumb doesn't vanish.
+  const retainUnderUnreadFilter = useCallback((id: number) => {
+    if (filterRef.current !== "unread") return;
+    setRetainedUnreadIds((prev) => new Set(prev).add(id));
+  }, []);
+
+  // Reflects completed mark-as-read writes in local state. markItemRead also
+  // removes the posts from Read Later, so the read-later set follows suit.
+  const applyReadLocally = useCallback((ids: ReadonlySet<number>) => {
+    setItems((prev) =>
+      prev.map((item) => (ids.has(item.id) ? { ...item, read: 1 } : item))
+    );
+    setReadLaterIds((prev) => {
+      if (![...ids].some((id) => prev.has(id))) return prev;
+      const next = new Set(prev);
+      for (const id of ids) next.delete(id);
+      return next;
+    });
+  }, []);
+
+  const markReadAndApply = useCallback(
+    async (id: number) => {
+      await markItemRead(id);
+      applyReadLocally(new Set([id]));
+    },
+    [applyReadLocally]
+  );
+
   // Batched per callback rather than per row: each newly visible post used to
   // cost three state updates and a full copy of `items` — re-running the whole
   // sort/filter/group pipeline — once per row, mid-scroll. Now a scroll that
@@ -408,21 +449,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
             markingReadIdsRef.current.delete(newlyRead[index]);
             if (result.status === "fulfilled") marked.add(newlyRead[index]);
           });
-          if (marked.size === 0) return;
-          setItems((prev) =>
-            prev.map((i) => (marked.has(i.id) ? { ...i, read: 1 } : i))
-          );
-          // markItemRead auto-removes from Read Later list.
-          setReadLaterIds((prev) => {
-            if (![...marked].some((id) => prev.has(id))) return prev;
-            const next = new Set(prev);
-            for (const id of marked) next.delete(id);
-            return next;
-          });
+          if (marked.size > 0) applyReadLocally(marked);
         }
       );
     },
-    []
+    [applyReadLocally]
   );
 
   const scrollCurrentViewToTop = useCallback(() => {
@@ -511,8 +542,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
       // explicitly asked for: without it, pulling to refresh shortly after a
       // sync skips every feed still in backoff and returns instantly, so
       // nothing fetches and no banner is ever seen — the refresh silently does
-      // nothing. Matches FeedItemsScreen's explicit-refresh behaviour. Host
-      // 429 rate limits are checked separately in refreshFeeds and are NOT
+      // nothing. Host 429 rate limits are checked separately in refreshFeeds and are NOT
       // bypassed by this.
       forceRemote = false
     ) => {
@@ -790,7 +820,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
         }
       }
     },
-    [selectedFeedId, selectedTagId, selectedCustomFeedId]
+    [
+      selectedFeedId,
+      selectedTagId,
+      selectedCustomFeedId,
+      setBackgroundRefreshing,
+      setRefreshProgress,
+    ]
   );
 
   const handleLoadMore = useCallback(async () => {
@@ -1012,19 +1048,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
   // re-renders constantly (refresh progress alone ticks once per feed). The
   // cache is rebuilt whenever the feed metadata it folds in changes, so
   // there's nothing stale to invalidate.
-  const feedItemViewItemCache = useMemo(
-    () =>
-      new WeakMap<
-        FeedItemWithFeed,
-        RootStackParamList["FeedItemView"]["item"]
-      >(),
-    [customFeedNsfw, feedDetailsById]
-  );
-  const buildFeedItemViewItem = useCallback(
-    (item: FeedItemWithFeed): RootStackParamList["FeedItemView"]["item"] => {
-      const cached = feedItemViewItemCache.get(item);
+  const buildFeedItemViewItem = useMemo(() => {
+    const cache = new WeakMap<FeedItemWithFeed, FeedItemViewItem>();
+    return (item: FeedItemWithFeed): FeedItemViewItem => {
+      const cached = cache.get(item);
       if (cached) return cached;
 
+      const sourceFeed = feedDetailsById.get(item.feed_id);
       const built = {
         itemId: item.id,
         title: item.title,
@@ -1033,16 +1063,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
         imageUrl: item.image_url,
         publishedAt: item.published_at,
         feedTitle: item.feed_title,
-        feedUrl: feedDetailsById.get(item.feed_id)?.url ?? null,
+        feedUrl: sourceFeed?.url ?? null,
         read: item.read,
-        useProxy: feedDetailsById.get(item.feed_id)?.use_proxy === 1,
-        nsfw: feedDetailsById.get(item.feed_id)?.nsfw === 1 || customFeedNsfw,
+        useProxy: sourceFeed?.use_proxy === 1,
+        nsfw: sourceFeed?.nsfw === 1 || customFeedNsfw,
       };
-      feedItemViewItemCache.set(item, built);
+      cache.set(item, built);
       return built;
-    },
-    [customFeedNsfw, feedDetailsById, feedItemViewItemCache]
-  );
+    };
+  }, [customFeedNsfw, feedDetailsById]);
 
   // Ref mirrors of frequently-changing state, kept fresh on every render so
   // that the row-action callbacks below can stay referentially stable
@@ -1084,16 +1113,14 @@ export default function FeedListScreen({ navigation, route }: Props) {
       const item = itemsByIdRef.current.get(id);
       if (!item) return;
 
-      if (filter === "unread" && !item.read) {
-        setRetainedUnreadIds((prev) => new Set(prev).add(item.id));
-      }
+      if (!item.read) retainUnderUnreadFilter(item.id);
 
       markActivity();
       navigation.navigate("FeedItemView", {
         item: buildFeedItemViewItem(item),
       });
     },
-    [buildFeedItemViewItem, filter, markActivity, navigation]
+    [buildFeedItemViewItem, markActivity, navigation, retainUnderUnreadFilter]
   );
 
   const toggleSave = useCallback(async (id: number) => {
@@ -1113,7 +1140,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         await savePost(item, item.feed_title);
         setSavedIds((prev) => new Set(prev).add(id));
       }
-    } catch (err) {
+    } catch {
       Alert.alert("Error", "Could not update saved status.");
     }
   }, []);
@@ -1145,25 +1172,9 @@ export default function FeedListScreen({ navigation, route }: Props) {
     if (!item) return;
     const authorName = extractRedditAuthor(item.content);
     if (!authorName) return;
-    const feedUrl = buildRedditFeedUrl(`u/${authorName}`);
     try {
-      const existingFeed = await getFeedByUrl(feedUrl);
-      if (existingFeed) {
-        await deleteFeed(existingFeed.id);
-      } else {
-        const originFeed = feedDetailsByIdRef.current.get(item.feed_id);
-        await addFeed({
-          title: `Reddit - u/${authorName}`,
-          url: feedUrl,
-          description: null,
-          use_proxy: 0,
-          nsfw: originFeed?.nsfw === 1 ? 1 : 0,
-          show_only_in_tag: 0,
-          show_only_in_custom_feed: 0,
-          collapse_repeated: 0,
-          reddit_include_comments: 0,
-        });
-      }
+      const originFeed = feedDetailsByIdRef.current.get(item.feed_id);
+      await toggleRedditAuthorFollow(authorName, originFeed?.nsfw === 1);
       const updatedFeeds = await getFeeds();
       setFeeds(updatedFeeds);
     } catch {
@@ -1179,27 +1190,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
       const isExpanding = !expandedIdsRef.current.has(id);
       setExpandedIds((prev) => toggleExpandedId(prev, id));
       if (isExpanding && !item.read) {
-        if (filter === "unread") {
-          setRetainedUnreadIds((prev) => new Set(prev).add(id));
-        }
-
+        retainUnderUnreadFilter(id);
         try {
-          await markItemRead(id);
-          setItems((prev) =>
-            prev.map((i) => (i.id === id ? { ...i, read: 1 } : i))
-          );
-          setReadLaterIds((prev) => {
-            if (!prev.has(id)) return prev;
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-          });
+          await markReadAndApply(id);
         } catch {
           Alert.alert("Error", "Could not update read status.");
         }
       }
     },
-    [filter]
+    [markReadAndApply, retainUnderUnreadFilter]
   );
 
   const toggleRead = useCallback(
@@ -1215,35 +1214,17 @@ export default function FeedListScreen({ navigation, route }: Props) {
               current.id === id ? { ...current, read: 0 } : current
             )
           );
-          setRetainedUnreadIds((prev) => {
-            const next = new Set(prev);
-            next.add(id);
-            return next;
-          });
+          setRetainedUnreadIds((prev) => new Set(prev).add(id));
           return;
         }
 
-        if (filter === "unread") {
-          setRetainedUnreadIds((prev) => new Set(prev).add(id));
-        }
-
-        await markItemRead(id);
-        setItems((prev) =>
-          prev.map((current) =>
-            current.id === id ? { ...current, read: 1 } : current
-          )
-        );
-        setReadLaterIds((prev) => {
-          if (!prev.has(id)) return prev;
-          const next = new Set(prev);
-          next.delete(id);
-          return next;
-        });
+        retainUnderUnreadFilter(id);
+        await markReadAndApply(id);
       } catch {
         Alert.alert("Error", "Could not update read status.");
       }
     },
-    [filter]
+    [markReadAndApply, retainUnderUnreadFilter]
   );
 
   const handleRevealCardMedia = useCallback((id: number) => {
@@ -1301,29 +1282,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
       openUrlWithPreference({ url: item.url, navigation });
 
       if (!item.read) {
-        if (filter === "unread") {
-          setRetainedUnreadIds((prev) => new Set(prev).add(id));
-        }
-
+        retainUnderUnreadFilter(id);
         try {
-          await markItemRead(id);
-          setItems((prev) =>
-            prev.map((current) =>
-              current.id === id ? { ...current, read: 1 } : current
-            )
-          );
-          setReadLaterIds((prev) => {
-            if (!prev.has(id)) return prev;
-            const next = new Set(prev);
-            next.delete(id);
-            return next;
-          });
+          await markReadAndApply(id);
         } catch {
           // Link was opened; silently ignore read-status update failure.
         }
       }
     },
-    [filter, markActivity, navigation]
+    [markActivity, markReadAndApply, navigation, retainUnderUnreadFilter]
   );
 
   useEffect(() => {
@@ -1649,28 +1616,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
       return;
     }
 
-    if (filter === "unread") {
-      setRetainedUnreadIds((prev) => new Set(prev).add(currentSingleItem.id));
-    }
-
-    markItemRead(currentSingleItem.id)
-      .then(() => {
-        setItems((prev) =>
-          prev.map((item) =>
-            item.id === currentSingleItem.id ? { ...item, read: 1 } : item
-          )
-        );
-        setReadLaterIds((prev) => {
-          if (!prev.has(currentSingleItem.id)) return prev;
-          const next = new Set(prev);
-          next.delete(currentSingleItem.id);
-          return next;
-        });
-      })
-      .catch(() => {
-        Alert.alert("Error", "Could not update read status.");
-      });
-  }, [currentSingleItem, feedLayout, filter]);
+    retainUnderUnreadFilter(currentSingleItem.id);
+    markReadAndApply(currentSingleItem.id).catch(() => {
+      Alert.alert("Error", "Could not update read status.");
+    });
+  }, [
+    currentSingleItem,
+    feedLayout,
+    markReadAndApply,
+    retainUnderUnreadFilter,
+  ]);
 
   useEffect(() => {
     if (
@@ -1712,7 +1667,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
     setIsFeedScrolled,
     singleAwaitingNextPost,
     singleSafeIndex,
-    singleItems.length,
+    singleItems,
   ]);
 
   // Post text/HTML is already local (read from SQLite up front), so the only
@@ -1987,6 +1942,31 @@ export default function FeedListScreen({ navigation, route }: Props) {
     );
   }
 
+  // Shared by the list layouts' toolbar and the single-post reader's filter
+  // bar. A single feed, tag or custom feed only offers the Newest sort.
+  const filterSortMenus = (
+    <>
+      <CompactMenu<FilterMode>
+        value={filter === "starred" ? "all" : filter}
+        options={FILTER_OPTIONS}
+        onChange={setFilter}
+        accessibilityLabel="Filter posts"
+      />
+      <CompactMenu<SortMode>
+        value={sort}
+        options={
+          selectedFeedId === undefined &&
+          selectedTagId === undefined &&
+          selectedCustomFeedId === undefined
+            ? SORT_OPTIONS
+            : SCOPED_SORT_OPTIONS
+        }
+        onChange={setSort}
+        accessibilityLabel="Sort posts"
+      />
+    </>
+  );
+
   // What an empty feed says, for both the list layouts (inside the list) and
   // the single-post reader.
   const emptyState = (
@@ -2050,37 +2030,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         <View
           style={[styles.filterRow, { borderBottomColor: colors.inkFaint }]}
         >
-          <View style={styles.filterControls}>
-            <CompactMenu<FilterMode>
-              value={filter === "starred" ? "all" : filter}
-              options={[
-                { value: "all", label: "All" },
-                { value: "unread", label: "Unread" },
-              ]}
-              onChange={setFilter}
-              accessibilityLabel="Filter posts"
-            />
-            {selectedFeedId === undefined &&
-            selectedTagId === undefined &&
-            selectedCustomFeedId === undefined ? (
-              <CompactMenu<SortMode>
-                value={sort}
-                options={[
-                  { value: "newest", label: "Newest" },
-                  { value: "stacked", label: "Stacked" },
-                ]}
-                onChange={setSort}
-                accessibilityLabel="Sort posts"
-              />
-            ) : (
-              <CompactMenu<SortMode>
-                value={sort}
-                options={[{ value: "newest", label: "Newest" }]}
-                onChange={setSort}
-                accessibilityLabel="Sort posts"
-              />
-            )}
-          </View>
+          <View style={styles.filterControls}>{filterSortMenus}</View>
           {!isWeb ? (
             <TouchableOpacity
               onPress={() => setMobileSearchOpen((open) => !open)}
@@ -2131,14 +2081,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         <ScrollView
           style={styles.fill}
           contentContainerStyle={styles.center}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={handleRefreshAll}
-              colors={[colors.accent]}
-              tintColor={colors.accent}
-            />
-          }
+          refreshControl={singleRefreshControl}
         >
           {emptyState}
         </ScrollView>
@@ -2242,35 +2185,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                 ]}
               >
                 <View style={styles.singleFilterBarControls}>
-                  <CompactMenu<FilterMode>
-                    value={filter === "starred" ? "all" : filter}
-                    options={[
-                      { value: "all", label: "All" },
-                      { value: "unread", label: "Unread" },
-                    ]}
-                    onChange={setFilter}
-                    accessibilityLabel="Filter posts"
-                  />
-                  {selectedFeedId === undefined &&
-                  selectedTagId === undefined &&
-                  selectedCustomFeedId === undefined ? (
-                    <CompactMenu<SortMode>
-                      value={sort}
-                      options={[
-                        { value: "newest", label: "Newest" },
-                        { value: "stacked", label: "Stacked" },
-                      ]}
-                      onChange={setSort}
-                      accessibilityLabel="Sort posts"
-                    />
-                  ) : (
-                    <CompactMenu<SortMode>
-                      value={sort}
-                      options={[{ value: "newest", label: "Newest" }]}
-                      onChange={setSort}
-                      accessibilityLabel="Sort posts"
-                    />
-                  )}
+                  {filterSortMenus}
                 </View>
                 <View
                   style={[
@@ -2460,31 +2375,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
                   <TouchableOpacity
                     style={styles.singleMoreMenuItem}
                     onPress={async () => {
-                      const feedUrl = buildRedditFeedUrl(
-                        `u/${singleItemRedditAuthor}`
-                      );
-                      try {
-                        const existingFeed = await getFeedByUrl(feedUrl);
-                        if (existingFeed) {
-                          await deleteFeed(existingFeed.id);
-                        } else {
-                          await addFeed({
-                            title: `Reddit - u/${singleItemRedditAuthor}`,
-                            url: feedUrl,
-                            description: null,
-                            use_proxy: 0,
-                            nsfw: 0,
-                            show_only_in_tag: 0,
-                            show_only_in_custom_feed: 0,
-                            collapse_repeated: 0,
-                            reddit_include_comments: 0,
-                          });
-                        }
-                        const updatedFeeds = await getFeeds();
-                        setFeeds(updatedFeeds);
-                      } catch {
-                        Alert.alert("Error", "Could not update subscription.");
-                      }
+                      await handleFollowAuthor(currentSingleItem.id);
                       setShowSingleMoreMenu(false);
                     }}
                     activeOpacity={0.7}
@@ -2559,15 +2450,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
           ref={flatListRef}
           data={displayItems}
           keyExtractor={keyExtractor}
-          getItemType={(item) =>
-            isGroupDivider(item)
-              ? "divider"
-              : isCollapsedRunRow(item)
-                ? "collapsed-run"
-                : isCollapsedItemRow(item)
-                  ? "collapsed"
-                  : "item"
-          }
+          getItemType={getItemType}
           onRefresh={handleRefreshAll}
           refreshing={refreshing}
           viewabilityConfig={viewabilityConfig}
@@ -2633,6 +2516,13 @@ const keyExtractor = (item: CollapsedFeedListRow) => {
   if (isCollapsedRunRow(item)) return `collapsed-run-${item.runKey}`;
   if (isCollapsedItemRow(item)) return `collapsed-${item.item.id}`;
   return String(item.id);
+};
+
+const getItemType = (item: CollapsedFeedListRow) => {
+  if (isGroupDivider(item)) return "divider";
+  if (isCollapsedRunRow(item)) return "collapsed-run";
+  if (isCollapsedItemRow(item)) return "collapsed";
+  return "item";
 };
 
 // The full-screen loader is the one place on this screen that shows per-feed
@@ -2820,103 +2710,6 @@ const styles = StyleSheet.create({
   },
   cardList: {
     alignItems: "center",
-  },
-  card: {
-    borderWidth: 1,
-    borderRadius: radii.md,
-    overflow: "hidden",
-  },
-  cardLayout: {
-    maxWidth: CARD_LAYOUT_WIDTH,
-  },
-  cardLayoutContent: {
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  cardRow: {
-    flexDirection: "row",
-  },
-  cardImage: {
-    width: CARD_IMAGE_WIDTH,
-    alignSelf: "stretch",
-  },
-  cardContent: {
-    flex: 1,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  cardMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.xs,
-  },
-  sourceText: {
-    fontSize: fontSize.meta,
-    fontFamily: fonts.sans,
-    fontWeight: "600",
-  },
-  metaDot: {
-    fontSize: fontSize.meta,
-    marginHorizontal: 2,
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginLeft: spacing.sm,
-  },
-  title: {
-    fontSize: fontSize.title,
-    fontWeight: "700",
-    fontFamily: fonts.heading,
-    lineHeight: 20,
-  },
-  summary: {
-    fontSize: fontSize.body,
-    marginTop: spacing.xs,
-    lineHeight: 18,
-  },
-  actionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.md,
-    marginTop: spacing.xs,
-    paddingTop: spacing.sm,
-    borderTopWidth: 1,
-  },
-  actionMeta: {
-    fontSize: fontSize.meta,
-    fontFamily: fonts.sans,
-  },
-  expandPanel: {
-    padding: spacing.md,
-    gap: spacing.md,
-    borderTopWidth: 1,
-  },
-  expandContent: {
-    fontSize: fontSize.body,
-    lineHeight: 20,
-    fontFamily: fonts.body,
-  },
-  contentLinkRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing.sm,
-    flexWrap: "wrap",
-  },
-  contentLinkBtn: {
-    borderWidth: 1,
-    borderRadius: radii.pill,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  contentLinkText: {
-    fontFamily: fonts.sans,
-    fontWeight: "600",
-    fontSize: fontSize.meta,
   },
   separator: { height: spacing.sm },
   loadMoreFooter: { paddingVertical: spacing.lg, alignItems: "center" },

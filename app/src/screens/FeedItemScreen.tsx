@@ -20,7 +20,6 @@ import {
   removeFromReadLater,
   savePost,
   unsavePost,
-  addFeed,
   deleteFeed,
   getFeedByUrl,
   getFeedItemWithFeedById,
@@ -31,13 +30,10 @@ import { FeedItem, RootStackParamList } from "../types";
 import { parseContentAndLinks } from "../utils/contentActions";
 import { openUrlWithPreference } from "../linkOpening";
 import { loadConfig } from "../storage";
-import {
-  FeedItemContent,
-  formatDate,
-  isRedditCommentsUrl,
-} from "../components/FeedItemContent";
+import { FeedItemContent, formatDate } from "../components/FeedItemContent";
 import { FeedIcon } from "../components/FeedIcon";
-import { extractRedditAuthor, buildRedditFeedUrl } from "../redditUtils";
+import { extractRedditAuthor, isRedditCommentsUrl } from "../redditUtils";
+import { followRedditAuthor, redditAuthorFeedUrl } from "../redditFollow";
 
 type Props = NativeStackScreenProps<RootStackParamList, "FeedItemView">;
 
@@ -72,17 +68,14 @@ export default function FeedItemScreen({ route, navigation }: Props) {
     () => extractRedditAuthor(item.content),
     [item.content]
   );
-  const redditAuthorFeedUrl = redditAuthor
-    ? buildRedditFeedUrl(`u/${redditAuthor}`)
-    : null;
   const [authorFeedId, setAuthorFeedId] = React.useState<number | null>(null);
 
   React.useEffect(() => {
-    if (!redditAuthorFeedUrl) return;
-    getFeedByUrl(redditAuthorFeedUrl)
+    if (!redditAuthor) return;
+    getFeedByUrl(redditAuthorFeedUrl(redditAuthor))
       .then((feed) => setAuthorFeedId(feed?.id ?? null))
       .catch(() => {});
-  }, [redditAuthorFeedUrl]);
+  }, [redditAuthor]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: item.feedTitle || "post" });
@@ -399,24 +392,14 @@ export default function FeedItemScreen({ route, navigation }: Props) {
               <TouchableOpacity
                 style={styles.moreMenuItem}
                 onPress={async () => {
-                  if (!redditAuthorFeedUrl) return;
                   try {
                     if (authorFeedId !== null) {
                       await deleteFeed(authorFeedId);
                       setAuthorFeedId(null);
                     } else {
-                      const newFeedId = await addFeed({
-                        title: `Reddit - u/${redditAuthor}`,
-                        url: redditAuthorFeedUrl,
-                        description: null,
-                        use_proxy: 0,
-                        nsfw: item.nsfw ? 1 : 0,
-                        show_only_in_tag: 0,
-                        show_only_in_custom_feed: 0,
-                        collapse_repeated: 0,
-                        reddit_include_comments: 0,
-                      });
-                      setAuthorFeedId(newFeedId);
+                      setAuthorFeedId(
+                        await followRedditAuthor(redditAuthor, !!item.nsfw)
+                      );
                     }
                   } catch {
                     Alert.alert("Error", "Could not update subscription.");

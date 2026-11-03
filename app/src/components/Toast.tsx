@@ -2,7 +2,7 @@
 // could not be refreshed") that shouldn't interrupt the user the way a modal
 // Alert does. Built on the core Animated API to match LoadingState.tsx.
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useState } from "react";
 import { Animated, Easing, Platform, StyleSheet, Text } from "react-native";
 import { fonts, fontSize, radii, spacing } from "../theme";
 import { useTheme } from "../context/ThemeContext";
@@ -29,7 +29,7 @@ export function Toast({
   bottom?: number;
 }) {
   const { colors } = useTheme();
-  const opacity = useRef(new Animated.Value(0)).current;
+  const [opacity] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     if (!message) return;

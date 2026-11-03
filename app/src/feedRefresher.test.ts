@@ -646,7 +646,7 @@ describe("refreshFeeds", () => {
         etag: null,
         lastModified: null,
       });
-    const failures: Array<{ id: number; message: string }> = [];
+    const failures: { id: number; message: string }[] = [];
 
     // Act
     const errors = await refreshFeeds(feeds, {

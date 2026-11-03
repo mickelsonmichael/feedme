@@ -20,7 +20,8 @@
       "favicon": "./assets/favicon.png"
     },
     "experiments": {
-      "baseUrl": "/feedme"
+      "baseUrl": "/feedme",
+      "reactCompiler": true
     },
     "plugins": [
       "expo-web-browser",

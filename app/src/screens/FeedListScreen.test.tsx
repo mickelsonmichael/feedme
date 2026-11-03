@@ -1,13 +1,11 @@
 import React from "react";
 import {
   Alert,
-  Animated,
   AppState,
   Platform,
   ScrollView,
   Text,
   TextInput,
-  TouchableOpacity,
 } from "react-native";
 import type { AppStateStatus } from "react-native";
 import {
@@ -25,7 +23,7 @@ import renderer, { act } from "react-test-renderer";
 import FeedListScreen from "../screens/FeedListScreen";
 import { SingleViewPager } from "../components/SingleViewPager";
 import { RootStackParamList, TabParamList } from "../types";
-import { loadConfig, saveConfig } from "../storage";
+import { loadConfig } from "../storage";
 import { HeaderContentProvider } from "../context/HeaderContentContext";
 import { BackgroundSyncProvider } from "../context/BackgroundSyncContext";
 import { BackgroundSyncBannerHost } from "../components/BackgroundSyncBannerHost";
@@ -102,8 +100,6 @@ jest.mock("../components/ui", () => {
   return {
     MetaText: ({ children }: { children: React.ReactNode }) =>
       React.createElement(Text, null, children),
-    Pill: ({ label }: { label: string }) =>
-      React.createElement(Text, null, label),
   };
 });
 
@@ -1281,7 +1277,7 @@ describe("FeedListScreen", () => {
     // this test explicitly releases it, simulating a background DB write
     // that lands after further navigation (see database.ts's write-lock
     // queue, which can back writes up under rapid navigation).
-    const pendingMarkReads: Array<{ id: number; resolve: () => void }> = [];
+    const pendingMarkReads: { id: number; resolve: () => void }[] = [];
     (markItemRead as jest.Mock).mockImplementation(
       (id: number) =>
         new Promise<void>((resolve) => {
@@ -3804,7 +3800,7 @@ describe("FeedListScreen", () => {
       (markItemRead as jest.Mock).mockResolvedValue(undefined);
       (refreshFeeds as jest.Mock).mockResolvedValue(0);
 
-      const appStateHandlers: Array<(state: AppStateStatus) => void> = [];
+      const appStateHandlers: ((state: AppStateStatus) => void)[] = [];
       const addEventListenerSpy = jest
         .spyOn(AppState, "addEventListener")
         .mockImplementation((_event, handler) => {
@@ -4016,7 +4012,7 @@ describe("FeedListScreen", () => {
       (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
       (refreshFeeds as jest.Mock).mockResolvedValue(0);
 
-      const appStateHandlers: Array<(state: AppStateStatus) => void> = [];
+      const appStateHandlers: ((state: AppStateStatus) => void)[] = [];
       const addEventListenerSpy = jest
         .spyOn(AppState, "addEventListener")
         .mockImplementation((_event, handler) => {
@@ -4115,7 +4111,7 @@ describe("FeedListScreen", () => {
       (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
       (refreshFeeds as jest.Mock).mockResolvedValue(0);
 
-      const appStateHandlers: Array<(state: AppStateStatus) => void> = [];
+      const appStateHandlers: ((state: AppStateStatus) => void)[] = [];
       const addEventListenerSpy = jest
         .spyOn(AppState, "addEventListener")
         .mockImplementation((_event, handler) => {
@@ -4191,7 +4187,7 @@ describe("FeedListScreen", () => {
       (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
       (refreshFeeds as jest.Mock).mockResolvedValue(0);
 
-      const appStateHandlers: Array<(state: AppStateStatus) => void> = [];
+      const appStateHandlers: ((state: AppStateStatus) => void)[] = [];
       const addEventListenerSpy = jest
         .spyOn(AppState, "addEventListener")
         .mockImplementation((_event, handler) => {
@@ -4546,7 +4542,7 @@ describe("FeedListScreen mark as read on scroll", () => {
   // viewability tracker does after a scroll.
   async function reportAllRowsVisible(tree: renderer.ReactTestRenderer) {
     const list = tree.root.findByType(FlashList);
-    const rows = list.props.data as Array<{ id: number }>;
+    const rows = list.props.data as { id: number }[];
     await act(async () => {
       list.props.onViewableItemsChanged({
         viewableItems: rows.map((item, index) => ({
@@ -4575,9 +4571,9 @@ describe("FeedListScreen mark as read on scroll", () => {
     expect((markItemRead as jest.Mock).mock.calls.map(([id]) => id)).toEqual([
       1, 2, 3,
     ]);
-    const rows = tree.root.findByType(FlashList).props.data as Array<{
+    const rows = tree.root.findByType(FlashList).props.data as {
       read: number;
-    }>;
+    }[];
     expect(rows.map((row) => row.read)).toEqual([1, 1, 1]);
   });
 
@@ -4606,10 +4602,10 @@ describe("FeedListScreen mark as read on scroll", () => {
     await reportAllRowsVisible(tree);
 
     // Assert
-    const rows = tree.root.findByType(FlashList).props.data as Array<{
+    const rows = tree.root.findByType(FlashList).props.data as {
       id: number;
       read: number;
-    }>;
+    }[];
     expect(rows.find((row) => row.id === 2)?.read).toBe(0);
     expect(rows.find((row) => row.id === 1)?.read).toBe(1);
   });

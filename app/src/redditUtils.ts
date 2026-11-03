@@ -67,6 +67,22 @@ export function extractRedditAuthor(content: string | null): string | null {
   return match ? match[1] : null;
 }
 
+/** Whether `url` is a Reddit post's comments page. */
+export function isRedditCommentsUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    if (!(hostname === "reddit.com" || hostname.endsWith(".reddit.com"))) {
+      return false;
+    }
+    return parsed.pathname.toLowerCase().includes("/comments/");
+  } catch {
+    return /(?:https?:\/\/)?(?:(?:www|old)\.)?reddit\.com\/.*\/comments\//i.test(
+      url
+    );
+  }
+}
+
 /**
  * Constructs the RSS feed URL for a Reddit subreddit or user.
  * Subreddit is assumed when no prefix is provided.

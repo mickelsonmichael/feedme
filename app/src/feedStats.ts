@@ -45,7 +45,7 @@ export type StabilityStat = {
   label: string;
 };
 
-export type LastFetchStatus = {
+type LastFetchStatus = {
   /** True when the most recent attempt succeeded and no error is currently
    *  stored. False when an error string is present. `null` when the feed
    *  has never been fetched. */
@@ -219,7 +219,7 @@ export function computeStability(feed: Feed): StabilityStat {
   };
 }
 
-export function computeLastFetchStatus(feed: Feed): LastFetchStatus {
+function computeLastFetchStatus(feed: Feed): LastFetchStatus {
   if (feed.last_fetched == null) {
     return { ok: null, label: "never fetched", error: null };
   }
@@ -237,7 +237,7 @@ export function computeLastFetchStatus(feed: Feed): LastFetchStatus {
   };
 }
 
-export function computeNewestPostAge(
+function computeNewestPostAge(
   publishedAts: number[],
   now: number
 ): { ms: number | null; label: string | null } {
@@ -394,7 +394,7 @@ export function computeFeedStats(
 /** Parse the JSON stored in `feed.rate_limit_info` and return a short
  *  human-readable string for display in the stats panel, or `null` when
  *  no rate-limit data is available. */
-export function parseRateLimitInfo(
+function parseRateLimitInfo(
   raw: string | null,
   now: number = Date.now()
 ): string | null {

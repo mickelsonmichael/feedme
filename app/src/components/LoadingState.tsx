@@ -3,7 +3,7 @@
 // react-native Animated API (no extra dependencies) so they work on both
 // native and web.
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Animated,
   Easing,
@@ -100,7 +100,7 @@ const DOT_PHASES = Array.from(
  */
 export function ChompingLoader({ size = BASE_HEAD }: { size?: number }) {
   const { colors } = useTheme();
-  const clock = useRef(new Animated.Value(0)).current;
+  const [clock] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
     const animation = Animated.loop(
@@ -240,8 +240,8 @@ export function FunFeedLoader({
   progress?: FeedRefreshProgress | null;
 }) {
   const { colors } = useTheme();
-  const bounce = useRef(new Animated.Value(0)).current;
-  const messageOpacity = useRef(new Animated.Value(1)).current;
+  const [bounce] = useState(() => new Animated.Value(0));
+  const [messageOpacity] = useState(() => new Animated.Value(1));
   // Random starting message so repeated loads don't always open on the same
   // line — tiny thing, but it keeps the loader from feeling canned.
   const [messageIndex, setMessageIndex] = useState(() =>
@@ -392,13 +392,13 @@ export function BackgroundSyncBanner({
 }
 
 /** A slim, animated determinate progress bar driven by refresh progress. */
-export function RefreshProgressBar({
+function RefreshProgressBar({
   progress,
 }: {
   progress: FeedRefreshProgress | null;
 }) {
   const { colors } = useTheme();
-  const fill = useRef(new Animated.Value(0)).current;
+  const [fill] = useState(() => new Animated.Value(0));
   const fraction =
     progress && progress.total > 0 ? progress.completed / progress.total : 0;
 
@@ -477,7 +477,7 @@ function SkeletonRow({ pulse }: { pulse: Animated.Value }) {
 export function SkeletonFeedList({ rows = 5 }: { rows?: number }) {
   // One shared animated value drives every row so the whole list breathes in
   // sync with a single JS-side loop.
-  const pulse = useRef(new Animated.Value(0.45)).current;
+  const [pulse] = useState(() => new Animated.Value(0.45));
 
   useEffect(() => {
     const animation = Animated.loop(

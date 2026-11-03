@@ -63,7 +63,7 @@ export function stackDaySalt(dayNumber: number): number {
  * bit. Reshuffles once per local calendar day — never mid-session, never on
  * refresh.
  */
-export function stackHash(id: number, daySalt: number): number {
+function stackHash(id: number, daySalt: number): number {
   let x = ((Math.imul(id, HASH_ID_MULTIPLIER) >>> 0) + daySalt) % 0x100000000;
   x = Math.imul((x >>> 16) ^ x, HASH_MIX) >>> 0;
   x = Math.imul((x >>> 16) ^ x, HASH_MIX) >>> 0;

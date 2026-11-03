@@ -5,7 +5,7 @@ import Animated, { getAnimatedStyle } from "react-native-reanimated";
 // build Jest actually runs takes the component.
 const readAnimatedStyle = getAnimatedStyle as unknown as (component: {
   props: Record<string, unknown>;
-}) => { transform?: Array<{ translateX?: number }> };
+}) => { transform?: { translateX?: number }[] };
 
 /**
  * The live translateX of the Reanimated view under `root`. Reanimated puts the

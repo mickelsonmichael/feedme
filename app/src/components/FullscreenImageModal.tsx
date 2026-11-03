@@ -122,14 +122,13 @@ export function FullscreenImageModal({
   // Keyboard dismiss on web
   useEffect(() => {
     if (!visible || Platform.OS !== "web") return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const handler = (e: any) => {
       if (e.key === "Escape") handleClose();
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (globalThis as any).addEventListener?.("keydown", handler);
     return () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (globalThis as any).removeEventListener?.("keydown", handler);
     };
   }, [visible, handleClose]);
@@ -137,7 +136,7 @@ export function FullscreenImageModal({
   // Ctrl+wheel zoom for web desktop
   useEffect(() => {
     if (!visible || Platform.OS !== "web") return;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     const handler = (e: any) => {
       if (!e.ctrlKey) return;
       e.preventDefault();
@@ -148,12 +147,11 @@ export function FullscreenImageModal({
         translateY.value = 0;
       }
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     (globalThis as any).addEventListener?.("wheel", handler, {
       passive: false,
     });
     return () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (globalThis as any).removeEventListener?.("wheel", handler);
     };
   }, [visible, scale, translateX, translateY]);

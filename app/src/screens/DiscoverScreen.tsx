@@ -4,7 +4,7 @@
 // feeds on a given site URL.
 // Below: a curated list of suggested feeds the user can add with a single tap.
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Alert,
   ScrollView,
@@ -15,8 +15,7 @@ import {
 } from "react-native";
 import { Image } from "expo-image";
 import { Feather } from "@react-native-vector-icons/feather";
-import { useFocusEffect } from "@react-navigation/native";
-import { CompositeScreenProps } from "@react-navigation/native";
+import { useFocusEffect, CompositeScreenProps } from "@react-navigation/native";
 import { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { addFeed, getFeeds } from "../database";
@@ -59,10 +58,6 @@ export default function DiscoverScreen({ navigation }: Props) {
       loadSubscribed();
     }, [loadSubscribed])
   );
-
-  useEffect(() => {
-    loadSubscribed();
-  }, [loadSubscribed]);
 
   const feeds = useMemo(() => curatedFeeds as CuratedFeed[], []);
 

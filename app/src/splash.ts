@@ -8,6 +8,7 @@ import * as SplashScreen from "expo-splash-screen";
 // The hold is capped: if the Feed screen never reports in (a crash caught by
 // the error boundary, a launch that lands somewhere else), the splash still
 // lifts on its own rather than leaving the app looking frozen.
+/** @public Exported for tests. */
 export const SPLASH_MAX_HOLD_MS = 2_500;
 
 let released = false;

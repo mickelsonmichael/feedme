@@ -139,4 +139,41 @@ describe("NotificationSettingsSection", () => {
       frequency: "daily",
     });
   });
+
+  it("does not reload when the parent re-renders with the same feed", async () => {
+    // Arrange
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <NotificationSettingsSection source="feed" feedId={1} />
+      );
+    });
+    expect(getFeedById).toHaveBeenCalledTimes(1);
+
+    // Act: a parent re-render hands over an equal but new props object.
+    await act(async () => {
+      tree!.update(<NotificationSettingsSection source="feed" feedId={1} />);
+    });
+
+    // Assert
+    expect(getFeedById).toHaveBeenCalledTimes(1);
+  });
+
+  it("reloads when pointed at a different feed", async () => {
+    // Arrange
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(
+        <NotificationSettingsSection source="feed" feedId={1} />
+      );
+    });
+
+    // Act
+    await act(async () => {
+      tree!.update(<NotificationSettingsSection source="feed" feedId={3} />);
+    });
+
+    // Assert
+    expect(getFeedById).toHaveBeenLastCalledWith(3);
+  });
 });

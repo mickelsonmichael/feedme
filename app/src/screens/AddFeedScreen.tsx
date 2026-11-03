@@ -892,23 +892,6 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: fontSize.meta,
   },
-  segmentedControl: {
-    flexDirection: "row",
-    borderWidth: 1,
-    borderRadius: radii.md,
-    overflow: "hidden",
-    marginBottom: spacing.lg,
-  },
-  segmentBtn: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    alignItems: "center",
-  },
-  segmentBtnText: {
-    fontSize: fontSize.body,
-    fontFamily: fonts.sans,
-    fontWeight: "600",
-  },
   sourceGrid: {
     flexDirection: "row",
     flexWrap: "wrap",

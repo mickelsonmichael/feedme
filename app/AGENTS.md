@@ -19,6 +19,10 @@ Users add RSS feeds by URL, with an optional title. Items from every feed are ag
 
 Render images at actual size, capped at 1024×1024. Ask before exceeding that. Thumbnails, icons and small previews are exempt.
 
+## React Compiler
+
+The app is built with the React Compiler (`experiments.reactCompiler` in `app.json`) and Jest compiles components the same way. A render must depend only on props, state and context: reading module-level mutable state and forcing a re-render returns the memoised output. `npm run lint` flags the patterns the compiler skips or mishandles.
+
 ## Tests
 
 Jest (`npm test`). Run a single file with `npm test -- <path>` — a bare `npx jest` can pick up a stale global install that fails to parse TSX.
