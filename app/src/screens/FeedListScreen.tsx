@@ -247,6 +247,15 @@ export default function FeedListScreen({ navigation, route }: Props) {
   const selectedFeedId = route.params?.selectedFeedId;
   const selectedTagId = route.params?.selectedTagId;
   const selectedCustomFeedId = route.params?.selectedCustomFeedId;
+  // Which feeds the screen is showing. Unlike filter and sort, which are also
+  // applied client-side, the selection only takes effect once loadData
+  // re-queries — so `items` is tagged with the selection it was queried for
+  // (itemsSelection) and is the previous feed's posts until then.
+  const selection = `${selectedFeedId}|${selectedTagId}|${selectedCustomFeedId}`;
+  const [itemsSelection, setItemsSelection] = useState<string | null>(null);
+  const itemsAreForSelection = itemsSelection === selection;
+  // The selection of the most recent loadData call.
+  const loadSelectionRef = useRef<string | null>(null);
   const [customFeedNsfw, setCustomFeedNsfw] = useState(false);
   const [customFeedIcon, setCustomFeedIcon] = useState<string | null>(null);
   const scrollToTopParam = route.params?.scrollToTop;
@@ -509,6 +518,8 @@ export default function FeedListScreen({ navigation, route }: Props) {
     ) => {
       const generation = ++loadGenerationRef.current;
       const pageClock = Date.now();
+      const loadSelection = `${selectedFeedId}|${selectedTagId}|${selectedCustomFeedId}`;
+      loadSelectionRef.current = loadSelection;
       // Tracked for every deferred refresh, not just the app-resume one, so
       // that re-focusing the Feed tab mid-sync can tell a sync is still running
       // and leave it alone.
@@ -647,6 +658,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
           pageClockRef.current = pageClock;
           pagedCountRef.current = pagedCount;
           setItems(itemData);
+          setItemsSelection(loadSelection);
           setHasMore(morePages);
           return itemData.length;
         };
@@ -844,7 +856,13 @@ export default function FeedListScreen({ navigation, route }: Props) {
       // get discarded on arrival — the user would watch the banner vanish and
       // never get the "New posts available" button. The sync commits its own
       // fresh page when it lands, so there is nothing to re-read here anyway.
-      if (backgroundSyncInFlightRef.current && !deferNewItems) {
+      // Unless the user has since picked a different feed: that sync's page is
+      // for the old selection, so this load has to supersede it.
+      if (
+        backgroundSyncInFlightRef.current &&
+        !deferNewItems &&
+        loadSelectionRef.current === selection
+      ) {
         return;
       }
       if (refreshRemote && !deferNewItems) {
@@ -854,7 +872,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
         lastActiveAtRef.current = Date.now();
       }
       loadData(refreshRemote, deferNewItems);
-    }, [loadData, shouldRefreshOnFocus])
+    }, [loadData, selection, shouldRefreshOnFocus])
   );
 
   // Re-page from the database when the sort mode changes: pagination order
@@ -1515,6 +1533,11 @@ export default function FeedListScreen({ navigation, route }: Props) {
     if (feedLayout !== "single") {
       return visibleItems;
     }
+    // Freezing the previous feed's posts under the new key would hold them in
+    // front of the new feed's posts for as long as the user reads it.
+    if (!itemsAreForSelection) {
+      return [];
+    }
 
     const cached = singleSequenceRef.current;
     const previous = cached.key === singleScopeKey ? cached.items : [];
@@ -1532,7 +1555,7 @@ export default function FeedListScreen({ navigation, route }: Props) {
 
     singleSequenceRef.current = { key: singleScopeKey, items: merged };
     return merged;
-  }, [feedLayout, singleScopeKey, visibleItems]);
+  }, [feedLayout, itemsAreForSelection, singleScopeKey, visibleItems]);
 
   // The active post is tracked by identity (singleActiveItemId), not
   // position, so it survives the sequence being appended to underneath it.
@@ -1952,6 +1975,16 @@ export default function FeedListScreen({ navigation, route }: Props) {
       );
     }
     return <SyncProgressLoadingScreen />;
+  }
+  // Just switched feeds: hold for the new feed's cached page (a local read)
+  // rather than flash the previous feed's posts under the new feed's title.
+  if (!itemsAreForSelection) {
+    return (
+      <View
+        style={[styles.container, { backgroundColor: colors.paper }]}
+        testID="selection-load-hold"
+      />
+    );
   }
 
   // What an empty feed says, for both the list layouts (inside the list) and

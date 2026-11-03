@@ -23,6 +23,7 @@ import { NSFW_BLUR_RADIUS } from "../theme";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import renderer, { act } from "react-test-renderer";
 import FeedListScreen from "../screens/FeedListScreen";
+import { SingleViewPager } from "../components/SingleViewPager";
 import { RootStackParamList, TabParamList } from "../types";
 import { loadConfig, saveConfig } from "../storage";
 import { HeaderContentProvider } from "../context/HeaderContentContext";
@@ -35,6 +36,7 @@ import {
   markItemUnread,
   getSavedItemIds,
   getFeedsForTag,
+  getCustomFeedMembers,
 } from "../database";
 import { refreshFeeds } from "../feedRefresher";
 import { openUrlWithPreference } from "../linkOpening";
@@ -1089,6 +1091,70 @@ describe("FeedListScreen", () => {
         expect.objectContaining({ alignItems: "center" }),
       ])
     );
+
+    await act(async () => {
+      tree!.unmount();
+    });
+  });
+
+  it("shows only a custom feed's own posts after switching to it in single layout", async () => {
+    // Arrange: the All Feeds reader is open on a feed outside the custom feed.
+    (loadConfig as jest.Mock).mockReturnValue({ feedLayout: "single" });
+    const feedFields = { description: null, last_fetched: Date.now() };
+    (getFeeds as jest.Mock).mockResolvedValue([
+      { ...feedFields, id: 1, title: "Other", url: "https://o.example/rss" },
+      { ...feedFields, id: 2, title: "Member", url: "https://m.example/rss" },
+    ]);
+    (getCustomFeedMembers as jest.Mock).mockResolvedValue([2]);
+    (refreshFeeds as jest.Mock).mockResolvedValue(0);
+    (getSavedItemIds as jest.Mock).mockResolvedValue(new Set<number>());
+    (markItemRead as jest.Mock).mockResolvedValue(undefined);
+    const otherPosts = makeItems(3, 100, 1, "Other");
+    const memberPosts = makeItems(2, 200, 2, "Member");
+    (getItemsPage as jest.Mock).mockImplementation(
+      ({ feedIds }: { feedIds: number[] | null }) =>
+        Promise.resolve(feedIds?.includes(2) ? memberPosts : otherPosts)
+    );
+
+    const navigation = {
+      navigate: jest.fn(),
+      addListener: jest.fn(() => jest.fn()),
+      isFocused: jest.fn(() => true),
+    } as unknown as FeedScreenProps["navigation"];
+    const renderWith = (params: FeedScreenProps["route"]["params"]) => (
+      <GestureHandlerRootView>
+        <HeaderContentProvider>
+          <BackgroundSyncProvider>
+            <BackgroundSyncBannerHost />
+            <FeedListScreen
+              {...({
+                navigation,
+                route: { key: "Feed-custom-switch", name: "Feed", params },
+              } as FeedScreenProps)}
+            />
+          </BackgroundSyncProvider>
+        </HeaderContentProvider>
+      </GestureHandlerRootView>
+    );
+    let tree: renderer.ReactTestRenderer;
+    await act(async () => {
+      tree = renderer.create(renderWith(undefined));
+    });
+    expect(activePostTitle(tree!)).toMatch(/^Post 10/);
+
+    // Act: open the custom feed on the same, still-mounted screen.
+    await act(async () => {
+      tree!.update(
+        renderWith({ selectedCustomFeedId: 7, selectedCustomFeedName: "AI" })
+      );
+    });
+
+    // Assert
+    expect(activePostTitle(tree!)).toBe("Post 200");
+    const pager = tree!.root.findByType(SingleViewPager);
+    expect(
+      pager.props.items.map((item: { title: string }) => item.title)
+    ).toEqual(["Post 200", "Post 201"]);
 
     await act(async () => {
       tree!.unmount();
