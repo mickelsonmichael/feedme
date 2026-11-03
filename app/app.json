@@ -44,7 +44,15 @@
           }
         }
       ],
-      "@react-native-vector-icons/feather"
+      "@react-native-vector-icons/feather",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "# WorkManager 2.9 (and the Room 2.5 it pulls in) keep these classes but not\n# the constructors it calls by reflection, so R8 strips them. Without the\n# database one the app crashes on launch; without the merger one every\n# background sync fails.\n-keep class * extends androidx.room.RoomDatabase { <init>(); }\n-keep class * extends androidx.work.InputMerger { <init>(); }"
+          }
+        }
+      ]
     ]
   }
 }
